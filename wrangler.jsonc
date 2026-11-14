@@ -4,7 +4,7 @@
 //   EDGE_HMAC_SECRET = same value as in Google Secret Manager
 // `name` must match the Worker's name in the Cloudflare dashboard.
 {
-  "name": "crm-leads",
+  "name": "crm---leads",
   "main": "apps/web/worker.ts",
   "compatibility_date": "2026-09-01",
   "assets": {
