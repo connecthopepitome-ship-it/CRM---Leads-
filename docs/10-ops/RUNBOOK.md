@@ -49,7 +49,8 @@ Run these once per client. Steps marked **(owner)** need the client's or product
    gcloud firestore backups schedules create --project=<project> --database='(default)' --recurrence=weekly --day-of-week=SUN --retention=5w
    ```
 6. **Logs (HLD §13):** create a log exclusion for `run.googleapis.com/requests` on the `api` service. Re-create the `_Default` bucket in `asia-south1` with 30-day retention.
-7. **Cloudflare Pages (owner).** Create the project and attach the domain `crm.<client>.com`. Set the environment secrets `API_ORIGIN` (the `api` function URL, from `firebase functions:list`) and `EDGE_HMAC_SECRET` (the same value as in Secret Manager). Add a WAF rate-limiting rule: `/api/*`, 60 requests/min per IP, action block for 1 min.
+7. **Cloudflare (owner)** — either a **Worker** (repo root `wrangler.jsonc`: build `pnpm run build`, deploy `npx wrangler deploy`; the `name` in `wrangler.jsonc` must equal the Worker name; set the secrets below under Settings → Variables and secrets) or a **Pages** project as follows.
+   **Cloudflare Pages:** Create the project and attach the domain `crm.<client>.com`. Set the environment secrets `API_ORIGIN` (the `api` function URL, from `firebase functions:list`) and `EDGE_HMAC_SECRET` (the same value as in Secret Manager). Add a WAF rate-limiting rule: `/api/*`, 60 requests/min per IP, action block for 1 min.
 8. **GitHub Environment `client-<id>` (owner).** Set the vars `CLIENT_ID`, `FIREBASE_PROJECT`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA`, `CF_PAGES_PROJECT` and `APP_URL`, and the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. Add a required reviewer. Grant the deploy service account Firebase Admin, Cloud Functions Admin, Service Account User and Datastore User through Workload Identity Federation.
 9. **Deploy:** Actions → deploy → environment `client-<id>`, ref `v1.0.0` (see §4).
 10. **Provision (FR-002):**

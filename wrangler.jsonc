@@ -1,0 +1,17 @@
+// Cloudflare Worker deploy for the SaleSphere PWA + /api edge proxy (`npx wrangler deploy` from the repo root).
+// Build first: `pnpm run build` (Cloudflare build command). Secrets (dashboard → Settings → Variables and secrets):
+//   API_ORIGIN       = URL of the `api` Cloud Function
+//   EDGE_HMAC_SECRET = same value as in Google Secret Manager
+// `name` must match the Worker's name in the Cloudflare dashboard.
+{
+  "name": "crm-leads",
+  "main": "apps/web/worker.ts",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "apps/web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": { "enabled": true }
+}

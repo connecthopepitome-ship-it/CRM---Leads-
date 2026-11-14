@@ -42,3 +42,17 @@ describe('edge proxy', () => {
     expect(no.headers.get('Access-Control-Allow-Origin')).toBeNull();
   });
 });
+
+describe('worker entry (Cloudflare Workers deploy)', () => {
+  it('routes /api/* to the signed proxy and everything else to the static assets', async () => {
+    const { default: worker } = await import('../worker');
+    const assets = vi.fn(async () => new Response('<html>app</html>'));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"status":"ok"}')));
+    const wenv = { ...env, ASSETS: { fetch: assets } };
+    expect(await (await worker.fetch(new Request('https://crm.example.com/leads/123'), wenv)).text()).toBe('<html>app</html>');
+    const api = await worker.fetch(new Request('https://crm.example.com/api/v1/health'), wenv);
+    expect(await api.text()).toBe('{"status":"ok"}');
+    expect(assets).toHaveBeenCalledTimes(1);
+    expect((await worker.fetch(new Request('https://crm.example.com/api/internal/x'), wenv)).status).toBe(404);
+  });
+});
