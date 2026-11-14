@@ -1,0 +1,5431 @@
+openapi: 3.1.0
+info:
+  title: SaleSphere API
+  version: 0.2.0
+  summary: Per-install REST API (one deployment per client).
+  description: |
+    Design-time contract for all LLD modules (batches 1–4).
+    Conventions: docs/07-lld/LLD-common.md. Money in integer paise. Errors are RFC 7807 problem+json.
+    At build time this file is regenerated from Zod (@ss/contracts).
+servers:
+  - url: https://crm.{client}.com/api/v1
+    variables:
+      client:
+        default: example
+tags:
+  - name: platform
+  - name: identity
+  - name: audit
+  - name: masters
+  - name: leads
+  - name: engagement
+  - name: google
+  - name: sales
+  - name: payments
+  - name: customers
+  - name: documents
+  - name: notify
+  - name: insights
+  - name: privacy
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      tags:
+        - platform
+      operationId: getHealth
+      summary: API-001 Health
+      security: []
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          $ref: '#/components/responses/Problem'
+  /app-config:
+    get:
+      tags:
+        - platform
+      operationId: getAppConfig
+      summary: API-002 App bootstrap config (FR-003, FR-004)
+      security: []
+      responses:
+        '200':
+          description: Branding, terminology and mode
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppConfig'
+  /admin/settings/{section}:
+    parameters:
+      - name: section
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+            - company
+            - branding
+            - terminology
+            - mode
+            - modules
+            - sla
+            - security
+    get:
+      tags:
+        - platform
+      operationId: getSettingsSection
+      summary: API-003 Get settings section
+      responses:
+        '200':
+          description: Section
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingsSection'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+    put:
+      tags:
+        - platform
+      operationId: updateSettingsSection
+      summary: API-004 Update settings section
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingsSection'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/number-series:
+    get:
+      tags:
+        - platform
+      operationId: listNumberSeries
+      summary: API-005 List number series (FR-005)
+      responses:
+        '200':
+          description: Series
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NumberSeries'
+  /admin/number-series/{docType}:
+    put:
+      tags:
+        - platform
+      operationId: updateNumberSeries
+      summary: API-006 Update number series (FR-005, RULE-003)
+      parameters:
+        - name: docType
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/DocType'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prefix:
+                  type: string
+                  pattern: ^[A-Z0-9-]{1,8}$
+                padding:
+                  type: integer
+                  minimum: 3
+                  maximum: 6
+                fyReset:
+                  type: boolean
+                nextOverride:
+                  type:
+                    - integer
+                    - 'null'
+                  minimum: 1
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NumberSeries'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/about:
+    get:
+      tags:
+        - platform
+      operationId: getAbout
+      summary: API-007 Version and migrations (FR-006)
+      responses:
+        '200':
+          description: About
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                  deployedAt:
+                    type: string
+                    format: date-time
+                  migrations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        appliedAt:
+                          type: string
+                          format: date-time
+                        status:
+                          type: string
+                          enum:
+                            - applied
+                            - failed
+  /jobs/{jobId}:
+    get:
+      tags:
+        - platform
+      operationId: getJob
+      summary: API-008 Async job status
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /admin/mode:
+    post:
+      tags:
+        - platform
+      operationId: switchMode
+      summary: API-009 Switch Solo/Team (FR-004, RULE-002)
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - mode
+              properties:
+                mode:
+                  type: string
+                  enum:
+                    - Solo
+                    - Team
+      responses:
+        '200':
+          description: Switched
+        '422':
+          $ref: '#/components/responses/Problem'
+  /auth/login:
+    post:
+      tags:
+        - identity
+      operationId: login
+      summary: API-010 Sign in (FR-007, FR-008)
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  minLength: 3
+                  maxLength: 32
+                password:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+      responses:
+        '200':
+          description: Signed in, or 2FA required
+          headers:
+            Set-Cookie:
+              description: __Secure-rt refresh cookie (HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth)
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/LoginSuccess'
+                  - $ref: '#/components/schemas/MfaRequired'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '423':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+  /auth/2fa/verify:
+    post:
+      tags:
+        - identity
+      operationId: verifyMfa
+      summary: API-011 Verify 2FA code (FR-012)
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - mfaToken
+                - code
+              properties:
+                mfaToken:
+                  type: string
+                code:
+                  type: string
+                  pattern: ^[0-9]{6}$
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginSuccess'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '423':
+          $ref: '#/components/responses/Problem'
+  /auth/refresh:
+    post:
+      tags:
+        - identity
+      operationId: refresh
+      summary: API-012 Refresh access token with rotation (FR-010)
+      security:
+        - refreshCookie: []
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      responses:
+        '200':
+          description: New access token; rotated cookie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  expiresIn:
+                    type: integer
+                    example: 900
+        '401':
+          $ref: '#/components/responses/Problem'
+  /auth/logout:
+    post:
+      tags:
+        - identity
+      operationId: logout
+      summary: API-013 Sign out (FR-010)
+      security:
+        - refreshCookie: []
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      responses:
+        '204':
+          description: Signed out
+  /auth/password:
+    post:
+      tags:
+        - identity
+      operationId: changePassword
+      summary: API-014 Change password (FR-009)
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - currentPassword
+                - newPassword
+              properties:
+                currentPassword:
+                  type: string
+                newPassword:
+                  type: string
+                  minLength: 10
+                  maxLength: 256
+      responses:
+        '204':
+          description: Changed
+        '401':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /me:
+    get:
+      tags:
+        - identity
+      operationId: getMe
+      summary: API-015 Current user (FR-013)
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+  /me/login-history:
+    get:
+      tags:
+        - identity
+      operationId: getLoginHistory
+      summary: API-016 My login history (FR-012 AC3)
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: History
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        at:
+                          type: string
+                          format: date-time
+                        result:
+                          type: string
+                          enum:
+                            - success
+                            - failed
+                            - locked
+                            - mfa_failed
+                        ip:
+                          type: string
+                        device:
+                          type: string
+  /me/2fa/setup:
+    post:
+      tags:
+        - identity
+      operationId: setupMfa
+      summary: API-017 Start 2FA setup
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      responses:
+        '200':
+          description: Pending secret
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  otpauthUrl:
+                    type: string
+                  qrSvg:
+                    type: string
+  /me/2fa/enable:
+    post:
+      tags:
+        - identity
+      operationId: enableMfa
+      summary: API-018 Enable 2FA
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - code
+              properties:
+                code:
+                  type: string
+                  pattern: ^[0-9]{6}$
+      responses:
+        '204':
+          description: Enabled
+        '422':
+          $ref: '#/components/responses/Problem'
+  /me/2fa:
+    delete:
+      tags:
+        - identity
+      operationId: disableMfa
+      summary: API-019 Disable 2FA
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - password
+                - code
+              properties:
+                password:
+                  type: string
+                code:
+                  type: string
+      responses:
+        '204':
+          description: Disabled
+        '401':
+          $ref: '#/components/responses/Problem'
+  /admin/users:
+    get:
+      tags:
+        - identity
+      operationId: listUsers
+      summary: API-020 List users (FR-011)
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - active
+              - inactive
+        - name: teamId
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  nextCursor:
+                    type:
+                      - string
+                      - 'null'
+    post:
+      tags:
+        - identity
+      operationId: createUser
+      summary: API-021 Create user (FR-011)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          description: Created with one-time password
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  oneTimePassword:
+                    type: string
+        '400':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    patch:
+      tags:
+        - identity
+      operationId: updateUser
+      summary: API-022 Update user (FR-011)
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/users/{id}/reset-password:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags:
+        - identity
+      operationId: resetPassword
+      summary: API-023 Reset password (FR-011)
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      responses:
+        '200':
+          description: One-time password
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  oneTimePassword:
+                    type: string
+  /admin/users/{id}/deactivate:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags:
+        - identity
+      operationId: deactivateUser
+      summary: API-024 Deactivate with reassignment (FR-011 AC2)
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reassignTo:
+                  type: string
+      responses:
+        '202':
+          description: Reassignment job queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobRef'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/users/{id}/reactivate:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags:
+        - identity
+      operationId: reactivateUser
+      summary: API-025 Reactivate user
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      responses:
+        '200':
+          description: Reactivated with one-time password
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/users/{id}/unlock:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags:
+        - identity
+      operationId: unlockUser
+      summary: API-026 Unlock user (FR-008 AC3)
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      responses:
+        '204':
+          description: Unlocked
+  /admin/users/{id}/2fa:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    delete:
+      tags:
+        - identity
+      operationId: resetUserMfa
+      summary: API-027 Reset a user's 2FA (FR-012 AC2)
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      responses:
+        '204':
+          description: 2FA removed
+  /admin/sessions:
+    get:
+      tags:
+        - identity
+      operationId: listSessions
+      summary: API-028 Sessions of a user (FR-010 AC3)
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Session'
+  /admin/users/{id}/force-logout:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags:
+        - identity
+      operationId: forceLogout
+      summary: API-029 Force logout (FR-010 AC3, ≤ 60 s)
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      responses:
+        '204':
+          description: Sessions revoked; epoch incremented
+  /admin/roles:
+    get:
+      tags:
+        - identity
+      operationId: listRoles
+      summary: API-030 List roles (FR-014)
+      responses:
+        '200':
+          description: Roles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Role'
+  /admin/roles/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    patch:
+      tags:
+        - identity
+      operationId: updateRole
+      summary: API-031 Update role limits (FR-014)
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                discountLimitPct:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                recordScope:
+                  type: string
+                  enum:
+                    - own
+                    - team
+                    - all
+                canRecordPayments:
+                  type: boolean
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/teams:
+    get:
+      tags:
+        - identity
+      operationId: listTeams
+      summary: API-032 List teams
+      responses:
+        '200':
+          description: Teams
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Team'
+    post:
+      tags:
+        - identity
+      operationId: createTeam
+      summary: API-033 Create team
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/teams/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    patch:
+      tags:
+        - identity
+      operationId: updateTeam
+      summary: API-034 Update team
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamInput'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+  /admin/support-access:
+    put:
+      tags:
+        - identity
+      operationId: setSupportAccess
+      summary: API-035 Enable/disable support access (FR-089)
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - enabled
+              properties:
+                enabled:
+                  type: boolean
+                days:
+                  type: integer
+                  minimum: 1
+                  maximum: 7
+      responses:
+        '200':
+          description: Support access state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                  expiresAt:
+                    type:
+                      - string
+                      - 'null'
+                    format: date-time
+                  username:
+                    type: string
+                  oneTimePassword:
+                    type: string
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/audit/search:
+    post:
+      tags:
+        - audit
+      operationId: searchAudit
+      summary: API-040 Search audit log (FR-016)
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditFilter'
+      responses:
+        '200':
+          description: Entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditEntry'
+                  nextCursor:
+                    type:
+                      - string
+                      - 'null'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/audit/export:
+    post:
+      tags:
+        - audit
+      operationId: exportAudit
+      summary: API-041 Export audit log (async)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditFilter'
+      responses:
+        '202':
+          description: Export queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobRef'
+  /history/{recordType}/{recordId}:
+    get:
+      tags:
+        - audit
+      operationId: getRecordHistory
+      summary: API-042 Record history (FR-016 AC2)
+      parameters:
+        - name: recordType
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: recordId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditEntry'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /admin/masters/{type}:
+    parameters:
+      - $ref: '#/components/parameters/MasterType'
+    get:
+      tags:
+        - masters
+      operationId: listMasterItems
+      summary: API-045 List master items
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - active
+              - inactive
+        - name: q
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MasterItem'
+                  nextCursor:
+                    type:
+                      - string
+                      - 'null'
+    post:
+      tags:
+        - masters
+      operationId: createMasterItem
+      summary: API-046 Create master item
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              description: Per-type schema (LLD-masters TBL-031 – TBL-036)
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MasterItem'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /admin/masters/{type}/{id}:
+    parameters:
+      - $ref: '#/components/parameters/MasterType'
+      - $ref: '#/components/parameters/Id'
+    patch:
+      tags:
+        - masters
+      operationId: updateMasterItem
+      summary: API-047 Update master item
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MasterItem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+    delete:
+      tags:
+        - masters
+      operationId: deleteMasterItem
+      summary: API-050 Delete unused master item (RULE-013)
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      responses:
+        '204':
+          description: Deleted
+        '409':
+          $ref: '#/components/responses/Problem'
+  /admin/masters/{type}/{id}/deactivate:
+    parameters:
+      - $ref: '#/components/parameters/MasterType'
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags:
+        - masters
+      operationId: deactivateMasterItem
+      summary: API-048 Deactivate master item (FR-024)
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                moveTo:
+                  type: string
+                  description: Required for pipelineStages in use
+      responses:
+        '200':
+          description: Deactivated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MasterItem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/masters/{type}/{id}/activate:
+    parameters:
+      - $ref: '#/components/parameters/MasterType'
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags:
+        - masters
+      operationId: activateMasterItem
+      summary: API-049 Activate master item
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      responses:
+        '200':
+          description: Activated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MasterItem'
+  /masters/{type}/options:
+    parameters:
+      - $ref: '#/components/parameters/MasterType'
+    get:
+      tags:
+        - masters
+      operationId: getMasterOptions
+      summary: API-051 Lookup options for forms
+      responses:
+        '200':
+          description: Options
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        label:
+                          type: string
+                        data:
+                          type: object
+                          additionalProperties: true
+  /admin/company:
+    get:
+      tags:
+        - masters
+      operationId: getCompany
+      summary: API-052 Company profile (FR-017)
+      responses:
+        '200':
+          description: Company
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Company'
+    put:
+      tags:
+        - masters
+      operationId: updateCompany
+      summary: API-053 Update company profile (FR-017, RULE-016)
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Company'
+                - type: object
+                  properties:
+                    confirm:
+                      type: boolean
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Company'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/imports/templates/{kind}:
+    get:
+      tags:
+        - masters
+      operationId: getImportTemplate
+      summary: API-054 Download import template (FR-023)
+      parameters:
+        - $ref: '#/components/parameters/ImportKind'
+      responses:
+        '200':
+          description: Excel template
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+  /admin/imports:
+    post:
+      tags:
+        - masters
+      operationId: uploadImport
+      summary: API-055 Upload import file and preview (FR-023, FR-026)
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - kind
+                - file
+              properties:
+                kind:
+                  $ref: '#/components/schemas/ImportKind'
+                file:
+                  type: string
+                  format: binary
+                mapping:
+                  type: string
+                  description: JSON column mapping
+      responses:
+        '201':
+          description: Preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportPreview'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/imports/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags:
+        - masters
+      operationId: getImport
+      summary: API-057 Get import preview/status
+      responses:
+        '200':
+          description: Preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportPreview'
+  /admin/imports/{id}/commit:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags:
+        - masters
+      operationId: commitImport
+      summary: API-056 Commit import (async)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                updateExisting:
+                  type: boolean
+                  default: false
+      responses:
+        '202':
+          description: Import job queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobRef'
+  /leads:
+    get:
+      tags:
+        - leads
+      operationId: getLeads
+      summary: API-070 List leads (FR-034)
+      x-api-id: API-070
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadPage'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+        - leads
+      operationId: postLeads
+      summary: API-071 Create lead with normalise, dedupe, assign (FR-025, FR-028, FR-029, FR-031, FR-086)
+      x-api-id: API-071
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadCreate'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadIntakeResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /leads/{id}:
+    get:
+      tags:
+        - leads
+      operationId: getLeadsById
+      summary: API-072 Get lead (FR-033)
+      x-api-id: API-072
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      tags:
+        - leads
+      operationId: patchLeadsById
+      summary: API-073 Update lead (FR-025)
+      x-api-id: API-073
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadUpdate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+        default:
+          $ref: '#/components/responses/Problem'
+  /leads/{id}/stage:
+    post:
+      tags:
+        - leads
+      operationId: postLeadsByIdStage
+      summary: API-074 Change stage (FR-033)
+      x-api-id: API-074
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StageChange'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+        default:
+          $ref: '#/components/responses/Problem'
+  /leads/{id}/reopen:
+    post:
+      tags:
+        - leads
+      operationId: postLeadsByIdReopen
+      summary: API-075 Reopen lead (FR-033)
+      x-api-id: API-075
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+        default:
+          $ref: '#/components/responses/Problem'
+  /leads/bulk:
+    post:
+      tags:
+        - leads
+      operationId: postLeadsBulk
+      summary: API-076 Bulk assign, stage or tag (FR-032)
+      x-api-id: API-076
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadBulk'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /leads/merge:
+    post:
+      tags:
+        - leads
+      operationId: postLeadsMerge
+      summary: API-077 Merge two leads (FR-030)
+      x-api-id: API-077
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadMerge'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+        default:
+          $ref: '#/components/responses/Problem'
+  /leads/{id}/convert:
+    post:
+      tags:
+        - leads
+      operationId: postLeadsByIdConvert
+      summary: API-078 Convert lead to customer (FR-036)
+      x-api-id: API-078
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadConvert'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /leads/check-duplicate:
+    post:
+      tags:
+        - leads
+      operationId: postLeadsCheckDuplicate
+      summary: API-079 Check duplicates (FR-029)
+      x-api-id: API-079
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /leads/board:
+    get:
+      tags:
+        - leads
+      operationId: getLeadsBoard
+      summary: API-080 Kanban board (FR-034)
+      x-api-id: API-080
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /me/saved-filters:
+    get:
+      tags:
+        - leads
+      operationId: getMeSavedFilters
+      summary: API-081 Get saved filters (FR-034)
+      x-api-id: API-081
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      tags:
+        - leads
+      operationId: putMeSavedFilters
+      summary: API-081 Replace saved filters (FR-034)
+      x-api-id: API-081
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /leads/import:
+    post:
+      tags:
+        - leads
+      operationId: postLeadsImport
+      summary: API-082 Import leads CSV (FR-026)
+      x-api-id: API-082
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobRef'
+        default:
+          $ref: '#/components/responses/Problem'
+  /public/forms/{formId}/submit:
+    post:
+      tags:
+        - leads
+      operationId: postPublicFormsByFormIdSubmit
+      summary: API-083 Public web form submit (FR-027, FR-086)
+      x-api-id: API-083
+      security: []
+      parameters:
+        - name: formId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FormSubmit'
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /hooks/leads:
+    post:
+      tags:
+        - leads
+      operationId: postHooksLeads
+      summary: API-084 Lead webhook with API key (FR-027)
+      x-api-id: API-084
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadCreate'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadIntakeResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/lead-capture/keys:
+    get:
+      tags:
+        - leads
+      operationId: getAdminLeadCaptureKeys
+      summary: API-085 List capture keys (FR-027)
+      x-api-id: API-085
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+        - leads
+      operationId: postAdminLeadCaptureKeys
+      summary: API-085 Create capture key (FR-027)
+      x-api-id: API-085
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/lead-capture/forms/{formId}:
+    put:
+      tags:
+        - leads
+      operationId: putAdminLeadCaptureFormsByFormId
+      summary: API-086 Configure web form (FR-027)
+      x-api-id: API-086
+      parameters:
+        - name: formId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /timeline/{recordType}/{recordId}:
+    get:
+      tags:
+        - engagement
+      operationId: getTimelineByRecordTypeByRecordId
+      summary: API-100 Activity timeline (FR-035)
+      x-api-id: API-100
+      parameters:
+        - name: recordType
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: recordId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        default:
+          $ref: '#/components/responses/Problem'
+  /activities:
+    post:
+      tags:
+        - engagement
+      operationId: postActivities
+      summary: API-101 Log activity (FR-044, FR-046, FR-048)
+      x-api-id: API-101
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivityCreate'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /activities/{id}/outcome:
+    post:
+      tags:
+        - engagement
+      operationId: postActivitiesByIdOutcome
+      summary: API-102 Record call outcome (FR-044, FR-045)
+      x-api-id: API-102
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallOutcome'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /follow-ups:
+    get:
+      tags:
+        - engagement
+      operationId: getFollowUps
+      summary: API-103 List follow-ups (FR-049)
+      x-api-id: API-103
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+        - engagement
+      operationId: postFollowUps
+      summary: API-104 Create follow-up (FR-049)
+      x-api-id: API-104
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FollowUpCreate'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /follow-ups/{id}:
+    patch:
+      tags:
+        - engagement
+      operationId: patchFollowUpsById
+      summary: API-105 Complete, reschedule or cancel follow-up (FR-049)
+      x-api-id: API-105
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /messages/whatsapp:
+    post:
+      tags:
+        - engagement
+      operationId: postMessagesWhatsapp
+      summary: API-106 Render WhatsApp click-to-chat (FR-046)
+      x-api-id: API-106
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /emails:
+    post:
+      tags:
+        - engagement
+      operationId: postEmails
+      summary: API-107 Send email via Gmail (FR-047)
+      x-api-id: API-107
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailCreate'
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /emails/{id}:
+    get:
+      tags:
+        - engagement
+      operationId: getEmailsById
+      summary: API-108 Email status (FR-047)
+      x-api-id: API-108
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /emails/{id}/retry:
+    post:
+      tags:
+        - engagement
+      operationId: postEmailsByIdRetry
+      summary: API-108 Retry failed email (FR-047)
+      x-api-id: API-108
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /outbox:
+    post:
+      tags:
+        - engagement
+      operationId: postOutbox
+      summary: API-109 Replay offline outbox (FR-081)
+      x-api-id: API-109
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Outbox'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /me/email-quota:
+    get:
+      tags:
+        - engagement
+      operationId: getMeEmailQuota
+      summary: API-110 Email quota (FR-047)
+      x-api-id: API-110
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/google:
+    get:
+      tags:
+        - google
+      operationId: getAdminGoogle
+      summary: API-120 Google connection status (FR-037, FR-043)
+      x-api-id: API-120
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/google/connect:
+    post:
+      tags:
+        - google
+      operationId: postAdminGoogleConnect
+      summary: API-121 Start Google OAuth (FR-037)
+      x-api-id: API-121
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /oauth/google/callback:
+    get:
+      tags:
+        - google
+      operationId: getOauthGoogleCallback
+      summary: API-122 OAuth callback (FR-037)
+      x-api-id: API-122
+      security: []
+      responses:
+        '302':
+          description: Redirect to settings
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/google/disconnect:
+    post:
+      tags:
+        - google
+      operationId: postAdminGoogleDisconnect
+      summary: API-123 Disconnect Google (FR-037)
+      x-api-id: API-123
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/google/picker-token:
+    get:
+      tags:
+        - google
+      operationId: getAdminGooglePickerToken
+      summary: API-124 Picker token (FR-038)
+      x-api-id: API-124
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/sheets/preview:
+    post:
+      tags:
+        - google
+      operationId: postAdminSheetsPreview
+      summary: API-125 Preview sheet (FR-038)
+      x-api-id: API-125
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/sheets:
+    post:
+      tags:
+        - google
+      operationId: postAdminSheets
+      summary: API-126 Create sheet sync (FR-038, FR-040)
+      x-api-id: API-126
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SheetSync'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      tags:
+        - google
+      operationId: getAdminSheets
+      summary: API-127 List sheet syncs (FR-038)
+      x-api-id: API-127
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/sheets/{id}:
+    patch:
+      tags:
+        - google
+      operationId: patchAdminSheetsById
+      summary: API-127 Update sheet sync (FR-038)
+      x-api-id: API-127
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SheetSync'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      tags:
+        - google
+      operationId: deleteAdminSheetsById
+      summary: API-127 Delete sheet sync (FR-038)
+      x-api-id: API-127
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: No content
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/sheets/{id}/sync:
+    post:
+      tags:
+        - google
+      operationId: postAdminSheetsByIdSync
+      summary: API-128 Sync now (FR-039)
+      x-api-id: API-128
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /hooks/sheets/{id}:
+    post:
+      tags:
+        - google
+      operationId: postHooksSheetsById
+      summary: API-129 Apps Script change hook (FR-039)
+      x-api-id: API-129
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/sheets/{id}/runs:
+    get:
+      tags:
+        - google
+      operationId: getAdminSheetsByIdRuns
+      summary: API-130 Sync runs (FR-042)
+      x-api-id: API-130
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/import-errors:
+    get:
+      tags:
+        - google
+      operationId: getAdminImportErrors
+      summary: API-131 Import error queue (FR-042)
+      x-api-id: API-131
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/import-errors/{id}/retry:
+    post:
+      tags:
+        - google
+      operationId: postAdminImportErrorsByIdRetry
+      summary: API-132 Retry import error (FR-042)
+      x-api-id: API-132
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/import-errors/{id}/dismiss:
+    post:
+      tags:
+        - google
+      operationId: postAdminImportErrorsByIdDismiss
+      summary: API-132 Dismiss import error (FR-042)
+      x-api-id: API-132
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/sheets/{id}/apps-script:
+    get:
+      tags:
+        - google
+      operationId: getAdminSheetsByIdAppsScript
+      summary: API-133 Apps Script snippet (FR-039)
+      x-api-id: API-133
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /quotes:
+    get:
+      tags:
+        - sales
+      operationId: getQuotes
+      summary: API-140 List quotations (FR-051)
+      x-api-id: API-140
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+        - sales
+      operationId: postQuotes
+      summary: API-141 Create draft quotation (FR-051, FR-052)
+      x-api-id: API-141
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteDraft'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+        default:
+          $ref: '#/components/responses/Problem'
+  /quotes/{id}:
+    get:
+      tags:
+        - sales
+      operationId: getQuotesById
+      summary: API-142 Get quotation (FR-054, FR-058)
+      x-api-id: API-142
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      tags:
+        - sales
+      operationId: patchQuotesById
+      summary: API-143 Update draft quotation (FR-051)
+      x-api-id: API-143
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteDraft'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      tags:
+        - sales
+      operationId: deleteQuotesById
+      summary: API-144 Delete draft quotation
+      x-api-id: API-144
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: No content
+        default:
+          $ref: '#/components/responses/Problem'
+  /quotes/{id}/send:
+    post:
+      tags:
+        - sales
+      operationId: postQuotesByIdSend
+      summary: API-145 Send quotation (FR-053, FR-056)
+      x-api-id: API-145
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /quotes/{id}/approval:
+    post:
+      tags:
+        - sales
+      operationId: postQuotesByIdApproval
+      summary: API-146 Approve or reject discount (FR-053)
+      x-api-id: API-146
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+        default:
+          $ref: '#/components/responses/Problem'
+  /quotes/{id}/revise:
+    post:
+      tags:
+        - sales
+      operationId: postQuotesByIdRevise
+      summary: API-147 Create revision (FR-054)
+      x-api-id: API-147
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+        default:
+          $ref: '#/components/responses/Problem'
+  /quotes/{id}/compare:
+    get:
+      tags:
+        - sales
+      operationId: getQuotesByIdCompare
+      summary: API-148 Compare revisions (FR-054)
+      x-api-id: API-148
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /quotes/{id}/pdf:
+    post:
+      tags:
+        - sales
+      operationId: postQuotesByIdPdf
+      summary: API-149 Regenerate quotation PDF (FR-055)
+      x-api-id: API-149
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobRef'
+        default:
+          $ref: '#/components/responses/Problem'
+  /sales/calc:
+    post:
+      tags:
+        - sales
+      operationId: postSalesCalc
+      summary: API-150 Totals preview (FR-052)
+      x-api-id: API-150
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteDraft'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Totals'
+        default:
+          $ref: '#/components/responses/Problem'
+  /public/s/{token}/respond:
+    post:
+      tags:
+        - sales
+      operationId: postPublicSByTokenRespond
+      summary: API-151 Customer response to quotation (FR-057)
+      x-api-id: API-151
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteResponse'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /quotes/{id}/create-invoice:
+    post:
+      tags:
+        - sales
+      operationId: postQuotesByIdCreateInvoice
+      summary: API-152 Invoice from accepted quote with silent order (FR-059)
+      x-api-id: API-152
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        default:
+          $ref: '#/components/responses/Problem'
+  /orders:
+    get:
+      tags:
+        - sales
+      operationId: getOrders
+      summary: API-155 List orders (FR-059)
+      x-api-id: API-155
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+        - sales
+      operationId: postOrders
+      summary: API-155 Create order (FR-059)
+      x-api-id: API-155
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /orders/{id}:
+    get:
+      tags:
+        - sales
+      operationId: getOrdersById
+      summary: API-156 Get order (FR-061)
+      x-api-id: API-156
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      tags:
+        - sales
+      operationId: patchOrdersById
+      summary: API-156 Update order (FR-059)
+      x-api-id: API-156
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /orders/{id}/status:
+    post:
+      tags:
+        - sales
+      operationId: postOrdersByIdStatus
+      summary: API-157 Change order status (FR-060)
+      x-api-id: API-157
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /invoices:
+    get:
+      tags:
+        - sales
+      operationId: getInvoices
+      summary: API-160 List invoices (FR-062)
+      x-api-id: API-160
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+        - sales
+      operationId: postInvoices
+      summary: API-161 Create draft invoice (FR-062, FR-063)
+      x-api-id: API-161
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoiceCreate'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        default:
+          $ref: '#/components/responses/Problem'
+  /invoices/{id}:
+    get:
+      tags:
+        - sales
+      operationId: getInvoicesById
+      summary: API-162 Get invoice (FR-065)
+      x-api-id: API-162
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      tags:
+        - sales
+      operationId: patchInvoicesById
+      summary: API-162 Update draft invoice (FR-065)
+      x-api-id: API-162
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      tags:
+        - sales
+      operationId: deleteInvoicesById
+      summary: API-163 Delete draft invoice
+      x-api-id: API-163
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: No content
+        default:
+          $ref: '#/components/responses/Problem'
+  /invoices/{id}/issue:
+    post:
+      tags:
+        - sales
+      operationId: postInvoicesByIdIssue
+      summary: API-164 Issue invoice (FR-064, FR-065)
+      x-api-id: API-164
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        default:
+          $ref: '#/components/responses/Problem'
+  /invoices/{id}/credit-notes:
+    post:
+      tags:
+        - sales
+      operationId: postInvoicesByIdCreditNotes
+      summary: API-165 Issue credit note (FR-066)
+      x-api-id: API-165
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditNoteCreate'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /credit-notes/{id}:
+    get:
+      tags:
+        - sales
+      operationId: getCreditNotesById
+      summary: API-166 Get credit note (FR-066)
+      x-api-id: API-166
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /invoices/{id}/convert:
+    post:
+      tags:
+        - sales
+      operationId: postInvoicesByIdConvert
+      summary: API-167 Convert proforma (FR-063)
+      x-api-id: API-167
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        default:
+          $ref: '#/components/responses/Problem'
+  /invoices/{id}/pdf:
+    post:
+      tags:
+        - sales
+      operationId: postInvoicesByIdPdf
+      summary: API-168 Regenerate invoice PDF (FR-067)
+      x-api-id: API-168
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobRef'
+        default:
+          $ref: '#/components/responses/Problem'
+  /invoices/{id}/upi:
+    get:
+      tags:
+        - sales
+      operationId: getInvoicesByIdUpi
+      summary: API-169 UPI payload and QR for balance (FR-068)
+      x-api-id: API-169
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Upi'
+        default:
+          $ref: '#/components/responses/Problem'
+  /payments:
+    get:
+      tags:
+        - payments
+      operationId: getPayments
+      summary: API-180 List payments (FR-070)
+      x-api-id: API-180
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+        - payments
+      operationId: postPayments
+      summary: API-181 Record payment (FR-070 – FR-072)
+      x-api-id: API-181
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentCreate'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        default:
+          $ref: '#/components/responses/Problem'
+  /payments/{id}:
+    get:
+      tags:
+        - payments
+      operationId: getPaymentsById
+      summary: API-182 Get payment (FR-072)
+      x-api-id: API-182
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        default:
+          $ref: '#/components/responses/Problem'
+  /payments/{id}/reverse:
+    post:
+      tags:
+        - payments
+      operationId: postPaymentsByIdReverse
+      summary: API-183 Reverse payment (FR-073)
+      x-api-id: API-183
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reason'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        default:
+          $ref: '#/components/responses/Problem'
+  /payments/preview:
+    post:
+      tags:
+        - payments
+      operationId: postPaymentsPreview
+      summary: API-184 Allocation preview (FR-071)
+      x-api-id: API-184
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentCreate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /customers/{id}/apply-advance:
+    post:
+      tags:
+        - payments
+      operationId: postCustomersByIdApplyAdvance
+      summary: API-185 Apply advance (FR-071)
+      x-api-id: API-185
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /payments/utr-check:
+    get:
+      tags:
+        - payments
+      operationId: getPaymentsUtrCheck
+      summary: API-186 UTR duplicate check (FR-070)
+      x-api-id: API-186
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /customers:
+    get:
+      tags:
+        - customers
+      operationId: getCustomers
+      summary: API-190 List customers (FR-074)
+      x-api-id: API-190
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+        - customers
+      operationId: postCustomers
+      summary: API-191 Create customer (FR-074)
+      x-api-id: API-191
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerCreate'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        default:
+          $ref: '#/components/responses/Problem'
+  /customers/{id}:
+    get:
+      tags:
+        - customers
+      operationId: getCustomersById
+      summary: API-192 Get customer (FR-074)
+      x-api-id: API-192
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      tags:
+        - customers
+      operationId: patchCustomersById
+      summary: API-192 Update customer (FR-074)
+      x-api-id: API-192
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerCreate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        default:
+          $ref: '#/components/responses/Problem'
+  /customers/{id}/360:
+    get:
+      tags:
+        - customers
+      operationId: getCustomersById360
+      summary: API-193 Customer 360 (FR-075)
+      x-api-id: API-193
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /customers/{id}/contacts:
+    post:
+      tags:
+        - customers
+      operationId: postCustomersByIdContacts
+      summary: API-194 Add contact (FR-074)
+      x-api-id: API-194
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /customers/{id}/addresses:
+    post:
+      tags:
+        - customers
+      operationId: postCustomersByIdAddresses
+      summary: API-195 Add address (FR-074)
+      x-api-id: API-195
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /customers/{id}/statement:
+    get:
+      tags:
+        - customers
+      operationId: getCustomersByIdStatement
+      summary: API-196 Statement of account (FR-076)
+      x-api-id: API-196
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /customers/{id}/invoices:
+    get:
+      tags:
+        - customers
+      operationId: getCustomersByIdInvoices
+      summary: API-197 Customer invoices tab (FR-075)
+      x-api-id: API-197
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        default:
+          $ref: '#/components/responses/Problem'
+  /files/uploads:
+    post:
+      tags:
+        - documents
+      operationId: postFilesUploads
+      summary: API-200 Start upload (FR-078)
+      x-api-id: API-200
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /files/uploads/{id}:
+    put:
+      tags:
+        - documents
+      operationId: putFilesUploadsById
+      summary: API-201 Upload chunk (FR-078)
+      x-api-id: API-201
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /files:
+    get:
+      tags:
+        - documents
+      operationId: getFiles
+      summary: API-202 List files for record (FR-078)
+      x-api-id: API-202
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /files/{id}/content:
+    get:
+      tags:
+        - documents
+      operationId: getFilesByIdContent
+      summary: API-203 Download file (FR-078)
+      x-api-id: API-203
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Binary or HTML content
+        default:
+          $ref: '#/components/responses/Problem'
+  /files/{id}:
+    delete:
+      tags:
+        - documents
+      operationId: deleteFilesById
+      summary: API-204 Delete file (FR-078)
+      x-api-id: API-204
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: No content
+        default:
+          $ref: '#/components/responses/Problem'
+  /public/s/{token}:
+    get:
+      tags:
+        - documents
+      operationId: getPublicSByToken
+      summary: API-205 Public document view (FR-057, FR-069, FR-079)
+      x-api-id: API-205
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /public/s/{token}/pdf:
+    get:
+      tags:
+        - documents
+      operationId: getPublicSByTokenPdf
+      summary: API-206 Public PDF (FR-079)
+      x-api-id: API-206
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Binary or HTML content
+        default:
+          $ref: '#/components/responses/Problem'
+  /share-links:
+    post:
+      tags:
+        - documents
+      operationId: postShareLinks
+      summary: API-207 Create share link (FR-079)
+      x-api-id: API-207
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      tags:
+        - documents
+      operationId: getShareLinks
+      summary: API-209 List share links (FR-079)
+      x-api-id: API-209
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /share-links/{id}:
+    patch:
+      tags:
+        - documents
+      operationId: patchShareLinksById
+      summary: API-208 Revoke or extend share link (FR-079)
+      x-api-id: API-208
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /documents/{type}/{id}/preview:
+    get:
+      tags:
+        - documents
+      operationId: getDocumentsByTypeByIdPreview
+      summary: API-210 HTML preview (FR-055, FR-067)
+      x-api-id: API-210
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Binary or HTML content
+        default:
+          $ref: '#/components/responses/Problem'
+  /notifications:
+    get:
+      tags:
+        - notify
+      operationId: getNotifications
+      summary: API-215 List notifications (FR-082)
+      x-api-id: API-215
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        default:
+          $ref: '#/components/responses/Problem'
+  /notifications/read:
+    post:
+      tags:
+        - notify
+      operationId: postNotificationsRead
+      summary: API-216 Mark read (FR-082)
+      x-api-id: API-216
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /me/push-tokens:
+    post:
+      tags:
+        - notify
+      operationId: postMePushTokens
+      summary: API-217 Register push token (FR-082)
+      x-api-id: API-217
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /me/push-tokens/{id}:
+    delete:
+      tags:
+        - notify
+      operationId: deleteMePushTokensById
+      summary: API-218 Remove push token (FR-082)
+      x-api-id: API-218
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: No content
+        default:
+          $ref: '#/components/responses/Problem'
+  /me/notification-prefs:
+    get:
+      tags:
+        - notify
+      operationId: getMeNotificationPrefs
+      summary: API-219 Get notification preferences (FR-082)
+      x-api-id: API-219
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      tags:
+        - notify
+      operationId: putMeNotificationPrefs
+      summary: API-219 Set notification preferences (FR-082)
+      x-api-id: API-219
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /dashboard:
+    get:
+      tags:
+        - insights
+      operationId: getDashboard
+      summary: API-225 Home dashboard (FR-084)
+      x-api-id: API-225
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /search:
+    get:
+      tags:
+        - insights
+      operationId: getSearch
+      summary: API-226 Global search (FR-083)
+      x-api-id: API-226
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /reports:
+    get:
+      tags:
+        - insights
+      operationId: getReports
+      summary: API-227 Reports allowed for role (FR-085)
+      x-api-id: API-227
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /reports/{id}:
+    get:
+      tags:
+        - insights
+      operationId: getReportsById
+      summary: API-228 Run report (FR-085, FR-050)
+      x-api-id: API-228
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /reports/{id}/export:
+    post:
+      tags:
+        - insights
+      operationId: postReportsByIdExport
+      summary: API-229 Export report (FR-085)
+      x-api-id: API-229
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobRef'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/targets:
+    get:
+      tags:
+        - insights
+      operationId: getAdminTargets
+      summary: API-230 Get targets (FR-084)
+      x-api-id: API-230
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      tags:
+        - insights
+      operationId: putAdminTargets
+      summary: API-230 Set targets (FR-084)
+      x-api-id: API-230
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/privacy/find:
+    post:
+      tags:
+        - privacy
+      operationId: postAdminPrivacyFind
+      summary: API-240 Find person records (FR-087, FR-088)
+      x-api-id: API-240
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Obj'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/privacy/export:
+    post:
+      tags:
+        - privacy
+      operationId: postAdminPrivacyExport
+      summary: API-241 Export personal data (FR-087)
+      x-api-id: API-241
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobRef'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/privacy/erase:
+    post:
+      tags:
+        - privacy
+      operationId: postAdminPrivacyErase
+      summary: API-242 Erase or anonymise person (FR-088)
+      x-api-id: API-242
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Obj'
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobRef'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/privacy/requests:
+    get:
+      tags:
+        - privacy
+      operationId: getAdminPrivacyRequests
+      summary: API-243 Privacy request history (FR-087, FR-088)
+      x-api-id: API-243
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        default:
+          $ref: '#/components/responses/Problem'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT (EdDSA, 15 min)
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: __Secure-rt
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+  headers:
+    ETag:
+      description: Record version for optimistic concurrency
+      schema:
+        type: string
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Version from ETag (RULE-058)
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Csrf:
+      name: X-Requested-With
+      in: header
+      required: true
+      schema:
+        type: string
+        const: SaleSphere
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    MasterType:
+      name: type
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/MasterType'
+    ImportKind:
+      name: kind
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ImportKind'
+  responses:
+    Problem:
+      description: RFC 7807 problem
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Problem:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - code
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+          examples:
+            - VALIDATION_FAILED
+            - VERSION_CONFLICT
+            - INVALID_CREDENTIALS
+        detail:
+          type: string
+        requestId:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              code:
+                type: string
+              message:
+                type: string
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - degraded
+        version:
+          type: string
+        firestore:
+          type: string
+        google:
+          type: string
+          enum:
+            - connected
+            - partial
+            - broken
+            - not_connected
+        lastTickAt:
+          type: string
+          format: date-time
+    AppConfig:
+      type: object
+      properties:
+        appName:
+          type: string
+        branding:
+          type: object
+          properties:
+            primary:
+              type: string
+              pattern: ^#[0-9A-Fa-f]{6}$
+            logoLightUrl:
+              type: string
+            logoDarkUrl:
+              type: string
+        terminology:
+          type: object
+          additionalProperties:
+            type: string
+        mode:
+          type: string
+          enum:
+            - Solo
+            - Team
+        modules:
+          type: object
+          additionalProperties:
+            type: boolean
+        taxMode:
+          type: string
+          enum:
+            - GST
+            - NonGST
+        locale:
+          type: string
+        version:
+          type: string
+    SettingsSection:
+      type: object
+      properties:
+        section:
+          type: string
+        version:
+          type: integer
+        data:
+          type: object
+          additionalProperties: true
+    DocType:
+      type: string
+      enum:
+        - quotation
+        - salesOrder
+        - taxInvoice
+        - billOfSupply
+        - proforma
+        - creditNote
+        - receipt
+        - openingInvoice
+    NumberSeries:
+      type: object
+      properties:
+        docType:
+          $ref: '#/components/schemas/DocType'
+        prefix:
+          type: string
+        pattern:
+          type: string
+        padding:
+          type: integer
+        fyReset:
+          type: boolean
+        next:
+          type: object
+          additionalProperties:
+            type: integer
+        preview:
+          type: string
+          maxLength: 16
+        version:
+          type: integer
+    Job:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        status:
+          type: string
+          enum:
+            - queued
+            - running
+            - succeeded
+            - failed
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        result:
+          type: object
+          additionalProperties: true
+        error:
+          $ref: '#/components/schemas/Problem'
+    JobRef:
+      type: object
+      properties:
+        jobId:
+          type: string
+    LoginSuccess:
+      type: object
+      required:
+        - accessToken
+        - expiresIn
+        - user
+      properties:
+        accessToken:
+          type: string
+        expiresIn:
+          type: integer
+        user:
+          $ref: '#/components/schemas/Me'
+        mustChangePassword:
+          type: boolean
+    MfaRequired:
+      type: object
+      required:
+        - mfaRequired
+        - mfaToken
+      properties:
+        mfaRequired:
+          type: boolean
+          const: true
+        mfaToken:
+          type: string
+        expiresIn:
+          type: integer
+    Me:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        fullName:
+          type: string
+        role:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        fullName:
+          type: string
+        phone:
+          type:
+            - string
+            - 'null'
+        email:
+          type:
+            - string
+            - 'null'
+        role:
+          type: string
+        teamIds:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum:
+            - active
+            - inactive
+        lockedUntil:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        has2fa:
+          type: boolean
+        mustChangePassword:
+          type: boolean
+        lastLoginAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        version:
+          type: integer
+    UserCreate:
+      type: object
+      required:
+        - username
+        - fullName
+        - role
+      properties:
+        username:
+          type: string
+          pattern: ^[A-Za-z0-9._-]{3,32}$
+        fullName:
+          type: string
+          minLength: 2
+          maxLength: 80
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+        teamIds:
+          type: array
+          items:
+            type: string
+        territoryIds:
+          type: array
+          items:
+            type: string
+    UserUpdate:
+      type: object
+      properties:
+        fullName:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+        teamIds:
+          type: array
+          items:
+            type: string
+        territoryIds:
+          type: array
+          items:
+            type: string
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+        device:
+          type: string
+        ipMasked:
+          type: string
+        current:
+          type: boolean
+    Role:
+      type: object
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+        name:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        recordScope:
+          type: string
+          enum:
+            - own
+            - team
+            - all
+        discountLimitPct:
+          type: integer
+        canRecordPayments:
+          type: boolean
+        version:
+          type: integer
+    Team:
+      allOf:
+        - $ref: '#/components/schemas/TeamInput'
+        - type: object
+          properties:
+            id:
+              type: string
+            version:
+              type: integer
+    TeamInput:
+      type: object
+      required:
+        - name
+        - managerId
+      properties:
+        name:
+          type: string
+        managerId:
+          type: string
+        memberIds:
+          type: array
+          maxItems: 30
+          items:
+            type: string
+    AuditFilter:
+      type: object
+      required:
+        - from
+        - to
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        userId:
+          type:
+            - string
+            - 'null'
+        recordType:
+          type:
+            - string
+            - 'null'
+        recordId:
+          type:
+            - string
+            - 'null'
+        action:
+          type:
+            - string
+            - 'null'
+        limit:
+          type: integer
+          maximum: 100
+        cursor:
+          type:
+            - string
+            - 'null'
+    AuditEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        at:
+          type: string
+          format: date-time
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+        action:
+          type: string
+        recordType:
+          type:
+            - string
+            - 'null'
+        recordId:
+          type:
+            - string
+            - 'null'
+        changes:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              before: {}
+              after: {}
+        ipMasked:
+          type:
+            - string
+            - 'null'
+    MasterType:
+      type: string
+      enum:
+        - bankAccounts
+        - upiIds
+        - products
+        - productCategories
+        - units
+        - taxRates
+        - paymentTerms
+        - paymentModes
+        - termsTemplates
+        - messageTemplates
+        - documentLayouts
+        - leadSources
+        - pipelineStages
+        - lostReasons
+        - junkReasons
+        - callOutcomes
+        - territories
+        - tags
+        - customerGroups
+        - customerTypes
+        - states
+    MasterItem:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          $ref: '#/components/schemas/MasterType'
+        name:
+          type: string
+        code:
+          type:
+            - string
+            - 'null'
+        status:
+          type: string
+          enum:
+            - active
+            - inactive
+        inUse:
+          type: boolean
+        isDefault:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+        version:
+          type: integer
+    Company:
+      type: object
+      properties:
+        legalName:
+          type: string
+        tradeName:
+          type: string
+        gstStatus:
+          type: string
+          enum:
+            - registered
+            - not_registered
+        gstin:
+          type:
+            - string
+            - 'null'
+          pattern: ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$
+        stateCode:
+          type: string
+          pattern: ^[0-9]{2}$
+        address:
+          type: object
+          properties:
+            line1:
+              type: string
+            city:
+              type: string
+            state:
+              type: string
+            pincode:
+              type: string
+              pattern: ^[1-9][0-9]{5}$
+        pan:
+          type:
+            - string
+            - 'null'
+        cin:
+          type:
+            - string
+            - 'null'
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        website:
+          type:
+            - string
+            - 'null'
+        financialYear:
+          type: object
+          properties:
+            startMonth:
+              type: integer
+              const: 4
+            lockDate:
+              type:
+                - string
+                - 'null'
+              format: date
+    ImportKind:
+      type: string
+      enum:
+        - products
+        - customers
+        - openLeads
+        - openingInvoices
+    ImportPreview:
+      type: object
+      properties:
+        importId:
+          type: string
+        kind:
+          $ref: '#/components/schemas/ImportKind'
+        status:
+          type: string
+          enum:
+            - previewed
+            - committing
+            - done
+            - failed
+        rows:
+          type: integer
+        valid:
+          type: integer
+        failed:
+          type: integer
+        duplicatesExisting:
+          type: integer
+        failures:
+          type: array
+          items:
+            type: object
+            properties:
+              row:
+                type: integer
+              field:
+                type: string
+              message:
+                type: string
+    Obj:
+      type: object
+      additionalProperties: true
+    Page:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Obj'
+        nextCursor:
+          type:
+            - string
+            - 'null'
+    BulkResult:
+      type: object
+      properties:
+        ok:
+          type: array
+          items:
+            type: string
+        skipped:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              reason:
+                type: string
+    Reason:
+      type: object
+      properties:
+        reason:
+          type: string
+          minLength: 3
+      required:
+        - reason
+    LeadCreate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        phone:
+          type:
+            - string
+            - 'null'
+        email:
+          type:
+            - string
+            - 'null'
+        company:
+          type: string
+        city:
+          type: string
+        pincode:
+          type: string
+          pattern: ^\d{6}$
+        interestProductId:
+          type: string
+        expectedValue:
+          type: integer
+          description: paise
+        sourceId:
+          type: string
+        notes:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        assignAuto:
+          type: boolean
+      required:
+        - name
+    LeadUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        company:
+          type: string
+        city:
+          type: string
+        pincode:
+          type: string
+        expectedValue:
+          type: integer
+          description: paise
+        tags:
+          type: array
+          items:
+            type: string
+    Lead:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        phone:
+          type:
+            - string
+            - 'null'
+        phoneValid:
+          type: boolean
+        email:
+          type:
+            - string
+            - 'null'
+        stage:
+          type: string
+        ownerId:
+          type: string
+        sourceId:
+          type: string
+        consentBasis:
+          type: string
+          enum:
+            - web_form_consent
+            - person_initiated
+            - imported_by_business
+            - existing_customer
+        slaStatus:
+          type: string
+          enum:
+            - pending
+            - met
+            - breached
+        slaDueAt:
+          type: string
+          format: date-time
+        labels:
+          type: array
+          items:
+            type: string
+        customerId:
+          type:
+            - string
+            - 'null'
+        mergedIntoId:
+          type:
+            - string
+            - 'null'
+        version:
+          type: integer
+    LeadPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Lead'
+        nextCursor:
+          type:
+            - string
+            - 'null'
+    LeadIntakeResult:
+      type: object
+      properties:
+        outcome:
+          type: string
+          enum:
+            - created
+            - merged
+            - linked_customer
+        lead:
+          $ref: '#/components/schemas/Lead'
+    StageChange:
+      type: object
+      properties:
+        stage:
+          type: string
+        reasonId:
+          type: string
+      required:
+        - stage
+    LeadBulk:
+      type: object
+      properties:
+        ids:
+          type: array
+          maxItems: 500
+          items:
+            type: string
+        action:
+          type: string
+          enum:
+            - assign
+            - stage
+            - tag
+        ownerId:
+          type: string
+        stage:
+          type: string
+        reasonId:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+      required:
+        - ids
+        - action
+    LeadMerge:
+      type: object
+      properties:
+        survivorId:
+          type: string
+        otherId:
+          type: string
+        picks:
+          $ref: '#/components/schemas/Obj'
+      required:
+        - survivorId
+        - otherId
+    LeadConvert:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum:
+            - new
+            - link
+        customerId:
+          type: string
+      required:
+        - mode
+    FormSubmit:
+      type: object
+      properties:
+        fields:
+          $ref: '#/components/schemas/Obj'
+        consent:
+          type: boolean
+        hp:
+          type: string
+        renderedAt:
+          type: integer
+        idempotencyKey:
+          type: string
+      required:
+        - fields
+    ActivityCreate:
+      type: object
+      properties:
+        clientId:
+          type: string
+        recordType:
+          type: string
+          enum:
+            - lead
+            - customer
+        recordId:
+          type: string
+        type:
+          type: string
+          enum:
+            - call
+            - whatsapp
+            - note
+            - visit
+        status:
+          type: string
+          enum:
+            - pending
+            - done
+        note:
+          type: string
+          maxLength: 5000
+        deviceAt:
+          type: string
+          format: date-time
+      required:
+        - clientId
+        - recordType
+        - recordId
+        - type
+    CallOutcome:
+      type: object
+      properties:
+        outcomeId:
+          type: string
+        note:
+          type: string
+        followUp:
+          type: object
+          properties:
+            dueAt:
+              type: string
+              format: date-time
+            type:
+              type: string
+      required:
+        - outcomeId
+    FollowUpCreate:
+      type: object
+      properties:
+        clientId:
+          type: string
+        recordType:
+          type: string
+        recordId:
+          type: string
+        dueAt:
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum:
+            - call
+            - whatsapp
+            - email
+            - visit
+            - other
+        note:
+          type: string
+      required:
+        - recordType
+        - recordId
+        - dueAt
+        - type
+    EmailCreate:
+      type: object
+      properties:
+        recordType:
+          type: string
+        recordId:
+          type: string
+        to:
+          type: array
+          items:
+            type: string
+        cc:
+          type: array
+          items:
+            type: string
+        subject:
+          type: string
+        html:
+          type: string
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Obj'
+      required:
+        - to
+        - subject
+    Outbox:
+      type: object
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            properties:
+              clientId:
+                type: string
+              kind:
+                type: string
+                enum:
+                  - note
+                  - call_outcome
+                  - follow_up
+              payload:
+                $ref: '#/components/schemas/Obj'
+              deviceAt:
+                type: string
+                format: date-time
+      required:
+        - items
+    SheetSync:
+      type: object
+      properties:
+        spreadsheetId:
+          type: string
+        tab:
+          type: string
+        headerRow:
+          type: integer
+        mapping:
+          $ref: '#/components/schemas/Obj'
+        defaults:
+          $ref: '#/components/schemas/Obj'
+        markerColumn:
+          type: string
+        mode:
+          type: string
+          enum:
+            - webhook
+            - poll
+        pollMinutes:
+          type: integer
+          minimum: 1
+          maximum: 4
+        writeBack:
+          $ref: '#/components/schemas/Obj'
+        backfillDays:
+          type: integer
+    Line:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+            - item
+            - heading
+        productId:
+          type: string
+        description:
+          type: string
+        qty:
+          type: number
+        unit:
+          type: string
+        rate:
+          type: integer
+          description: paise
+        discountPct:
+          type: number
+        discountAmt:
+          type: integer
+          description: paise
+        taxRatePct:
+          type: number
+        hsnSac:
+          type: string
+    Totals:
+      type: object
+      properties:
+        subTotal:
+          type: integer
+          description: paise
+        discountTotal:
+          type: integer
+          description: paise
+        taxable:
+          type: integer
+          description: paise
+        cgst:
+          type: integer
+          description: paise
+        sgst:
+          type: integer
+          description: paise
+        igst:
+          type: integer
+          description: paise
+        roundOff:
+          type: integer
+          description: paise
+        grandTotal:
+          type: integer
+          description: paise
+        inWords:
+          type: string
+    QuoteDraft:
+      type: object
+      properties:
+        partyType:
+          type: string
+          enum:
+            - lead
+            - customer
+        partyId:
+          type: string
+        date:
+          type: string
+          format: date
+        validDays:
+          type: integer
+        placeOfSupply:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/Line'
+        overallDiscountPct:
+          type: number
+        paymentTermId:
+          type: string
+        termsText:
+          type: string
+        notes:
+          type:
+            - string
+            - 'null'
+      required:
+        - partyType
+        - partyId
+        - lines
+    Quote:
+      type: object
+      properties:
+        id:
+          type: string
+        number:
+          type:
+            - string
+            - 'null'
+        revision:
+          type: integer
+        status:
+          type: string
+          enum:
+            - draft
+            - pending_approval
+            - approved
+            - sent
+            - viewed
+            - changes_requested
+            - accepted
+            - rejected
+            - expired
+            - superseded
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/Line'
+        totals:
+          $ref: '#/components/schemas/Totals'
+        validUntil:
+          type: string
+          format: date
+        viewCount:
+          type: integer
+        version:
+          type: integer
+    QuoteResponse:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - accept
+            - changes
+            - reject
+        name:
+          type: string
+        comment:
+          type: string
+      required:
+        - type
+    InvoiceCreate:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - tax_invoice
+            - bill_of_supply
+            - proforma
+        source:
+          $ref: '#/components/schemas/Obj'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/Obj'
+        date:
+          type: string
+          format: date
+      required:
+        - type
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        number:
+          type:
+            - string
+            - 'null'
+        status:
+          type: string
+          enum:
+            - draft
+            - issued
+            - partly_paid
+            - paid
+            - cancelled
+            - converted
+        date:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        totals:
+          $ref: '#/components/schemas/Totals'
+        balanceDue:
+          type: integer
+          description: paise
+        version:
+          type: integer
+    CreditNoteCreate:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum:
+            - full
+            - lines
+            - amount
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/Obj'
+        amount:
+          type: integer
+          description: paise
+        reason:
+          type: string
+        date:
+          type: string
+          format: date
+      required:
+        - mode
+        - reason
+    Upi:
+      type: object
+      properties:
+        uri:
+          type: string
+        amount:
+          type: integer
+          description: paise
+        qrSvg:
+          type: string
+        paid:
+          type: boolean
+    PaymentCreate:
+      type: object
+      properties:
+        customerId:
+          type: string
+        date:
+          type: string
+          format: date
+        amount:
+          type: integer
+          minimum: 1
+        mode:
+          type: string
+          enum:
+            - upi
+            - neft
+            - rtgs
+            - imps
+            - cheque
+            - card
+            - cash
+        reference:
+          type:
+            - string
+            - 'null'
+        bankAccountId:
+          type: string
+        tdsAmount:
+          type: integer
+          description: paise
+        tdsSection:
+          type: string
+        proofFileId:
+          type:
+            - string
+            - 'null'
+        note:
+          type:
+            - string
+            - 'null'
+        allocation:
+          $ref: '#/components/schemas/Obj'
+        utrOverrideReason:
+          type:
+            - string
+            - 'null'
+      required:
+        - customerId
+        - date
+        - amount
+        - mode
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+        receiptNo:
+          type: string
+        status:
+          type: string
+          enum:
+            - active
+            - reversed
+        amount:
+          type: integer
+          description: paise
+        tdsAmount:
+          type: integer
+          description: paise
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Obj'
+        advance:
+          type: integer
+          description: paise
+    CustomerCreate:
+      type: object
+      properties:
+        displayName:
+          type: string
+          maxLength: 120
+        legalName:
+          type: string
+        type:
+          type: string
+          enum:
+            - individual
+            - business
+            - government
+        groupId:
+          type: string
+        gstin:
+          type: string
+        pan:
+          type: string
+        ownerId:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        creditDays:
+          type: integer
+          minimum: 0
+        confirmDuplicate:
+          type: boolean
+      required:
+        - displayName
+        - type
+    Customer:
+      type: object
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+        displayName:
+          type: string
+        gstin:
+          type:
+            - string
+            - 'null'
+        ownerId:
+          type: string
+        totals:
+          $ref: '#/components/schemas/Obj'
+        version:
+          type: integer

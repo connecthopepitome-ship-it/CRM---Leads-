@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SaleSphere Prototype</title>
+<meta name="description" content="Clickable low-to-mid fidelity prototype of SaleSphere CRM (Phase 4, UX v0.1).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<style>
+  :root {
+    --color-bg: 248 250 252; --color-surface: 255 255 255; --color-surface-2: 241 245 249;
+    --color-text: 15 23 42; --color-text-muted: 71 85 105; --color-border: 226 232 240; --color-border-input: 100 116 139;
+    --color-primary: 37 99 235; --color-primary-hover: 29 78 216; --color-primary-fg: 255 255 255; --color-primary-subtle: 239 246 255;
+    --color-success: 21 128 61; --color-success-subtle: 240 253 244;
+    --color-warning: 180 83 9; --color-warning-subtle: 255 251 235;
+    --color-danger: 185 28 28; --color-danger-subtle: 254 242 242;
+    --color-info: 3 105 161;
+    --radius-md: 10px; --radius-lg: 16px;
+    --motion-base: 200ms; --motion-slow: 320ms;
+  }
+  [data-theme="dark"] {
+    --color-bg: 11 18 32; --color-surface: 17 24 39; --color-surface-2: 31 41 55;
+    --color-text: 241 245 249; --color-text-muted: 148 163 184; --color-border: 51 65 85; --color-border-input: 100 116 139;
+    --color-primary: 96 165 250; --color-primary-hover: 147 197 253; --color-primary-fg: 11 18 32; --color-primary-subtle: 23 37 84;
+    --color-success: 74 222 128; --color-success-subtle: 5 46 22;
+    --color-warning: 251 191 36; --color-warning-subtle: 59 42 6;
+    --color-danger: 248 113 113; --color-danger-subtle: 63 13 13;
+    --color-info: 56 189 248;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --color-bg: 11 18 32; --color-surface: 17 24 39; --color-surface-2: 31 41 55;
+      --color-text: 241 245 249; --color-text-muted: 148 163 184; --color-border: 51 65 85;
+      --color-primary: 96 165 250; --color-primary-hover: 147 197 253; --color-primary-fg: 11 18 32; --color-primary-subtle: 23 37 84;
+      --color-success: 74 222 128; --color-success-subtle: 5 46 22;
+      --color-warning: 251 191 36; --color-warning-subtle: 59 42 6;
+      --color-danger: 248 113 113; --color-danger-subtle: 63 13 13; --color-info: 56 189 248;
+    }
+  }
+  html, body { background: rgb(var(--color-bg)); color: rgb(var(--color-text)); font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif; }
+  .tnum { font-variant-numeric: tabular-nums; }
+  :focus-visible { outline: 2px solid rgb(var(--color-primary)); outline-offset: 2px; border-radius: 6px; }
+  .sheet-enter { animation: up var(--motion-slow) cubic-bezier(.2,0,0,1); }
+  @keyframes up { from { transform: translateY(24px); opacity: 0 } to { transform: none; opacity: 1 } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0ms !important; transition-duration: 0ms !important; } }
+  .skip { position: absolute; left: -9999px; } .skip:focus { left: 16px; top: 8px; z-index: 100; }
+  .qr svg { width: 100%; height: auto; display: block; }
+  .qr svg rect[fill="#ffffff"], .qr svg path[fill="#ffffff"] { fill: #ffffff; }
+  main { scroll-padding-bottom: 140px; }
+  .row-swipe { touch-action: pan-y; transition: transform var(--motion-base); }
+</style>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      colors: {
+        bg: 'rgb(var(--color-bg) / <alpha-value>)', surface: 'rgb(var(--color-surface) / <alpha-value>)', surface2: 'rgb(var(--color-surface-2) / <alpha-value>)',
+        ink: 'rgb(var(--color-text) / <alpha-value>)', muted: 'rgb(var(--color-text-muted) / <alpha-value>)',
+        line: 'rgb(var(--color-border) / <alpha-value>)', input: 'rgb(var(--color-border-input) / <alpha-value>)',
+        primary: { DEFAULT: 'rgb(var(--color-primary) / <alpha-value>)', hover: 'rgb(var(--color-primary-hover) / <alpha-value>)', fg: 'rgb(var(--color-primary-fg) / <alpha-value>)', subtle: 'rgb(var(--color-primary-subtle) / <alpha-value>)' },
+        success: { DEFAULT: 'rgb(var(--color-success) / <alpha-value>)', subtle: 'rgb(var(--color-success-subtle) / <alpha-value>)' },
+        warning: { DEFAULT: 'rgb(var(--color-warning) / <alpha-value>)', subtle: 'rgb(var(--color-warning-subtle) / <alpha-value>)' },
+        danger: { DEFAULT: 'rgb(var(--color-danger) / <alpha-value>)', subtle: 'rgb(var(--color-danger-subtle) / <alpha-value>)' },
+        info: 'rgb(var(--color-info) / <alpha-value>)'
+      },
+      borderRadius: { md: 'var(--radius-md)', lg: 'var(--radius-lg)' },
+      screens: { sm: '360px', md: '768px', lg: '1024px', xl: '1280px', '2xl': '1536px' }
+    } }
+  };
+</script>
+</head>
+<body class="min-h-screen">
+<a href="#main" class="skip bg-primary text-primary-fg px-4 py-2 rounded-md">Skip to content</a>
+<div id="banners"></div>
+<div id="app"></div>
+<div id="overlay"></div>
+<div id="toasts" class="fixed z-[70] bottom-24 lg:bottom-6 left-1/2 -translate-x-1/2 w-[min(92vw,420px)] space-y-2" role="status" aria-live="polite"></div>
+<div id="sr" class="sr-only" aria-live="polite"></div>
+
+<script>
+/* ---------- Sample data (freelance web developer pilot, Solo mode) ---------- */
+const COMPANY = { name: 'Arjun Web Studio', state: 'Karnataka', stateCode: '29', gstin: '29AAAPM1234C1Z5', upi: 'arjunwebstudio@okhdfcbank', payee: 'Arjun Web Studio', bank: 'HDFC Bank · A/c ••4821 · IFSC HDFC0001234' };
+const now = Date.now(); const min = 60000, day = 86400000;
+const S = {
+  mode: 'Solo', user: { name: 'Arjun Mehta', first: 'Arjun', role: 'Admin' }, offline: false, google: 'Connected', loggedIn: false,
+  products: [
+    { id: 'P1', name: 'Website – 5 pages', sac: '998314', unit: 'Nos', rate: 30000, tax: 18 },
+    { id: 'P2', name: 'E-commerce website', sac: '998314', unit: 'Nos', rate: 75000, tax: 18 },
+    { id: 'P3', name: 'Hosting – 1 year', sac: '998315', unit: 'Yr', rate: 3000, tax: 18 },
+    { id: 'P4', name: 'Domain (.in) – 1 year', sac: '998315', unit: 'Yr', rate: 800, tax: 18 },
+    { id: 'P5', name: 'Website maintenance – monthly', sac: '998313', unit: 'Month', rate: 2500, tax: 18 },
+    { id: 'P6', name: 'SEO setup', sac: '998365', unit: 'Nos', rate: 12000, tax: 18 }
+  ],
+  leads: [
+    { id: 'L1', name: 'Kavya Rao', company: 'Rao Designs', phone: '+919845012345', email: 'kavya@raodesigns.in', city: 'Bengaluru', state: 'Karnataka', interest: 'Website – 5 pages', value: 35000, source: 'Meta ads (Sheet)', consent: 'Web-form consent · 13-11-2026 10:02', stage: 'New', created: now - 12 * min, contactedAt: null, next: null, activities: [{ t: 'system', at: now - 12 * min, text: 'Lead created from Google Sheet "Meta ads leads"', body: '"Need a site for my boutique, 5 pages, by December"' }] },
+    { id: 'L2', name: 'Ravi Kumar', company: '', phone: '+919876543210', email: 'ravi.k@gmail.com', city: 'Mysuru', state: 'Karnataka', interest: 'E-commerce website', value: 80000, source: 'Website form', consent: 'Web-form consent', stage: 'Interested', created: now - 3 * day, contactedAt: now - 3 * day + 8 * min, next: { at: now + 2 * 3600000, type: 'Call', note: 'Discuss payment gateway options' }, activities: [{ t: 'call', at: now - 2 * day, text: 'Call · Connected', body: 'Wants Razorpay and 50 products. Send quote after demo.' }] },
+    { id: 'L3', name: 'Sneha Patil', company: 'Patil Clinic', phone: '+919900112233', email: 'sneha@patilclinic.in', city: 'Pune', state: 'Maharashtra', interest: 'Website – 5 pages', value: 40000, source: 'Meta ads (Sheet)', consent: 'Web-form consent', stage: 'Contacted', created: now - 1 * day, contactedAt: now - day + 6 * min, next: { at: now - 5 * 3600000, type: 'WhatsApp', note: 'Send portfolio' }, activities: [{ t: 'whatsapp', at: now - day, text: 'WhatsApp opened · Greeting', body: '' }] },
+    { id: 'L4', name: 'Anita D\'Souza', company: 'Sweet Crumbs Bakery', phone: '+919811223344', email: 'anita@sweetcrumbs.in', city: 'Bengaluru', state: 'Karnataka', interest: 'Website – 5 pages', value: 33000, source: 'Phone call', consent: 'Person-initiated enquiry', stage: 'Quotation Sent', created: now - 6 * day, contactedAt: now - 6 * day, next: { at: now + day, type: 'Call', note: 'Follow up on quote' }, activities: [{ t: 'quote', at: now - 2 * day, text: 'Quote QT/25-26/0006 sent via WhatsApp', body: '' }] },
+    { id: 'L5', name: 'Vikram Singh', company: 'VS Fitness', phone: '+919822334455', email: '', city: 'Delhi', state: 'Delhi', interest: 'SEO setup', value: 12000, source: 'CSV import', consent: 'Imported by business', stage: 'Lost', lostReason: 'Budget too low', created: now - 20 * day, contactedAt: now - 19 * day, next: null, activities: [] }
+  ],
+  customers: [
+    { id: 'C1', code: 'C-0042', name: 'Acme Interiors', type: 'Business', gstin: '29ABCDE1234F1Z5', state: 'Karnataka', since: 'Apr 2025', phone: '+919845098450', email: 'accounts@acmeinteriors.in', tags: ['Retainer'], contacts: [{ name: 'Rohit Shah', role: 'Decision-maker', phone: '+919845098450' }, { name: 'Lata M', role: 'Accounts', phone: '+919845011111' }] },
+    { id: 'C2', code: 'C-0043', name: 'Bluefin Logistics', type: 'Business', gstin: '27AABCB5678K1Z2', state: 'Maharashtra', since: 'Jul 2025', phone: '+919820044556', email: 'it@bluefin.in', tags: [], contacts: [{ name: 'Nikhil Joshi', role: 'Decision-maker', phone: '+919820044556' }] }
+  ],
+  quotes: [
+    { id: 'Q6', no: 'QT/25-26/0006', rev: 0, party: { type: 'lead', id: 'L4' }, status: 'Viewed', views: 3, lastView: now - 2 * 3600000, date: now - 2 * day, valid: now + 13 * day, lines: [{ pid: 'P1', qty: 1, rate: 30000, disc: 10, tax: 18, sac: '998314', name: 'Website – 5 pages' }, { pid: 'P3', qty: 1, rate: 3000, disc: 0, tax: 18, sac: '998315', name: 'Hosting – 1 year' }] }
+  ],
+  invoices: [
+    { id: 'I142', no: 'INV/25-26/0142', cust: 'C1', date: now - 15 * day, due: now + 15 * day, lines: [{ name: 'Website redesign – phase 2', sac: '998314', qty: 1, rate: 40000, disc: 0, tax: 18 }], paid: 20000, credits: 0, payments: ['R90'] },
+    { id: 'I139', no: 'INV/25-26/0139', cust: 'C2', date: now - 75 * day, due: now - 45 * day, lines: [{ name: 'Fleet tracking portal', sac: '998314', qty: 1, rate: 50000, disc: 0, tax: 18 }], paid: 0, credits: 0, payments: [] },
+    { id: 'I140', no: 'INV/25-26/0140', cust: 'C1', date: now - 40 * day, due: now - 25 * day, lines: [{ name: 'Website maintenance – Sep', sac: '998313', qty: 1, rate: 2500, disc: 0, tax: 18 }], paid: 2950, credits: 0, payments: ['R88'] }
+  ],
+  payments: [
+    { id: 'R90', no: 'RCPT/25-26/0090', cust: 'C1', date: now - 7 * day, amount: 20000, mode: 'UPI', utr: '431298765432', alloc: [{ inv: 'I142', amt: 20000 }] },
+    { id: 'R88', no: 'RCPT/25-26/0088', cust: 'C1', date: now - 30 * day, amount: 2950, mode: 'Bank transfer', utr: 'HDFCN52025093011', alloc: [{ inv: 'I140', amt: 2950 }] }
+  ],
+  notifs: [
+    { at: now - 12 * min, text: 'New lead: Kavya Rao from Meta ads (Sheet)', href: '#/lead/L1', unread: true },
+    { at: now - 2 * 3600000, text: 'Sweet Crumbs Bakery opened QT/25-26/0006', href: '#/quote/Q6', unread: true },
+    { at: now - 7 * day, text: '₹20,000 received from Acme Interiors', href: '#/invoice/I142', unread: false }
+  ],
+  seq: { QT: 7, INV: 143, RCPT: 91, L: 6, C: 44 }
+};
+
+/* ---------- Helpers ---------- */
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const inr = n => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2, minimumFractionDigits: n % 1 ? 2 : 0 }).format(n);
+const inr2 = n => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(n);
+const d2 = n => String(n).padStart(2, '0');
+const fmtDate = t => { const d = new Date(t); return `${d2(d.getDate())}-${d2(d.getMonth() + 1)}-${d.getFullYear()}`; };
+const fmtTime = t => { const d = new Date(t); return `${d2(d.getHours())}:${d2(d.getMinutes())}`; };
+const rel = t => { const s = (now2() - t) / 1000; if (s < 0) { const f = -s; return f < 3600 ? `in ${Math.round(f / 60)} min` : f < 86400 ? `today ${fmtTime(t)}` : fmtDate(t); } return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`; };
+const now2 = () => Date.now();
+const phoneFmt = p => p && p.startsWith('+91') ? `+91 ${p.slice(3, 8)} ${p.slice(8)}` : (p || '');
+const initials = n => n.split(/\s+/).map(x => x[0]).slice(0, 2).join('').toUpperCase();
+const byId = (arr, id) => arr.find(x => x.id === id);
+const partyOf = p => p.type === 'lead' ? byId(S.leads, p.id) : byId(S.customers, p.id);
+function calc(lines, state) {
+  const intra = (state || COMPANY.state) === COMPANY.state;
+  let sub = 0, disc = 0, taxable = 0; const taxes = {};
+  for (const l of lines) {
+    const gross = l.qty * l.rate; const d = Math.round(gross * (l.disc || 0)) / 100; const tv = gross - d;
+    sub += gross; disc += d; taxable += tv;
+    const t = Math.round(tv * l.tax) / 100;
+    const k = intra ? `CGST ${l.tax / 2}% + SGST ${l.tax / 2}%` : `IGST ${l.tax}%`; taxes[k] = (taxes[k] || 0) + t;
+  }
+  const taxTotal = Object.values(taxes).reduce((a, b) => a + b, 0);
+  const raw = taxable + taxTotal; const grand = Math.round(raw); const round = +(grand - raw).toFixed(2);
+  return { sub, disc, taxable, taxes, taxTotal, round, grand, intra };
+}
+const invTotal = i => calc(i.lines, byId(S.customers, i.cust).state).grand;
+const invBal = i => Math.max(0, invTotal(i) - i.paid - i.credits);
+const invStatus = i => { const b = invBal(i); if (b === 0) return 'Paid'; if (i.due < now2()) return 'Overdue'; return i.paid > 0 ? 'Partly paid' : 'Issued'; };
+const custTotals = c => { const inv = S.invoices.filter(i => i.cust === c.id); const invoiced = inv.reduce((a, i) => a + invTotal(i), 0); const received = S.payments.filter(p => p.cust === c.id).reduce((a, p) => a + p.amount, 0); const outstanding = inv.reduce((a, i) => a + invBal(i), 0); const overdue = inv.filter(i => i.due < now2()).reduce((a, i) => a + invBal(i), 0); return { invoiced, received, outstanding, overdue, count: inv.length }; };
+const slaChip = l => {
+  if (l.contactedAt) { const m = Math.round((l.contactedAt - l.created) / min); return chip(`Contacted in ${m} min`, 'success'); }
+  if (['Lost', 'Junk', 'Won'].includes(l.stage)) return '';
+  const left = 15 - Math.floor((now2() - l.created) / min);
+  if (left <= 0) return chip(`SLA breached ${-left} min`, 'danger');
+  return chip(`${left} min left`, left <= 5 ? 'warning' : 'info');
+};
+function upiLink(i) { const b = invBal(i); const tr = i.no.replace(/^([A-Z]+)\/(\d{2})-(\d{2})\/(\d+)$/, '$1$2$3-$4'); return `upi://pay?pa=${COMPANY.upi}&pn=${encodeURIComponent(COMPANY.payee.slice(0, 50))}&am=${b.toFixed(2)}&cu=INR&tn=${encodeURIComponent(i.no)}&tr=${tr}`; }
+function qrSvg(text) { try { const q = qrcode(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 4, margin: 4, scalable: true }); } catch (e) { return '<div class="p-4 text-sm text-muted">QR library not loaded (offline). Use the Pay via UPI link.</div>'; } }
+
+/* ---------- UI atoms ---------- */
+const tone = { success: 'bg-success-subtle text-success', warning: 'bg-warning-subtle text-warning', danger: 'bg-danger-subtle text-danger', info: 'bg-primary-subtle text-primary-hover', muted: 'bg-surface2 text-muted' };
+function chip(text, t = 'muted') { return `<span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${tone[t]}"><span aria-hidden="true" class="w-1.5 h-1.5 rounded-full bg-current"></span>${esc(text)}</span>`; }
+const statusTone = s => ({ New: 'info', Contacted: 'info', Interested: 'warning', 'Quotation Sent': 'warning', Negotiation: 'warning', Won: 'success', Lost: 'danger', Junk: 'muted', Draft: 'muted', Sent: 'info', Viewed: 'info', Accepted: 'success', 'Changes requested': 'warning', Declined: 'danger', Paid: 'success', 'Partly paid': 'warning', Overdue: 'danger', Issued: 'info' }[s] || 'muted');
+function btn(label, attrs = '', kind = 'primary', extra = '') {
+  const k = { primary: 'bg-primary text-primary-fg hover:bg-primary-hover', secondary: 'bg-surface text-ink border border-input hover:bg-surface2', ghost: 'text-ink hover:bg-surface2', danger: 'bg-danger text-white hover:opacity-90' }[kind];
+  return `<button type="button" ${attrs} class="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 rounded-md font-medium text-sm ${k} ${extra}">${label}</button>`;
+}
+const field = (id, label, input, help = '') => `<div class="space-y-1"><label for="${id}" class="block text-sm font-medium">${label}</label>${input}${help ? `<p id="${id}-help" class="text-xs text-muted">${help}</p>` : ''}</div>`;
+const inputCls = 'w-full min-h-[44px] rounded-md border border-input bg-surface px-3 text-base';
+const card = (inner, extra = '') => `<section class="bg-surface border border-line rounded-lg p-4 lg:p-6 shadow-sm ${extra}">${inner}</section>`;
+function toast(msg, action) { const el = document.createElement('div'); el.className = 'sheet-enter bg-ink text-bg rounded-md px-4 py-3 shadow-lg flex items-center justify-between gap-3 text-sm'; el.innerHTML = `<span>${msg}</span>${action ? `<a class="underline font-medium" href="${action.href}">${action.label}</a>` : ''}`; $('#toasts').appendChild(el); setTimeout(() => el.remove(), action ? 8000 : 5000); }
+const announce = m => { $('#sr').textContent = ''; setTimeout(() => $('#sr').textContent = m, 50); };
+const actionBar = (name, phone, extra = '') => `<div class="flex gap-2 flex-wrap" role="group" aria-label="Contact ${esc(name)}">
+  ${btn('📞 Call', `data-act="call" aria-label="Call ${esc(name)}" ${phone ? '' : 'aria-disabled="true" title="Add a phone number first"'}`, 'primary')}
+  ${btn('💬 WhatsApp', `data-act="wa" aria-label="WhatsApp ${esc(name)}"`, 'secondary')}
+  ${btn('✉ Email', `data-act="email" aria-label="Email ${esc(name)}"`, 'secondary')}
+  ${btn('📍 Directions', `data-act="dir" aria-label="Directions to ${esc(name)}"`, 'ghost')}${extra}</div>`;
+
+/* ---------- Dialog / sheet with focus trap ---------- */
+let lastFocus = null;
+function openSheet(title, body, onReady) {
+  lastFocus = document.activeElement;
+  $('#overlay').innerHTML = `<div class="fixed inset-0 z-[60] flex items-end lg:items-center justify-center">
+    <div class="absolute inset-0 bg-black/50" data-close></div>
+    <div role="dialog" aria-modal="true" aria-labelledby="dlg-title" class="sheet-enter relative bg-surface w-full lg:w-[520px] max-h-[92vh] overflow-auto rounded-t-lg lg:rounded-lg p-5 shadow-2xl">
+      <div class="lg:hidden mx-auto mb-3 h-1.5 w-10 rounded-full bg-line" aria-hidden="true"></div>
+      <div class="flex items-start justify-between gap-4"><h2 id="dlg-title" class="text-xl font-semibold">${title}</h2>
+      <button type="button" data-close class="min-w-[44px] min-h-[44px] rounded-md hover:bg-surface2" aria-label="Close">✕</button></div>
+      <div class="mt-4">${body}</div></div></div>`;
+  const dlg = $('[role=dialog]'); const f = dlg.querySelector('input,select,textarea,button:not([data-close]),[tabindex="0"]'); (f || dlg).focus();
+  onReady && onReady(dlg);
+}
+function closeSheet() { $('#overlay').innerHTML = ''; lastFocus && lastFocus.focus && lastFocus.focus(); }
+document.addEventListener('keydown', e => {
+  const dlg = $('[role=dialog]');
+  if (e.key === 'Escape' && dlg) { closeSheet(); }
+  if (e.key === 'Tab' && dlg) { const f = [...dlg.querySelectorAll('a[href],button,input,select,textarea,[tabindex="0"]')].filter(x => !x.disabled); if (!f.length) return; const a = f[0], z = f[f.length - 1]; if (e.shiftKey && document.activeElement === a) { z.focus(); e.preventDefault(); } else if (!e.shiftKey && document.activeElement === z) { a.focus(); e.preventDefault(); } }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openSearch(); }
+});
+document.addEventListener('click', e => { if (e.target.closest('[data-close]')) closeSheet(); });
+
+/* ---------- Shell ---------- */
+const NAV = [['#/home', 'Home', '🏠'], ['#/leads', 'Leads', '👥'], ['#/customers', 'Customers', '🏢'], ['#/sales', 'Sales', '🧾'], ['#/more', 'More', '☰']];
+const SIDENAV = [['#/home', 'Home', '🏠'], ['#/leads', 'Leads', '👥'], ['#/customers', 'Customers', '🏢'], ['#/sales', 'Sales', '🧾'], ['#/followups', 'Follow-ups', '⏰'], ['#/reports', 'Reports', '📊'], ['#/settings', 'Settings', '⚙️']];
+function shell(content, active) {
+  const unread = S.notifs.filter(n => n.unread).length;
+  const navItem = ([h, l, i], side) => { const cur = active === h; return `<a href="${h}" ${cur ? 'aria-current="page"' : ''} class="${side ? 'flex items-center gap-3 px-3 min-h-[44px] rounded-md' : 'flex flex-col items-center justify-center min-h-[56px] flex-1 text-xs'} ${cur ? 'text-primary font-semibold ' + (side ? 'bg-primary-subtle' : '') : 'text-muted hover:text-ink'}"><span aria-hidden="true" class="${side ? '' : 'text-lg'}">${i}</span>${l}</a>`; };
+  return `<div class="lg:flex">
+  <nav aria-label="Main navigation" class="hidden lg:flex lg:flex-col w-60 shrink-0 h-screen sticky top-0 border-r border-line bg-surface p-4 gap-1">
+    <div class="flex items-center gap-2 px-2 pb-4"><span class="w-8 h-8 rounded-full bg-primary text-primary-fg grid place-items-center font-bold" aria-hidden="true">A</span><span class="font-semibold">${COMPANY.name}</span></div>
+    ${SIDENAV.map(n => navItem(n, true)).join('')}
+    <div class="mt-auto text-xs text-muted px-2">Prototype · Solo mode<br>Signed in as ${S.user.name}</div>
+  </nav>
+  <div class="flex-1 min-w-0">
+    <header class="sticky top-0 z-20 bg-surface/95 backdrop-blur border-b border-line">
+      <div class="flex items-center gap-2 px-4 lg:px-8 h-14">
+        <span class="lg:hidden font-semibold truncate">${COMPANY.name}</span>
+        <button type="button" data-act="search" class="ml-auto lg:ml-0 lg:w-80 min-h-[44px] flex items-center gap-2 px-3 rounded-md border border-input text-muted text-sm" aria-label="Search (Ctrl K)"><span aria-hidden="true">🔍</span><span class="hidden lg:inline">Search leads, customers, invoices…</span><kbd class="hidden lg:inline ml-auto text-xs border border-line rounded px-1">Ctrl K</kbd></button>
+        <span class="lg:ml-auto"></span>
+        ${S.offline ? `<span class="text-xs">${chip('Offline', 'warning')}</span>` : ''}
+        <a href="#/notifications" class="relative min-w-[44px] min-h-[44px] grid place-items-center rounded-md hover:bg-surface2" aria-label="Notifications, ${unread} unread">🔔${unread ? `<span class="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] rounded-full bg-danger text-white text-[11px] grid place-items-center" aria-hidden="true">${unread}</span>` : ''}</a>
+        <button type="button" data-act="theme" class="min-w-[44px] min-h-[44px] rounded-md hover:bg-surface2" aria-label="Switch light or dark theme">🌓</button>
+      </div>
+    </header>
+    ${S.offline ? `<div role="status" class="bg-warning-subtle text-warning px-4 lg:px-8 py-2 text-sm">You're offline. Notes and call outcomes will sync when you're back.</div>` : ''}
+    ${S.google !== 'Connected' ? `<div role="alert" class="bg-danger-subtle text-danger px-4 lg:px-8 py-2 text-sm">Google connection lost — leads from your sheet are paused. <a class="underline font-medium" href="#/settings">Reconnect</a></div>` : ''}
+    <main id="main" tabindex="-1" class="px-4 lg:px-8 py-5 pb-36 lg:pb-10 max-w-[1440px] mx-auto">${content}</main>
+  </div></div>
+  <nav aria-label="Tab bar" class="lg:hidden fixed bottom-0 inset-x-0 z-20 bg-surface border-t border-line flex pb-[env(safe-area-inset-bottom)]">${NAV.map(n => navItem(n, false)).join('')}</nav>
+  <button type="button" data-act="quickadd" aria-label="Quick add" class="lg:hidden fixed z-30 right-4 bottom-[76px] w-14 h-14 rounded-full bg-primary text-primary-fg text-2xl shadow-lg">＋</button>`;
+}
+const pageHead = (title, sub = '', actions = '', back = '') => `<div class="flex flex-wrap items-start gap-3 mb-5">${back ? `<a href="${back[0]}" class="min-h-[44px] inline-flex items-center text-sm text-muted hover:text-ink" aria-label="Back to ${back[1]}">← ${back[1]}</a><div class="basis-full h-0"></div>` : ''}<div class="min-w-0"><h1 tabindex="-1" class="text-2xl font-semibold">${title}</h1>${sub ? `<div class="text-sm text-muted mt-1 flex flex-wrap gap-2 items-center">${sub}</div>` : ''}</div><div class="ml-auto flex gap-2 flex-wrap">${actions}</div></div>`;
+
+/* ---------- Screens ---------- */
+function scrLogin(err) {
+  return `<main id="main" class="min-h-screen grid place-items-center px-4"><div class="w-full max-w-[400px] bg-surface border border-line rounded-lg p-6 shadow-sm">
+  <div class="flex items-center gap-2 mb-4"><span class="w-9 h-9 rounded-full bg-primary text-primary-fg grid place-items-center font-bold" aria-hidden="true">A</span><span class="font-semibold">${COMPANY.name}</span></div>
+  <h1 class="text-2xl font-semibold mb-4">Sign in to SaleSphere</h1>
+  ${err ? `<div role="alert" class="mb-4 rounded-md bg-danger-subtle text-danger px-3 py-2 text-sm">${err}</div>` : ''}
+  <form id="login" class="space-y-4" novalidate>
+    ${field('u', 'Username', `<input id="u" name="u" class="${inputCls}" autocomplete="username" value="arjun">`)}
+    ${field('p', 'Password', `<input id="p" name="p" type="password" class="${inputCls}" autocomplete="current-password" aria-describedby="p-help" value="prototype">`, 'Prototype: any password works except "wrong".')}
+    ${btn('Sign in', 'type="submit"', 'primary', 'w-full')}
+  </form><p class="mt-4 text-sm text-muted">Trouble signing in? Ask your admin.</p></div></main>`;
+}
+function scrHome() {
+  const due = S.leads.filter(l => l.next && !['Lost', 'Won'].includes(l.stage)).sort((a, b) => a.next.at - b.next.at);
+  const overdueF = due.filter(l => l.next.at < now2());
+  const newLeads = S.leads.filter(l => l.stage === 'New');
+  const overdueInv = S.invoices.filter(i => invStatus(i) === 'Overdue');
+  const collected = S.payments.filter(p => now2() - p.date < 31 * day).reduce((a, p) => a + p.amount, 0);
+  const tile = (label, value, href, t = '') => `<a href="${href}" class="block bg-surface border border-line rounded-lg p-4 hover:border-primary ${t}" aria-label="${esc(label)}: ${esc(value)}. View"><div class="text-sm text-muted">${label}</div><div class="text-2xl font-semibold tnum mt-1">${value}</div></a>`;
+  const stages = ['New', 'Contacted', 'Interested', 'Quotation Sent', 'Negotiation'];
+  const max = Math.max(1, ...stages.map(s => S.leads.filter(l => l.stage === s).length));
+  return shell(`${pageHead(`Good morning, ${S.user.first}`, fmtDate(now2()))}
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+    ${tile('Follow-ups due', `${due.filter(l => l.next.at < now2() + day).length}`, '#/followups')}
+    ${tile('New leads', `${newLeads.length}`, '#/leads')}
+    ${tile('Overdue invoices', `${inr(overdueInv.reduce((a, i) => a + invBal(i), 0))} (${overdueInv.length})`, '#/sales?tab=invoices')}
+    ${tile('Collected (30 days)', inr(collected), '#/sales?tab=payments')}
+  </div>
+  <div class="grid lg:grid-cols-2 gap-4">
+    ${card(`<h2 class="text-lg font-semibold mb-3">Today</h2>${due.length ? `<ul class="divide-y divide-line">${due.map(l => `<li class="py-3 flex items-center gap-3"><a href="#/lead/${l.id}" class="min-w-0 flex-1"><div class="font-medium">${esc(l.name)}</div><div class="text-sm text-muted">${l.next.type} · ${l.next.at < now2() ? `<span class="text-danger font-medium">Overdue</span> ` : ''}${rel(l.next.at)} · ${esc(l.next.note)}</div></a>${btn('📞', `data-act="call" data-id="${l.id}" aria-label="Call ${esc(l.name)}"`, 'secondary')}</li>`).join('')}</ul>` : `<p class="text-muted">Nothing due today. Nice work.</p>`}`)}
+    ${card(`<h2 class="text-lg font-semibold mb-3">New leads</h2>${newLeads.length ? `<ul class="divide-y divide-line">${newLeads.map(l => `<li class="py-3"><a href="#/lead/${l.id}" class="flex items-center gap-3"><span class="w-10 h-10 rounded-full bg-primary-subtle text-primary-hover grid place-items-center text-sm font-semibold" aria-hidden="true">${initials(l.name)}</span><span class="min-w-0 flex-1"><span class="block font-medium">${esc(l.name)}</span><span class="block text-sm text-muted">${esc(l.interest)} · ${esc(l.source)}</span></span>${slaChip(l)}</a></li>`).join('')}</ul>` : '<p class="text-muted">No new leads.</p>'}`)}
+    ${card(`<h2 class="text-lg font-semibold mb-3" id="pipe-h">Pipeline by stage</h2><p class="sr-only">Number of open leads per stage.</p><ul class="space-y-2" aria-labelledby="pipe-h">${stages.map(s => { const n = S.leads.filter(l => l.stage === s).length; const v = S.leads.filter(l => l.stage === s).reduce((a, l) => a + l.value, 0); return `<li class="grid grid-cols-[120px_1fr_auto] items-center gap-2 text-sm"><span>${s}</span><span class="h-3 rounded bg-surface2"><span class="block h-3 rounded bg-primary" style="width:${n / max * 100}%"></span></span><span class="tnum">${n} · ${inr(v)}</span></li>`; }).join('')}</ul>`)}
+    ${card(`<h2 class="text-lg font-semibold mb-3">Waiting on customers</h2><ul class="divide-y divide-line">${S.quotes.filter(q => ['Sent', 'Viewed', 'Changes requested'].includes(q.status)).map(q => `<li class="py-3"><a href="#/quote/${q.id}" class="flex items-center gap-3"><span class="flex-1"><span class="block font-medium">${q.no}</span><span class="block text-sm text-muted">${esc(partyOf(q.party).name)} · ${inr(calc(q.lines, partyOf(q.party).state).grand)}</span></span>${chip(q.status === 'Viewed' ? `Viewed ${q.views}×` : q.status, statusTone(q.status))}</a></li>`).join('') || '<li class="py-3 text-muted">No quotes awaiting response.</li>'}</ul>`)}
+  </div>`, '#/home');
+}
+let leadView = 'list', leadFilter = 'all';
+function scrLeads() {
+  const filters = [['all', 'All open'], ['new', 'New'], ['due', 'Due today'], ['sla', 'SLA breached']];
+  let rows = S.leads.filter(l => !['Lost', 'Junk'].includes(l.stage) || leadFilter === 'all');
+  if (leadFilter === 'new') rows = rows.filter(l => l.stage === 'New');
+  if (leadFilter === 'due') rows = rows.filter(l => l.next && l.next.at < now2() + day);
+  if (leadFilter === 'sla') rows = rows.filter(l => !l.contactedAt && (now2() - l.created) > 15 * min);
+  const toggle = `<div role="radiogroup" aria-label="View" class="inline-flex rounded-md border border-input overflow-hidden">${['list', 'board'].map(v => `<button type="button" role="radio" aria-checked="${leadView === v}" data-act="view" data-v="${v}" class="min-h-[44px] px-4 text-sm ${leadView === v ? 'bg-primary text-primary-fg' : 'bg-surface'}">${v === 'list' ? 'List' : 'Board'}</button>`).join('')}</div>`;
+  const chips = `<div class="flex gap-2 overflow-x-auto pb-1 mb-3" role="group" aria-label="Quick filters">${filters.map(([k, l]) => `<button type="button" aria-pressed="${leadFilter === k}" data-act="lf" data-v="${k}" class="shrink-0 min-h-[44px] px-4 rounded-full border text-sm ${leadFilter === k ? 'bg-primary-subtle border-primary text-primary-hover font-medium' : 'border-input bg-surface'}">${l}</button>`).join('')}</div>`;
+  let body;
+  if (leadView === 'list') {
+    body = rows.length ? `<p class="text-sm text-muted mb-2" aria-live="polite">${rows.length} leads</p><ul class="bg-surface border border-line rounded-lg divide-y divide-line overflow-hidden">${rows.map(l => `<li class="row-swipe" data-swipe="${l.id}"><a href="#/lead/${l.id}" class="flex items-center gap-3 p-4 min-h-[64px] hover:bg-surface2"><span class="w-10 h-10 rounded-full bg-primary-subtle text-primary-hover grid place-items-center text-sm font-semibold" aria-hidden="true">${initials(l.name)}</span><span class="min-w-0 flex-1"><span class="block font-medium truncate">${esc(l.name)}${l.company ? ` <span class="text-muted font-normal">· ${esc(l.company)}</span>` : ''}</span><span class="block text-sm text-muted truncate">${esc(l.interest)} · ${esc(l.source)}</span><span class="mt-1 flex gap-2 flex-wrap">${chip(l.stage, statusTone(l.stage))}${slaChip(l)}</span></span><span class="text-right tnum text-sm hidden md:block">${inr(l.value)}</span></a></li>`).join('')}</ul><p class="text-xs text-muted mt-2">Tip: on a phone, swipe a row right to call or left to WhatsApp.</p>` : `<div class="text-center py-16 bg-surface border border-line rounded-lg"><h2 class="text-lg font-semibold">No leads match</h2><p class="text-muted mt-1">Try another filter.</p><div class="mt-4">${btn('Clear filters', 'data-act="lf" data-v="all"', 'secondary')}</div></div>`;
+  } else {
+    const stages = ['New', 'Contacted', 'Interested', 'Quotation Sent', 'Negotiation', 'Won', 'Lost'];
+    body = `<div class="flex gap-3 overflow-x-auto pb-3 snap-x" aria-label="Lead board">${stages.map(s => { const ls = S.leads.filter(l => l.stage === s); return `<section class="snap-start shrink-0 w-72 bg-surface2 rounded-lg p-3" aria-label="${s}, ${ls.length} leads"><h2 class="font-semibold text-sm mb-2 flex justify-between"><span>${s} (${ls.length})</span><span class="tnum text-muted">${inr(ls.reduce((a, l) => a + l.value, 0))}</span></h2>${ls.map(l => `<article class="bg-surface border border-line rounded-md p-3 mb-2"><a href="#/lead/${l.id}" class="font-medium block">${esc(l.name)}</a><div class="text-sm text-muted">${esc(l.interest)}</div><div class="mt-2 flex gap-1 flex-wrap">${slaChip(l)}</div><label class="sr-only" for="mv-${l.id}">Move ${esc(l.name)} to</label><select id="mv-${l.id}" data-act="move" data-id="${l.id}" class="mt-2 w-full min-h-[44px] rounded-md border border-input bg-surface text-sm px-2">${stages.map(x => `<option ${x === s ? 'selected' : ''}>${x}</option>`).join('')}</select></article>`).join('') || '<p class="text-sm text-muted">No leads</p>'}</section>`; }).join('')}</div><p class="text-xs text-muted">Prototype: use "Move to" (the keyboard-accessible alternative to drag and drop).</p>`;
+  }
+  return shell(`${pageHead('Leads', '', `${toggle}${btn('+ New lead', 'data-act="newlead"')}`)}${chips}${body}`, '#/leads');
+}
+function scrLead(id) {
+  const l = byId(S.leads, id); if (!l) return shell(notFound('This lead doesn\'t exist or isn\'t assigned to you.'), '#/leads');
+  const q = S.quotes.filter(x => x.party.type === 'lead' && x.party.id === id);
+  return shell(`${pageHead(esc(l.name), `${l.company ? esc(l.company) + ' · ' : ''}<button type="button" data-act="stage" data-id="${id}" aria-haspopup="dialog" class="min-h-[32px]">${chip(l.stage + ' ▾', statusTone(l.stage))}</button>${slaChip(l)}`, `${l.stage === 'Won' ? '' : btn('Convert to customer', `data-act="convert" data-id="${id}"`, 'secondary')}${btn('New quote', `data-act="newquote" data-id="${id}"`)}`, ['#/leads', 'Leads'])}
+  ${l.stage === 'Lost' ? `<div class="mb-4 rounded-md bg-danger-subtle text-danger px-3 py-2 text-sm">Lost · ${esc(l.lostReason || '')}</div>` : ''}
+  <div class="lg:sticky lg:top-16 z-10 bg-bg py-2 mb-4 fixed lg:static bottom-[64px] inset-x-0 px-4 lg:px-0 border-t lg:border-0 border-line" data-id="${id}">${actionBar(l.name, l.phone)}</div>
+  <div class="grid xl:grid-cols-2 gap-4">
+    <div class="space-y-4">
+      ${card(`<h2 class="text-lg font-semibold mb-2">Next follow-up</h2>${l.next ? `<p><span class="${l.next.at < now2() ? 'text-danger font-medium' : ''}">${l.next.at < now2() ? 'Overdue · ' : ''}${l.next.type} ${rel(l.next.at)}</span> — ${esc(l.next.note)}</p>` : '<p class="text-muted">No follow-up set.</p>'}<div class="mt-3">${btn('+ Add follow-up', `data-act="followup" data-id="${id}"`, 'secondary')}</div>`)}
+      ${card(`<h2 class="text-lg font-semibold mb-2">Details</h2><dl class="grid grid-cols-[120px_1fr] gap-y-2 text-sm"><dt class="text-muted">Mobile</dt><dd class="tnum">${phoneFmt(l.phone)}</dd><dt class="text-muted">Email</dt><dd>${esc(l.email) || '—'}</dd><dt class="text-muted">Location</dt><dd>${esc(l.city)}, ${esc(l.state)}</dd><dt class="text-muted">Interest</dt><dd>${esc(l.interest)}</dd><dt class="text-muted">Expected value</dt><dd class="tnum">${inr(l.value)}</dd><dt class="text-muted">Source</dt><dd>${esc(l.source)}</dd><dt class="text-muted">Consent</dt><dd>${esc(l.consent)}</dd></dl>`)}
+      ${card(`<h2 class="text-lg font-semibold mb-2">Quotations</h2>${q.length ? q.map(x => `<a class="flex justify-between py-2" href="#/quote/${x.id}"><span>${x.no}</span>${chip(x.status === 'Viewed' ? `Viewed ${x.views}×` : x.status, statusTone(x.status))}</a>`).join('') : '<p class="text-muted">No quotes yet.</p>'}`)}
+    </div>
+    ${card(`<div class="flex items-center justify-between mb-3"><h2 class="text-lg font-semibold">Activity</h2>${btn('+ Note', `data-act="note" data-id="${id}"`, 'ghost')}</div>${timeline(l.activities)}`)}
+  </div>`, '#/leads');
+}
+function timeline(acts) {
+  if (!acts.length) return '<p class="text-muted">No activity yet — make the first contact.</p>';
+  const icon = { call: '📞', whatsapp: '💬', email: '✉', note: '📝', system: '⚙️', quote: '📄', stage: '➡️', payment: '₹' };
+  return `<ol class="space-y-4">${[...acts].sort((a, b) => b.at - a.at).map(a => `<li class="flex gap-3"><span aria-hidden="true" class="w-8 h-8 rounded-full bg-surface2 grid place-items-center shrink-0">${icon[a.t] || '•'}</span><div class="min-w-0"><div class="font-medium">${esc(a.text)} ${a.pending ? chip('Will sync', 'warning') : ''}</div>${a.body ? `<div class="text-sm">${esc(a.body)}</div>` : ''}<div class="text-xs text-muted"><time datetime="${new Date(a.at).toISOString()}" title="${fmtDate(a.at)} ${fmtTime(a.at)}">${rel(a.at)}</time> · ${esc(S.user.name)}</div></div></li>`).join('')}</ol>`;
+}
+function scrQuoteBuilder(leadId) {
+  const l = byId(S.leads, leadId) || S.leads[0];
+  window.__draft = window.__draft && window.__draft.lead === l.id ? window.__draft : { lead: l.id, lines: [{ pid: 'P1', qty: 1, rate: 30000, disc: 10, tax: 18, sac: '998314', name: 'Website – 5 pages' }] };
+  return shell(`${pageHead('New quote', `For ${esc(l.name)} (lead) · Draft · <span id="saved">Saved</span>`, '', [`#/lead/${l.id}`, esc(l.name)])}
+  <div class="grid lg:grid-cols-[1fr_340px] gap-4 items-start">
+    ${card(`<h2 class="text-lg font-semibold mb-3">Items</h2><div id="lines"></div><div class="flex gap-2 mt-3 flex-wrap">${btn('+ Add item', 'data-act="addline"', 'secondary')}</div>
+      <div class="grid md:grid-cols-2 gap-3 mt-6">${field('valid', 'Valid until', `<input id="valid" class="${inputCls}" value="${fmtDate(now2() + 15 * day)}" inputmode="numeric">`)}${field('terms', 'Payment terms', `<select id="terms" class="${inputCls}"><option>50% advance, 50% on delivery</option><option>Net 15</option><option>100% advance</option></select>`)}</div>`)}
+    <aside class="lg:sticky lg:top-20" aria-label="Totals">${card(`<div id="totals" aria-live="polite"></div><div class="flex gap-2 mt-4">${btn('Preview', 'data-act="preview"', 'secondary', 'flex-1')}${btn('Send', 'data-act="sendquote"', 'primary', 'flex-1')}</div><p class="text-xs text-muted mt-2">Solo mode: no discount approval needed.</p>`)}</aside>
+  </div>`, '#/sales');
+}
+function renderLines() {
+  const d = window.__draft; const l = byId(S.leads, d.lead);
+  $('#lines').innerHTML = d.lines.map((x, i) => `<fieldset class="border border-line rounded-md p-3 mb-3"><legend class="text-sm font-medium px-1">Line ${i + 1}</legend>
+    <div class="grid grid-cols-2 md:grid-cols-6 gap-2">
+      <div class="col-span-2 md:col-span-3">${field(`it${i}`, 'Item', `<select id="it${i}" data-line="${i}" data-k="pid" class="${inputCls}">${S.products.map(p => `<option value="${p.id}" ${p.id === x.pid ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>`)}</div>
+      ${field(`q${i}`, 'Qty', `<input id="q${i}" data-line="${i}" data-k="qty" inputmode="decimal" class="${inputCls} tnum" value="${x.qty}">`)}
+      ${field(`r${i}`, 'Rate ₹', `<input id="r${i}" data-line="${i}" data-k="rate" inputmode="decimal" class="${inputCls} tnum" value="${x.rate}">`)}
+      ${field(`d${i}`, 'Disc %', `<input id="d${i}" data-line="${i}" data-k="disc" inputmode="decimal" class="${inputCls} tnum" value="${x.disc}">`)}
+    </div><div class="flex justify-between items-center mt-2 text-sm"><span class="text-muted">SAC ${x.sac} · GST ${x.tax}%</span>${btn('Remove', `data-act="rmline" data-i="${i}" aria-label="Remove line ${i + 1}"`, 'ghost')}</div></fieldset>`).join('');
+  renderTotals(l.state);
+}
+function totalsBlock(c) {
+  return `<dl class="space-y-1 text-sm tnum"><div class="flex justify-between"><dt>Sub-total</dt><dd>${inr2(c.sub)}</dd></div><div class="flex justify-between"><dt>Discount</dt><dd>−${inr2(c.disc)}</dd></div>${Object.entries(c.taxes).map(([k, v]) => `<div class="flex justify-between"><dt>${k}</dt><dd>${inr2(v)}</dd></div>`).join('')}<div class="flex justify-between"><dt>Round-off</dt><dd>${c.round >= 0 ? '+' : '−'}${inr2(Math.abs(c.round))}</dd></div><div class="flex justify-between text-lg font-semibold text-primary pt-2 border-t border-line"><dt>Grand total</dt><dd>${inr2(c.grand)}</dd></div></dl>`;
+}
+function renderTotals(state) { const c = calc(window.__draft.lines, state); $('#totals').innerHTML = totalsBlock(c); }
+function docPreview(title, no, party, lines, extra = '') {
+  const c = calc(lines, party.state);
+  return `<article class="bg-white text-slate-900 rounded-md border border-line p-5 text-sm" aria-label="${title} ${no} preview">
+    <header class="flex justify-between gap-4 border-b-2 border-blue-600 pb-3"><div class="w-14 h-14 rounded bg-blue-600 text-white grid place-items-center font-bold" aria-hidden="true">A</div><div class="text-right"><div class="font-semibold">${COMPANY.name}</div><div class="text-xs text-slate-600">Bengaluru, Karnataka · GSTIN ${COMPANY.gstin}</div></div></header>
+    <div class="flex justify-between mt-3"><h2 class="font-semibold text-base">${title}</h2><div class="text-right text-xs text-slate-600">${no}<br>Place of supply: ${esc(party.state)}</div></div>
+    <div class="mt-3 border border-slate-200 rounded p-2 text-xs"><b>Bill to</b><br>${esc(party.name)}${party.gstin ? ` · GSTIN ${party.gstin}` : ''}</div>
+    <table class="w-full mt-3 text-xs"><caption class="sr-only">Items</caption><thead class="bg-slate-100"><tr><th class="text-left p-1">Description</th><th class="p-1">SAC</th><th class="text-right p-1">Qty</th><th class="text-right p-1">Rate</th><th class="text-right p-1">Disc</th><th class="text-right p-1">Amount</th></tr></thead><tbody>${lines.map((l, i) => `<tr class="${i % 2 ? 'bg-slate-50' : ''}"><td class="p-1">${esc(l.name)}</td><td class="p-1 text-center">${l.sac}</td><td class="p-1 text-right">${l.qty}</td><td class="p-1 text-right tnum">${inr(l.rate)}</td><td class="p-1 text-right">${l.disc || 0}%</td><td class="p-1 text-right tnum">${inr2(l.qty * l.rate * (1 - (l.disc || 0) / 100))}</td></tr>`).join('')}</tbody></table>
+    <div class="grid md:grid-cols-2 gap-3 mt-3 items-start">${extra || '<div></div>'}<div class="border border-slate-200 rounded p-2">${totalsBlock(c).replaceAll('text-primary', 'text-blue-700').replaceAll('border-line', 'border-slate-200')}</div></div>
+    <footer class="mt-3 pt-2 border-t border-slate-200 text-[11px] text-slate-600">Subject to Bengaluru jurisdiction · Thank you for your business · Page 1 of 1</footer></article>`;
+}
+function scrQuote(id) {
+  const q = byId(S.quotes, id); if (!q) return shell(notFound('Quote not found.'), '#/sales');
+  const p = partyOf(q.party); const c = calc(q.lines, p.state);
+  const steps = ['Sent', 'Viewed', 'Accepted']; const idx = { Sent: 0, Viewed: 1, Accepted: 2, Declined: 2, 'Changes requested': 1 }[q.status] ?? 0;
+  const primary = q.status === 'Accepted' ? btn('Create invoice', `data-act="mkinvoice" data-id="${id}"`) : btn('Share', `data-act="share" data-id="${id}"`);
+  return shell(`${pageHead(`${q.no} · R${q.rev}`, `${chip(q.status === 'Viewed' ? `Viewed ${q.views}× · last ${rel(q.lastView)}` : q.status, statusTone(q.status))} <span class="tnum">${inr(c.grand)}</span> · ${esc(p.name)} · valid to ${fmtDate(q.valid)}`, `${primary}${btn('Open customer view', `data-act="custview" data-id="${id}"`, 'secondary')}`, ['#/sales', 'Sales'])}
+  <ol class="flex gap-2 mb-4 text-sm" aria-label="Quote progress">${steps.map((s, i) => `<li class="flex items-center gap-2">${i <= idx ? '●' : '○'} <span class="${i <= idx ? 'font-medium' : 'text-muted'}">${s}</span>${i < 2 ? '<span aria-hidden="true" class="text-muted">—</span>' : ''}</li>`).join('')}</ol>
+  ${q.status === 'Accepted' ? `<div class="mb-4 rounded-md bg-success-subtle text-success px-3 py-2 text-sm">Accepted by ${esc(q.acceptedBy || p.name)} · ${rel(q.acceptedAt || now2())}. Orders are switched off (Solo), so "Create invoice" makes the order in the background.</div>` : ''}
+  <div class="max-w-3xl">${docPreview('QUOTATION', `${q.no} · R${q.rev}`, p, q.lines)}</div>`, '#/sales');
+}
+function scrPublicQuote(id, done) {
+  const q = byId(S.quotes, id); const p = partyOf(q.party); const c = calc(q.lines, p.state);
+  const closed = ['Accepted', 'Declined'].includes(q.status);
+  return `<main id="main" class="min-h-screen max-w-2xl mx-auto px-4 py-6 pb-40">
+  <div class="mb-3 text-sm"><a class="underline text-primary" href="#/quote/${id}">← Back to internal view (prototype only)</a></div>
+  <div class="flex items-center gap-2 mb-4"><span class="w-9 h-9 rounded-full bg-primary text-primary-fg grid place-items-center font-bold" aria-hidden="true">A</span><span class="font-semibold">${COMPANY.name}</span></div>
+  <h1 class="text-2xl font-semibold">Quotation ${q.no}</h1><p class="text-muted">for ${esc(p.name)} · valid until ${fmtDate(q.valid)}</p>
+  ${done ? `<div role="status" class="mt-4 rounded-md bg-success-subtle text-success p-4"><b>Thank you, ${esc(done)}.</b> ${S.user.first} will be in touch shortly.</div>` : ''}
+  <div class="mt-4">${docPreview('QUOTATION', q.no, p, q.lines)}</div>
+  ${btn('Download PDF', 'data-act="pdf"', 'secondary', 'mt-3')}
+  ${closed ? '' : `<div class="fixed bottom-0 inset-x-0 bg-surface border-t border-line p-4"><div class="max-w-2xl mx-auto grid gap-2">${btn(`Accept quote · ${inr(c.grand)}`, `data-act="accept" data-id="${id}"`, 'primary', 'w-full min-h-[52px]')}<div class="grid grid-cols-2 gap-2">${btn('Request changes', `data-act="changes" data-id="${id}"`, 'secondary')}${btn('Decline', `data-act="decline" data-id="${id}"`, 'secondary')}</div></div></div>`}
+  <p class="text-xs text-muted mt-8">Powered by SaleSphere</p></main>`;
+}
+function payBlock(i, compact) {
+  const b = invBal(i);
+  if (b === 0) return `<div class="border-2 border-green-700 text-green-700 rounded p-4 text-center font-bold text-2xl" role="img" aria-label="Paid in full">PAID</div>`;
+  return `<div class="border-2 border-blue-600 rounded p-3"><div class="font-semibold mb-2">Scan to pay</div><div class="flex gap-3 items-center"><div class="qr w-32 shrink-0 bg-white" role="img" aria-label="UPI QR code to pay ${inr2(b)} to ${COMPANY.upi}">${qrSvg(upiLink(i))}</div><div class="text-xs"><div class="text-lg font-semibold tnum text-slate-900">${inr2(b)}</div><div>Balance due</div><div class="font-mono mt-1 break-all">${COMPANY.upi}</div>${i.paid ? `<div class="mt-1">Paid ${inr(i.paid)}</div>` : ''}</div></div><div class="text-[11px] text-slate-600 mt-2">${COMPANY.bank}</div></div>`;
+}
+function scrInvoice(id) {
+  const i = byId(S.invoices, id); if (!i) return shell(notFound('Invoice not found.'), '#/sales');
+  const c = byId(S.customers, i.cust); const st = invStatus(i); const b = invBal(i);
+  return shell(`${pageHead(`${i.no} <span aria-label="Issued, can't be edited" title="Issued — can't be edited">🔒</span>`, `${chip(st, statusTone(st))} ${esc(c.name)} · due ${fmtDate(i.due)} · <b class="tnum">Balance ${inr2(b)}</b>`, `${b ? btn('Record payment', `data-act="pay" data-id="${id}"`) : ''}${btn('Share', `data-act="shareinv" data-id="${id}"`, 'secondary')}${btn('Customer view', `data-act="custinv" data-id="${id}"`, 'secondary')}`, ['#/sales?tab=invoices', 'Invoices'])}
+  <div class="grid xl:grid-cols-[1fr_320px] gap-4 items-start"><div class="max-w-3xl">${docPreview('TAX INVOICE', `${i.no} · Original`, c, i.lines, payBlock(i))}</div>
+  <aside aria-label="Payments">${card(`<h2 class="text-lg font-semibold mb-2">Payments</h2>${i.payments.length ? i.payments.map(pid => { const p = byId(S.payments, pid); return `<div class="flex justify-between py-2 text-sm"><span>${p.no}<br><span class="text-muted">${p.mode} · ${fmtDate(p.date)}</span></span><span class="tnum">${inr(p.alloc.find(a => a.inv === id).amt)}</span></div>`; }).join('') : '<p class="text-muted">No payments yet.</p>'}<details class="mt-3 text-xs text-muted"><summary class="cursor-pointer min-h-[44px] flex items-center">UPI link (for testing)</summary><code class="break-all">${esc(upiLink(i))}</code></details>`)}</aside></div>`, '#/sales');
+}
+function scrPublicInvoice(id) {
+  const i = byId(S.invoices, id); const b = invBal(i);
+  return `<main id="main" class="min-h-screen max-w-md mx-auto px-4 py-6">
+  <div class="mb-3 text-sm"><a class="underline text-primary" href="#/invoice/${id}">← Back to internal view (prototype only)</a></div>
+  <div class="flex items-center gap-2 mb-4"><span class="w-9 h-9 rounded-full bg-primary text-primary-fg grid place-items-center font-bold" aria-hidden="true">A</span><span class="font-semibold">${COMPANY.name}</span></div>
+  <h1 class="text-xl font-semibold">Invoice ${i.no}</h1><p class="text-muted">Due ${fmtDate(i.due)}</p>
+  ${b ? `<div class="mt-4 bg-surface border border-line rounded-lg p-5 text-center"><div class="text-sm text-muted">Balance due</div><div class="text-4xl font-semibold tnum my-1">${inr2(b)}</div>${i.paid ? `<div class="text-sm text-muted">Paid ${inr(i.paid)} · Total ${inr(invTotal(i))}</div>` : ''}
+  <a href="${esc(upiLink(i))}" class="mt-4 inline-flex w-full justify-center items-center min-h-[52px] rounded-md bg-primary text-primary-fg font-semibold">Pay via UPI</a>
+  <div class="qr w-48 mx-auto mt-4 bg-white p-1 rounded" role="img" aria-label="UPI QR code to pay ${inr2(b)} to ${COMPANY.upi}">${qrSvg(upiLink(i))}</div>
+  <div class="mt-3 text-sm">UPI ID <span class="font-mono">${COMPANY.upi}</span> ${btn('Copy', 'data-act="copyupi"', 'ghost')}</div><div class="text-xs text-muted">${COMPANY.bank}</div></div>
+  <p class="text-sm text-muted mt-4">After paying, send your UTR to ${S.user.first}: +91 98450 00000.</p>` : `<div role="status" class="mt-4 rounded-lg bg-success-subtle text-success p-6 text-center"><div class="text-3xl font-bold">PAID</div><p>Fully paid — thank you.</p></div>`}
+  ${btn('Download PDF', 'data-act="pdf"', 'secondary', 'mt-4 w-full')}<p class="text-xs text-muted mt-8">Powered by SaleSphere</p></main>`;
+}
+function scrCustomers() {
+  return shell(`${pageHead('Customers', '', btn('+ New customer', 'data-act="todo"'))}
+  <ul class="bg-surface border border-line rounded-lg divide-y divide-line">${S.customers.map(c => { const t = custTotals(c); return `<li><a href="#/customer/${c.id}" class="flex items-center gap-3 p-4 min-h-[64px] hover:bg-surface2"><span class="w-10 h-10 rounded-full bg-primary-subtle text-primary-hover grid place-items-center text-sm font-semibold" aria-hidden="true">${initials(c.name)}</span><span class="flex-1"><span class="block font-medium">${esc(c.name)}</span><span class="block text-sm text-muted">${c.code} · ${esc(c.state)}</span></span><span class="text-right"><span class="block tnum font-medium">${inr(t.outstanding)}</span>${t.overdue ? chip('Overdue', 'danger') : '<span class="text-xs text-muted">outstanding</span>'}</span></a></li>`; }).join('')}</ul>`, '#/customers');
+}
+let c360tab = 'overview';
+function scrCustomer(id) {
+  const c = byId(S.customers, id); if (!c) return shell(notFound('Customer not found.'), '#/customers'); const t = custTotals(c);
+  const inv = S.invoices.filter(i => i.cust === id);
+  const ageing = i => { if (!invBal(i)) return '—'; const d = Math.floor((now2() - i.due) / day); return d <= 0 ? 'Not yet due' : d <= 30 ? '1–30' : d <= 60 ? '31–60' : d <= 90 ? '61–90' : '90+'; };
+  const tiles = [['Lifetime value', inr(t.invoiced)], ['Total invoiced', inr(t.invoiced)], ['Total received', inr(t.received)], ['Outstanding', inr(t.outstanding)], ['Overdue', inr(t.overdue)], ['Open quotations', '0'], ['Active orders', '1'], ['Avg days to pay', '18']];
+  const tabs = [['overview', 'Overview'], ['invoices', 'Invoices'], ['payments', 'Payments'], ['ledger', 'Ledger'], ['contacts', 'Contacts']];
+  let body = '';
+  if (c360tab === 'overview') body = `<p><b>Next follow-up:</b> none set</p><p class="mt-2"><b>Upcoming dues:</b> ${inv.filter(i => invBal(i) && i.due > now2()).map(i => `${i.no} on ${fmtDate(i.due)}`).join(', ') || 'none'}</p>`;
+  if (c360tab === 'invoices') body = `<div class="overflow-x-auto"><table class="w-full text-sm"><caption class="sr-only">Invoices</caption><thead><tr class="text-left text-muted"><th class="py-2">Number</th><th>Due</th><th class="text-right">Total</th><th class="text-right">Balance</th><th>Ageing</th><th>Status</th></tr></thead><tbody>${inv.map(i => `<tr class="border-t border-line"><td class="py-2"><a class="text-primary underline" href="#/invoice/${i.id}">${i.no}</a></td><td>${fmtDate(i.due)}</td><td class="text-right tnum">${inr(invTotal(i))}</td><td class="text-right tnum">${inr(invBal(i))}</td><td>${ageing(i)}</td><td>${chip(invStatus(i), statusTone(invStatus(i)))}</td></tr>`).join('')}</tbody></table></div>`;
+  if (c360tab === 'payments') body = S.payments.filter(p => p.cust === id).map(p => `<div class="flex justify-between py-2 border-b border-line text-sm"><span>${p.no} · ${p.mode} · UTR <span class="font-mono">${p.utr}</span></span><span class="tnum">${inr(p.amount)}</span></div>`).join('') || '<p class="text-muted">No payments yet.</p>';
+  if (c360tab === 'ledger') { let bal = 0; const rows = []; inv.forEach(i => rows.push({ at: i.date, t: 'Invoice', no: i.no, dr: invTotal(i), cr: 0 })); S.payments.filter(p => p.cust === id).forEach(p => rows.push({ at: p.date, t: 'Payment', no: p.no, dr: 0, cr: p.amount })); rows.sort((a, b) => a.at - b.at); body = `<table class="w-full text-sm"><caption class="sr-only">Statement of account</caption><thead><tr class="text-left text-muted"><th class="py-2">Date</th><th>Type</th><th>Number</th><th class="text-right">Debit</th><th class="text-right">Credit</th><th class="text-right">Balance</th></tr></thead><tbody>${rows.map(r => { bal += r.dr - r.cr; return `<tr class="border-t border-line"><td class="py-2">${fmtDate(r.at)}</td><td>${r.t}</td><td>${r.no}</td><td class="text-right tnum">${r.dr ? inr(r.dr) : ''}</td><td class="text-right tnum">${r.cr ? inr(r.cr) : ''}</td><td class="text-right tnum">${inr(bal)}</td></tr>`; }).join('')}</tbody></table><div class="mt-3">${btn('Share statement on WhatsApp', 'data-act="todo"', 'secondary')}</div>`; }
+  if (c360tab === 'contacts') body = c.contacts.map(x => `<div class="py-3 border-b border-line flex flex-wrap items-center gap-3"><span class="flex-1"><b>${esc(x.name)}</b> · ${x.role}<br><span class="text-sm tnum text-muted">${phoneFmt(x.phone)}</span></span>${btn('📞 Call', `data-act="callc" aria-label="Call ${esc(x.name)}"`, 'secondary')}${btn('💬 WhatsApp', `data-act="wa" aria-label="WhatsApp ${esc(x.name)}"`, 'secondary')}</div>`).join('');
+  return shell(`${pageHead(esc(c.name), `${c.type} · ${c.code} · GSTIN <span class="font-mono">${c.gstin}</span> · since ${c.since} ${c.tags.map(x => chip(x, 'info')).join(' ')}`, '', ['#/customers', 'Customers'])}
+  <div class="mb-4">${actionBar(c.name, c.phone, btn('+ New quote', 'data-act="todo"', 'secondary'))}</div>
+  <div class="flex lg:grid lg:grid-cols-4 gap-3 overflow-x-auto pb-2 mb-4">${tiles.map(([l, v]) => `<div class="shrink-0 w-40 lg:w-auto bg-surface border border-line rounded-lg p-3"><div class="text-xs text-muted">${l}</div><div class="text-lg font-semibold tnum ${l === 'Overdue' && t.overdue ? 'text-danger' : ''}">${v}</div></div>`).join('')}</div>
+  <div role="tablist" aria-label="Customer sections" class="flex gap-1 overflow-x-auto border-b border-line mb-4">${tabs.map(([k, l]) => `<button type="button" role="tab" id="tab-${k}" aria-selected="${c360tab === k}" aria-controls="panel" data-act="c360tab" data-v="${k}" data-id="${id}" class="shrink-0 min-h-[44px] px-4 text-sm ${c360tab === k ? 'border-b-2 border-primary text-primary font-semibold' : 'text-muted'}">${l}</button>`).join('')}</div>
+  <section id="panel" role="tabpanel" aria-labelledby="tab-${c360tab}" class="bg-surface border border-line rounded-lg p-4">${body}</section>`, '#/customers');
+}
+let salesTab = 'quotes';
+function scrSales() {
+  const tabs = [['quotes', 'Quotes'], ['invoices', 'Invoices'], ['payments', 'Payments']];
+  let body = '';
+  if (salesTab === 'quotes') body = S.quotes.map(q => { const p = partyOf(q.party); return `<a href="#/quote/${q.id}" class="flex justify-between items-center p-4 hover:bg-surface2"><span><b>${q.no}</b><br><span class="text-sm text-muted">${esc(p.name)}</span></span><span class="text-right"><span class="block tnum">${inr(calc(q.lines, p.state).grand)}</span>${chip(q.status === 'Viewed' ? `Viewed ${q.views}×` : q.status, statusTone(q.status))}</span></a>`; }).join('');
+  if (salesTab === 'invoices') body = S.invoices.map(i => `<a href="#/invoice/${i.id}" class="flex justify-between items-center p-4 hover:bg-surface2"><span><b>${i.no}</b><br><span class="text-sm text-muted">${esc(byId(S.customers, i.cust).name)} · due ${fmtDate(i.due)}</span></span><span class="text-right"><span class="block tnum">${inr(invBal(i))} <span class="text-xs text-muted">due</span></span>${chip(invStatus(i), statusTone(invStatus(i)))}</span></a>`).join('');
+  if (salesTab === 'payments') body = S.payments.map(p => `<div class="flex justify-between items-center p-4"><span><b>${p.no}</b><br><span class="text-sm text-muted">${esc(byId(S.customers, p.cust).name)} · ${p.mode} · ${fmtDate(p.date)}</span></span><span class="tnum">${inr(p.amount)}</span></div>`).join('');
+  return shell(`${pageHead('Sales')}<div role="tablist" aria-label="Sales documents" class="flex gap-1 border-b border-line mb-4">${tabs.map(([k, l]) => `<button type="button" role="tab" aria-selected="${salesTab === k}" data-act="stab" data-v="${k}" class="min-h-[44px] px-4 text-sm ${salesTab === k ? 'border-b-2 border-primary text-primary font-semibold' : 'text-muted'}">${l}</button>`).join('')}</div><div role="tabpanel" class="bg-surface border border-line rounded-lg divide-y divide-line">${body}</div>`, '#/sales');
+}
+function scrFollowups() {
+  const items = S.leads.filter(l => l.next).sort((a, b) => a.next.at - b.next.at);
+  return shell(`${pageHead('Follow-ups')}<ul class="bg-surface border border-line rounded-lg divide-y divide-line">${items.map(l => `<li class="p-4 flex flex-wrap gap-3 items-center"><a href="#/lead/${l.id}" class="flex-1 min-w-0"><b>${esc(l.name)}</b><br><span class="text-sm ${l.next.at < now2() ? 'text-danger font-medium' : 'text-muted'}">${l.next.at < now2() ? 'Overdue · ' : ''}${l.next.type} ${rel(l.next.at)} · ${esc(l.next.note)}</span></a>${btn('Done', `data-act="fudone" data-id="${l.id}" aria-label="Mark follow-up with ${esc(l.name)} done"`, 'secondary')}</li>`).join('') || '<li class="p-6 text-muted">No follow-ups.</li>'}</ul>`, '#/followups');
+}
+function scrNotifs() {
+  return shell(`${pageHead('Notifications', '', btn('Mark all read', 'data-act="readall"', 'secondary'))}<ul class="bg-surface border border-line rounded-lg divide-y divide-line">${S.notifs.map(n => `<li><a href="${n.href}" class="flex gap-3 p-4 hover:bg-surface2">${n.unread ? '<span class="mt-2 w-2 h-2 rounded-full bg-primary" aria-hidden="true"></span><span class="sr-only">Unread:</span>' : '<span class="w-2"></span>'}<span><span class="block ${n.unread ? 'font-medium' : ''}">${esc(n.text)}</span><span class="text-xs text-muted">${rel(n.at)}</span></span></a></li>`).join('')}</ul>`, '#/home');
+}
+function scrSettings() {
+  return shell(`${pageHead('Settings', 'Solo mode · v1.0.0 (prototype)')}
+  <div class="grid lg:grid-cols-2 gap-4">
+  ${card(`<h2 class="text-lg font-semibold mb-2">Google connection</h2><p>${chip(S.google, S.google === 'Connected' ? 'success' : 'danger')} arjun.studio@gmail.com</p><p class="text-sm text-muted mt-1">Drive ✓ · Gmail ✓ · Sheets ✓</p><div class="mt-3 flex gap-2 flex-wrap">${S.google === 'Connected' ? btn('Simulate lost connection', 'data-act="gbreak"', 'secondary') : btn('Reconnect Google', 'data-act="gfix"')}</div>`)}
+  ${card(`<h2 class="text-lg font-semibold mb-2">Sheets</h2><p><b>Meta ads leads</b> · webhook · ${chip('Healthy', 'success')}</p><p class="text-sm text-muted">Last run 2 min ago · read 3 · created 1 · merged 0 · failed 1</p><div class="mt-3">${btn('Import errors (1)', 'data-act="todo"', 'secondary')}</div>`)}
+  ${card(`<h2 class="text-lg font-semibold mb-2">Payments</h2><p>Default UPI ID <span class="font-mono">${COMPANY.upi}</span></p><p class="text-sm text-muted">${COMPANY.bank}</p>`)}
+  ${card(`<h2 class="text-lg font-semibold mb-2">Prototype controls</h2><div class="flex gap-2 flex-wrap">${btn(S.offline ? 'Go online' : 'Simulate offline', 'data-act="offline"', 'secondary')}${btn('Toggle theme', 'data-act="theme"', 'secondary')}${btn('Sign out', 'data-act="logout"', 'ghost')}</div>`)}
+  </div>`, '#/settings');
+}
+function scrMore() { return shell(`${pageHead('More')}<ul class="bg-surface border border-line rounded-lg divide-y divide-line">${[['#/followups', 'Follow-ups'], ['#/reports', 'Reports'], ['#/notifications', 'Notifications'], ['#/settings', 'Settings & prototype controls']].map(([h, l]) => `<li><a class="flex p-4 min-h-[52px] items-center justify-between hover:bg-surface2" href="${h}">${l}<span aria-hidden="true">›</span></a></li>`).join('')}</ul>`, '#/more'); }
+function scrReports() {
+  const inv = S.invoices.filter(i => invBal(i)); const b = { 'Not yet due': 0, '1–30': 0, '31–60': 0, '61–90': 0, '90+': 0 };
+  inv.forEach(i => { const d = Math.floor((now2() - i.due) / day); b[d <= 0 ? 'Not yet due' : d <= 30 ? '1–30' : d <= 60 ? '31–60' : d <= 90 ? '61–90' : '90+'] += invBal(i); });
+  const max = Math.max(1, ...Object.values(b));
+  return shell(`${pageHead('Reports', 'Collections & ageing (as of today)', btn('Export to Excel', 'data-act="todo"', 'secondary'))}${card(`<h2 class="text-lg font-semibold mb-1">Outstanding by age</h2><p class="text-sm text-muted mb-3">Total outstanding ${inr(Object.values(b).reduce((a, x) => a + x, 0))}, of which ${inr(b['31–60'] + b['61–90'] + b['90+'])} is more than 30 days overdue.</p><ul class="space-y-2">${Object.entries(b).map(([k, v]) => `<li class="grid grid-cols-[100px_1fr_auto] gap-2 items-center text-sm"><span>${k}</span><span class="h-3 rounded bg-surface2"><span class="block h-3 rounded bg-primary" style="width:${v / max * 100}%"></span></span><span class="tnum">${inr(v)}</span></li>`).join('')}</ul>`)}`, '#/reports');
+}
+const notFound = m => `<div class="text-center py-16"><h1 tabindex="-1" class="text-2xl font-semibold">We can't find that</h1><p class="text-muted mt-2">${m}</p><a class="inline-block mt-4 text-primary underline" href="#/home">Go to Home</a></div>`;
+
+/* ---------- Interactions ---------- */
+let pendingCall = null;
+function openSearch() {
+  openSheet('Search', `${field('q', 'Search by name, phone, GSTIN or number', `<input id="q" class="${inputCls}" placeholder="e.g. 98450 12345 or 0142" autocomplete="off" aria-controls="sres">`)}<ul id="sres" class="mt-3 divide-y divide-line" aria-live="polite"></ul>`, dlg => {
+    const run = () => { const v = $('#q').value.trim().toLowerCase(); const dig = v.replace(/\D/g, ''); const res = [];
+      if (v) { S.leads.forEach(l => { if (l.name.toLowerCase().includes(v) || (dig.length >= 4 && l.phone.includes(dig))) res.push([`#/lead/${l.id}`, `Lead · ${l.name}`, phoneFmt(l.phone)]); });
+        S.customers.forEach(c => { if (c.name.toLowerCase().includes(v) || c.gstin.toLowerCase().includes(v)) res.push([`#/customer/${c.id}`, `Customer · ${c.name}`, c.gstin]); });
+        S.invoices.forEach(i => { if (i.no.toLowerCase().includes(v)) res.push([`#/invoice/${i.id}`, `Invoice · ${i.no}`, byId(S.customers, i.cust).name]); });
+        S.quotes.forEach(q => { if (q.no.toLowerCase().includes(v)) res.push([`#/quote/${q.id}`, `Quote · ${q.no}`, partyOf(q.party).name]); }); }
+      $('#sres').innerHTML = v ? (res.map(([h, t, s]) => `<li><a href="${h}" data-close class="block p-3 hover:bg-surface2 rounded-md"><b>${esc(t)}</b><br><span class="text-sm text-muted">${esc(s)}</span></a></li>`).join('') || `<li class="p-3 text-muted">No results for "${esc(v)}" — check the spelling or number.</li>`) : '<li class="p-3 text-muted">Try "Kavya", "98450 12345" or "0142".</li>'; };
+    $('#q').addEventListener('input', run); run();
+  });
+}
+function callOutcome(id) {
+  const l = byId(S.leads, id) || byId(S.customers, id);
+  openSheet(`How did the call with ${esc(l.name.split(' ')[0])} go?`, `<form id="outcome" class="space-y-4">
+    <fieldset><legend class="text-sm font-medium mb-2">Outcome</legend><div class="flex flex-wrap gap-2">${['Connected', 'No answer', 'Busy', 'Wrong number', 'Call back later'].map((o, i) => `<label class="cursor-pointer"><input type="radio" name="o" value="${o}" class="peer sr-only" ${i === 0 ? '' : ''}><span class="inline-flex min-h-[44px] items-center px-4 rounded-full border border-input peer-checked:bg-primary peer-checked:text-primary-fg peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-primary">${o}</span></label>`).join('')}</div></fieldset>
+    ${field('note', 'Note (optional)', `<textarea id="note" rows="2" class="${inputCls} py-2"></textarea>`)}
+    <fieldset><legend class="text-sm font-medium mb-2">Next follow-up</legend><div class="flex flex-wrap gap-2">${[['1', 'Tomorrow 11:00'], ['2', 'In 2 days'], ['7', 'Next week'], ['0', 'None']].map(([v, t]) => `<label class="cursor-pointer"><input type="radio" name="f" value="${v}" class="peer sr-only" ${v === '1' ? 'checked' : ''}><span class="inline-flex min-h-[44px] items-center px-4 rounded-full border border-input peer-checked:bg-primary-subtle peer-checked:border-primary peer-checked:text-primary-hover peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-primary">${t}</span></label>`).join('')}</div></fieldset>
+    <p id="oerr" class="text-sm text-danger" role="alert"></p>
+    ${btn('Save', 'type="submit"', 'primary', 'w-full min-h-[52px]')}</form>`, dlg => {
+    $('#outcome').addEventListener('submit', e => { e.preventDefault(); const o = new FormData(e.target).get('o'); if (!o) { $('#oerr').textContent = 'Choose an outcome to save.'; return; }
+      const f = +new FormData(e.target).get('f'); const lead = byId(S.leads, id);
+      if (lead) { const first = !lead.contactedAt; lead.activities.push({ t: 'call', at: now2(), text: `Call · ${o}`, body: $('#note').value, pending: S.offline }); if (first) lead.contactedAt = now2(); if (lead.stage === 'New' && o === 'Connected') lead.stage = 'Contacted'; lead.next = f ? { at: now2() + f * day, type: 'Call', note: $('#note').value || 'Follow up' } : null; }
+      closeSheet(); toast(S.offline ? 'Saved on this phone — will sync' : `Call outcome saved${f ? ' · follow-up set' : ''}`); render(); });
+  });
+}
+function waComposer(name) {
+  openSheet(`Send on WhatsApp to ${esc(name)}`, `<fieldset class="mb-3"><legend class="text-sm font-medium mb-2">Template</legend>${['Greeting', 'Quote link', 'Payment reminder'].map((t, i) => `<label class="flex items-center gap-3 min-h-[44px]"><input type="radio" name="tpl" value="${t}" ${i === 0 ? 'checked' : ''}> ${t}</label>`).join('')}</fieldset>
+  ${field('msg', 'Message', `<textarea id="msg" rows="4" class="${inputCls} py-2">Hi ${esc(name.split(' ')[0])}, thanks for your enquiry with ${COMPANY.name}! When is a good time to talk about your website?</textarea>`)}
+  <div class="mt-4">${btn('Open WhatsApp', 'data-act="waopen"', 'primary', 'w-full')}</div><p class="text-xs text-muted mt-2">Prototype: doesn't actually open WhatsApp. Logs "WhatsApp opened".</p>`);
+}
+function sharePicker(href, label) {
+  openSheet(`Share ${label}`, `<div class="grid gap-2">${btn('💬 WhatsApp with link', `data-act="sharedone" data-v="WhatsApp"`, 'secondary', 'justify-start')}${btn('✉ Email with PDF', `data-act="sharedone" data-v="Email"`, 'secondary', 'justify-start')}${btn('🔗 Copy link', `data-act="sharedone" data-v="Link copied"`, 'secondary', 'justify-start')}${btn('Open customer view', `data-act="go" data-href="${href}"`, 'ghost', 'justify-start')}</div>`);
+}
+function recordPayment(invId) {
+  const i = byId(S.invoices, invId); const b = invBal(i);
+  openSheet(`Record payment · ${esc(byId(S.customers, i.cust).name)}`, `<form id="payf" class="space-y-4" novalidate>
+    ${field('amt', 'Amount (₹)', `<input id="amt" inputmode="decimal" class="${inputCls} tnum" value="${b}" aria-describedby="amt-help">`, `Balance due on ${i.no}: ${inr2(b)}`)}
+    <fieldset><legend class="text-sm font-medium mb-2">Mode</legend><div class="flex flex-wrap gap-2">${['UPI', 'Bank transfer', 'Cash', 'Cheque'].map((m, k) => `<label class="cursor-pointer"><input type="radio" name="mode" value="${m}" class="peer sr-only" ${k === 0 ? 'checked' : ''}><span class="inline-flex min-h-[44px] items-center px-4 rounded-full border border-input peer-checked:bg-primary peer-checked:text-primary-fg peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-primary">${m}</span></label>`).join('')}</div></fieldset>
+    ${field('utr', 'UTR / reference', `<input id="utr" class="${inputCls} font-mono" inputmode="numeric" aria-describedby="utr-help utr-err">`, 'Required for UPI and bank transfers. Try 431298765432 to see the duplicate check.')}
+    <p id="utr-err" class="text-sm text-danger" role="alert"></p>
+    <div class="rounded-md bg-surface2 p-3 text-sm"><b>Allocation (oldest first)</b><div class="flex justify-between mt-1"><span>${i.no}</span><span class="tnum" id="alloc">${inr2(b)}</span></div></div>
+    ${btn('Save payment', 'type="submit"', 'primary', 'w-full min-h-[52px]')}</form>`, () => {
+    $('#amt').addEventListener('input', () => { const v = +$('#amt').value || 0; $('#alloc').textContent = inr2(Math.min(v, b)) + (v > b ? ` · advance ${inr2(v - b)}` : ''); });
+    $('#payf').addEventListener('submit', e => { e.preventDefault(); const amt = +$('#amt').value; const mode = new FormData(e.target).get('mode'); const utr = $('#utr').value.trim();
+      if (!(amt > 0)) { $('#utr-err').textContent = 'Enter an amount greater than zero.'; $('#amt').focus(); return; }
+      if (mode !== 'Cash' && !utr) { $('#utr-err').textContent = 'Add the UTR or reference for this payment.'; $('#utr').setAttribute('aria-invalid', 'true'); $('#utr').focus(); return; }
+      const dup = S.payments.find(p => p.utr === utr); if (dup) { $('#utr-err').textContent = `UTR ${utr} is already used on ${dup.no}. Only Admin or Accounts can override with a reason.`; $('#utr').setAttribute('aria-invalid', 'true'); $('#utr').focus(); return; }
+      const alloc = Math.min(amt, b); const no = `RCPT/25-26/${String(S.seq.RCPT++).padStart(4, '0')}`; const id = 'R' + S.seq.RCPT;
+      S.payments.push({ id, no, cust: i.cust, date: now2(), amount: amt, mode, utr, alloc: [{ inv: i.id, amt: alloc }] }); i.paid += alloc; i.payments.push(id);
+      S.notifs.unshift({ at: now2(), text: `${inr(amt)} received from ${byId(S.customers, i.cust).name}`, href: `#/invoice/${i.id}`, unread: true });
+      closeSheet(); toast(`${inr(amt)} saved · ${no}`, { href: `#/invoice/${i.id}`, label: 'Share receipt' }); render(); });
+  });
+}
+document.addEventListener('submit', e => {
+  if (e.target.id === 'login') { e.preventDefault(); if ($('#p').value === 'wrong') { $('#app').innerHTML = scrLogin('Username or password is incorrect.'); return; } S.loggedIn = true; location.hash = '#/home'; render(); }
+});
+document.addEventListener('input', e => {
+  const k = e.target.dataset.k; if (k && window.__draft) { const i = +e.target.dataset.line; const line = window.__draft.lines[i];
+    if (k === 'pid') { const p = byId(S.products, e.target.value); Object.assign(line, { pid: p.id, name: p.name, rate: p.rate, sac: p.sac, tax: p.tax }); renderLines(); $(`#it${i}`).focus(); }
+    else { line[k] = Math.max(0, +e.target.value || 0); renderTotals(byId(S.leads, window.__draft.lead).state); }
+    $('#saved') && ($('#saved').textContent = 'Saved'); }
+});
+document.addEventListener('change', e => {
+  if (e.target.dataset.act === 'move') { const l = byId(S.leads, e.target.dataset.id); const to = e.target.value;
+    if (to === 'Won') { toast('Convert the lead to mark it as Won'); e.target.value = l.stage; return; }
+    if (to === 'Lost') { openSheet(`Mark ${esc(l.name)} as Lost`, `${field('lr', 'Reason', `<select id="lr" class="${inputCls}"><option value="">Choose a reason</option><option>Budget too low</option><option>Chose a competitor</option><option>No response</option></select>`)}<p id="lrerr" role="alert" class="text-sm text-danger mt-2"></p><div class="mt-4">${btn('Mark as Lost', `data-act="lostok" data-id="${l.id}"`, 'danger', 'w-full')}</div>`); return; }
+    const from = l.stage; l.stage = to; l.activities.push({ t: 'stage', at: now2(), text: `Stage: ${from} → ${to}` }); announce(`Moved ${l.name} to ${to}`); render(); toast(`Moved to ${to}`); }
+});
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-act]'); if (!a || a.tagName === 'SELECT') return; const act = a.dataset.act; const id = a.dataset.id;
+  const hashId = location.hash.split('/')[2];
+  if (a.getAttribute('aria-disabled') === 'true') { toast(a.title || 'Not available'); return; }
+  switch (act) {
+    case 'search': openSearch(); break;
+    case 'theme': { const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); document.documentElement.dataset.theme = cur === 'dark' ? 'light' : 'dark'; try { localStorage.setItem('ss-theme', document.documentElement.dataset.theme); } catch (_) {} break; }
+    case 'quickadd': openSheet('Quick add', `<div class="grid gap-2">${[['newlead', '👥 Lead'], ['qaquote', '📄 Quote'], ['qapay', '₹ Payment'], ['qanote', '📝 Note'], ['qafu', '⏰ Follow-up']].map(([k, l]) => btn(l, `data-act="${k}"`, 'secondary', 'justify-start')).join('')}</div>`); break;
+    case 'qaquote': closeSheet(); location.hash = '#/quote-new/L1'; break;
+    case 'qapay': closeSheet(); location.hash = '#/invoice/I142'; setTimeout(() => recordPayment('I142'), 50); break;
+    case 'qanote': case 'qafu': case 'todo': closeSheet(); toast('Not in this prototype — see the UX spec'); break;
+    case 'call': { const tid = id || a.closest('[data-id]')?.dataset.id || hashId; pendingCall = tid; toast('Opening dialer… (prototype: come back to log the outcome)'); setTimeout(() => callOutcome(tid), 900); break; }
+    case 'callc': toast('Opening dialer…'); break;
+    case 'wa': waComposer((byId(S.leads, hashId) || byId(S.customers, hashId) || { name: 'customer' }).name); break;
+    case 'waopen': { const l = byId(S.leads, hashId); if (l) { l.activities.push({ t: 'whatsapp', at: now2(), text: `WhatsApp opened · ${document.querySelector('[name=tpl]:checked').value}` }); if (!l.contactedAt) l.contactedAt = now2(); } closeSheet(); toast('WhatsApp opened · logged on timeline'); render(); break; }
+    case 'email': toast('Email composer — see SCR-007 in the UX spec'); break;
+    case 'dir': toast('Opening Google Maps…'); break;
+    case 'view': leadView = a.dataset.v; render(); break;
+    case 'lf': leadFilter = a.dataset.v; render(); break;
+    case 'newlead': closeSheet(); openSheet('New lead', `<form id="lf" class="space-y-4" novalidate>${field('ln', 'Name <span class="text-muted font-normal">(required)</span>', `<input id="ln" class="${inputCls}" autocomplete="name" aria-describedby="ln-err">`)}<p id="ln-err" class="text-sm text-danger" role="alert"></p>${field('lp', 'Mobile number', `<input id="lp" class="${inputCls}" inputmode="tel" autocomplete="tel" placeholder="98450 12345" aria-describedby="lp-help">`, 'Add a phone number or email. Try 98450 12345 to see the duplicate check.')}${field('le', 'Email', `<input id="le" type="email" class="${inputCls}" autocomplete="email">`)}${field('ls', 'Source', `<select id="ls" class="${inputCls}"><option>Phone call</option><option>Walk-in</option><option>Referral</option></select>`)}${btn('Save lead', 'data-act="savelead"', 'primary', 'w-full')}</form>`); break;
+    case 'savelead': { const n = $('#ln').value.trim(); const p = $('#lp').value.replace(/\D/g, ''); const em = $('#le').value.trim();
+      if (!n) { $('#ln-err').textContent = 'Enter the lead\'s name.'; $('#ln').focus(); return; }
+      if (!p && !em) { $('#ln-err').textContent = 'Add a phone number or email.'; $('#lp').focus(); return; }
+      const e164 = p ? '+91' + p.slice(-10) : ''; const dup = e164 && S.leads.find(l => l.phone === e164);
+      if (dup) { $('[role=dialog] .mt-4').innerHTML = `<div class="space-y-3"><p>${esc(dup.name)} already exists (${dup.stage}).</p>${btn('Open lead', `data-act="go" data-href="#/lead/${dup.id}"`, 'primary', 'w-full')}${btn('Add as re-enquiry', `data-act="reenq" data-id="${dup.id}"`, 'secondary', 'w-full')}</div>`; return; }
+      const id2 = 'L' + S.seq.L++; S.leads.unshift({ id: id2, name: n, company: '', phone: e164, email: em, city: 'Bengaluru', state: 'Karnataka', interest: 'Website – 5 pages', value: 0, source: $('#ls').value, consent: 'Person-initiated enquiry', stage: 'New', created: now2(), contactedAt: null, next: null, activities: [{ t: 'system', at: now2(), text: 'Lead created manually' }] });
+      closeSheet(); toast(`Lead created · owner ${S.user.first}`); location.hash = `#/lead/${id2}`; break; }
+    case 'reenq': { const l = byId(S.leads, id); l.activities.push({ t: 'system', at: now2(), text: 'Re-enquired via Phone call' }); closeSheet(); location.hash = `#/lead/${id}`; toast('Added as re-enquiry'); break; }
+    case 'go': closeSheet(); location.hash = a.dataset.href; break;
+    case 'stage': toast('Use the board view "Move to" to change stage in this prototype'); break;
+    case 'lostok': { const r = $('#lr').value; if (!r) { $('#lrerr').textContent = 'Choose a reason to mark this lead as Lost.'; $('#lr').focus(); return; } const l = byId(S.leads, id); l.stage = 'Lost'; l.lostReason = r; l.next = null; closeSheet(); toast('Marked as Lost · follow-ups cancelled'); render(); break; }
+    case 'convert': toast('Convert dialog — see SCR-009. In this prototype, accept a quote to convert.'); break;
+    case 'followup': case 'note': { const l = byId(S.leads, id); openSheet(act === 'note' ? 'Add note' : 'Add follow-up', `${field('nt', act === 'note' ? 'Note' : 'What to do', `<textarea id="nt" rows="3" class="${inputCls} py-2"></textarea>`)}<div class="mt-4">${btn('Save', `data-act="ntsave" data-id="${id}" data-v="${act}"`, 'primary', 'w-full')}</div>`); break; }
+    case 'ntsave': { const l = byId(S.leads, id); const v = $('#nt').value || (a.dataset.v === 'note' ? 'Note' : 'Follow up'); if (a.dataset.v === 'note') l.activities.push({ t: 'note', at: now2(), text: 'Note', body: v, pending: S.offline }); else l.next = { at: now2() + day, type: 'Call', note: v }; closeSheet(); toast(S.offline ? 'Saved on this phone — will sync' : 'Saved'); render(); break; }
+    case 'newquote': window.__draft = null; location.hash = `#/quote-new/${id}`; break;
+    case 'addline': window.__draft.lines.push({ pid: 'P3', qty: 1, rate: 3000, disc: 0, tax: 18, sac: '998315', name: 'Hosting – 1 year' }); renderLines(); $(`#it${window.__draft.lines.length - 1}`).focus(); break;
+    case 'rmline': { const i = +a.dataset.i; const removed = window.__draft.lines.splice(i, 1)[0]; renderLines(); toast(`Line removed`); announce('Line removed'); window.__undo = removed; break; }
+    case 'preview': { const l = byId(S.leads, window.__draft.lead); openSheet('Preview', docPreview('QUOTATION', 'Draft', l, window.__draft.lines)); break; }
+    case 'sendquote': { const d = window.__draft; if (!d.lines.length) { toast('Add at least one item.'); return; } const no = `QT/25-26/${String(S.seq.QT++).padStart(4, '0')}`; const qid = 'Q' + (S.seq.QT); S.quotes.push({ id: qid, no, rev: 0, party: { type: 'lead', id: d.lead }, status: 'Sent', views: 0, date: now2(), valid: now2() + 15 * day, lines: d.lines.map(x => ({ ...x })) }); const l = byId(S.leads, d.lead); if (['New', 'Contacted', 'Interested'].includes(l.stage)) l.stage = 'Quotation Sent'; l.activities.push({ t: 'quote', at: now2(), text: `Quote ${no} sent via WhatsApp` }); window.__draft = null; location.hash = `#/quote/${qid}`; setTimeout(() => sharePicker(`#/public/quote/${qid}`, no), 60); break; }
+    case 'share': { const q = byId(S.quotes, id); sharePicker(`#/public/quote/${id}`, q.no); break; }
+    case 'shareinv': { const i = byId(S.invoices, id); sharePicker(`#/public/invoice/${id}`, i.no); break; }
+    case 'sharedone': closeSheet(); toast(`${a.dataset.v === 'Link copied' ? 'Link copied' : a.dataset.v + ' opened'} · logged on timeline`); break;
+    case 'custview': { const q = byId(S.quotes, id); if (q.status === 'Sent') { q.status = 'Viewed'; q.views = 1; q.lastView = now2(); } else q.views++; location.hash = `#/public/quote/${id}`; break; }
+    case 'custinv': location.hash = `#/public/invoice/${id}`; break;
+    case 'accept': { const q = byId(S.quotes, id); const p = partyOf(q.party); openSheet('Accept quotation', `<form id="accf">${field('an', 'Type your full name to accept', `<input id="an" class="${inputCls}" autocomplete="name" value="">`)}<p id="anerr" role="alert" class="text-sm text-danger mt-2"></p><div class="mt-4">${btn('Accept quote', `data-act="accok" data-id="${id}"`, 'primary', 'w-full min-h-[52px]')}</div></form>`); break; }
+    case 'accok': { const nm = $('#an').value.trim(); if (nm.length < 2) { $('#anerr').textContent = 'Type your full name to accept.'; $('#an').focus(); return; } const q = byId(S.quotes, id); q.status = 'Accepted'; q.acceptedBy = nm; q.acceptedAt = now2();
+      if (q.party.type === 'lead') { const l = byId(S.leads, q.party.id); const cid = 'C' + S.seq.C++; S.customers.push({ id: cid, code: `C-00${S.seq.C}`, name: l.company || l.name, type: 'Business', gstin: '—', state: l.state, since: 'Nov 2026', phone: l.phone, email: l.email, tags: [], contacts: [{ name: l.name, role: 'Decision-maker', phone: l.phone }] }); l.stage = 'Won'; l.customerId = cid; q.party = { type: 'customer', id: cid }; }
+      S.notifs.unshift({ at: now2(), text: `${nm} accepted ${q.no}`, href: `#/quote/${id}`, unread: true }); closeSheet(); $('#app').innerHTML = scrPublicQuote(id, nm); $('#main').focus(); break; }
+    case 'changes': case 'decline': toast(act === 'changes' ? 'Comment box opens here (required)' : 'Optional reason, then "Thanks for letting us know"'); break;
+    case 'mkinvoice': { const q = byId(S.quotes, id); const no = `INV/25-26/${String(S.seq.INV++).padStart(4, '0')}`; const iid = 'I' + S.seq.INV; S.invoices.push({ id: iid, no, cust: q.party.id, date: now2(), due: now2() + 15 * day, lines: q.lines.map(x => ({ ...x })), paid: 0, credits: 0, payments: [] });
+      openSheet('Issue invoice?', `<p>${no} will be issued for ${inr2(calc(q.lines, partyOf(q.party).state).grand)}. You can't edit it after issuing — corrections need a credit note.</p><div class="mt-4 grid grid-cols-2 gap-2">${btn('Cancel', 'data-close', 'secondary')}${btn('Issue invoice', `data-act="go" data-href="#/invoice/${iid}"`, 'primary')}</div>`); break; }
+    case 'pay': recordPayment(id); break;
+    case 'copyupi': try { navigator.clipboard.writeText(COMPANY.upi); } catch (_) {} toast('UPI ID copied'); break;
+    case 'pdf': toast('PDF download (prototype)'); break;
+    case 'c360tab': c360tab = a.dataset.v; render(); $(`#tab-${c360tab}`).focus(); break;
+    case 'stab': salesTab = a.dataset.v; render(); break;
+    case 'fudone': { const l = byId(S.leads, id); const prev = l.next; l.next = null; render(); toast('Follow-up done', { href: location.hash, label: 'Undo' }); window.__undoFu = () => { l.next = prev; }; break; }
+    case 'readall': S.notifs.forEach(n => n.unread = false); render(); break;
+    case 'gbreak': S.google = 'Broken'; render(); break;
+    case 'gfix': S.google = 'Connected'; render(); toast('Google reconnected — importing rows added during the outage'); break;
+    case 'offline': S.offline = !S.offline; render(); announce(S.offline ? 'You are offline' : 'Back online, syncing'); if (!S.offline) { S.leads.forEach(l => l.activities.forEach(x => x.pending = false)); setTimeout(() => { toast('Synced'); render(); }, 800); } break;
+    case 'logout': S.loggedIn = false; location.hash = '#/login'; render(); break;
+  }
+});
+/* Swipe on lead rows (touch) — alternatives exist via buttons on detail page */
+let sx = 0, srow = null;
+document.addEventListener('touchstart', e => { srow = e.target.closest('[data-swipe]'); if (srow) sx = e.touches[0].clientX; }, { passive: true });
+document.addEventListener('touchmove', e => { if (srow) { const dx = e.touches[0].clientX - sx; srow.style.transform = `translateX(${Math.max(-120, Math.min(120, dx))}px)`; } }, { passive: true });
+document.addEventListener('touchend', e => { if (!srow) return; const dx = e.changedTouches[0].clientX - sx; const id = srow.dataset.swipe; srow.style.transform = ''; if (dx > 90) { navigator.vibrate && !matchMedia('(prefers-reduced-motion: reduce)').matches && navigator.vibrate(10); location.hash = `#/lead/${id}`; setTimeout(() => callOutcome(id), 700); toast('Opening dialer…'); } else if (dx < -90) { location.hash = `#/lead/${id}`; setTimeout(() => waComposer(byId(S.leads, id).name), 300); } srow = null; });
+
+/* ---------- Router ---------- */
+function render() {
+  const h = location.hash || '#/login'; const [, r, id] = h.split('?')[0].split('/'); const qs = new URLSearchParams(h.split('?')[1] || '');
+  if (qs.get('tab')) salesTab = qs.get('tab');
+  if (r === 'public') { $('#app').innerHTML = id === 'quote' ? scrPublicQuote(h.split('/')[3].split('?')[0]) : scrPublicInvoice(h.split('/')[3].split('?')[0]); }
+  else if (!S.loggedIn) { $('#app').innerHTML = scrLogin(); }
+  else {
+    const map = { home: scrHome, leads: scrLeads, lead: () => scrLead(id), 'quote-new': () => scrQuoteBuilder(id), quote: () => scrQuote(id), invoice: () => scrInvoice(id), customers: scrCustomers, customer: () => scrCustomer(id), sales: scrSales, followups: scrFollowups, notifications: scrNotifs, settings: scrSettings, more: scrMore, reports: scrReports, login: () => { location.hash = '#/home'; return scrHome(); } };
+    $('#app').innerHTML = (map[r] || (() => shell(notFound('That page doesn\'t exist.'), '')))();
+    if (r === 'quote-new') renderLines();
+  }
+  const titles = { home: 'Home', leads: 'Leads', lead: 'Lead', 'quote-new': 'New quote', quote: 'Quote', invoice: 'Invoice', customers: 'Customers', customer: 'Customer 360', sales: 'Sales', followups: 'Follow-ups', notifications: 'Notifications', settings: 'Settings', more: 'More', reports: 'Reports', public: 'Customer view', login: 'Sign in' };
+  document.title = `${titles[r] || 'SaleSphere'} · SaleSphere Prototype`;
+}
+let lastRoute = '';
+window.addEventListener('hashchange', () => { render(); const h1 = $('#main h1') || $('#main'); h1 && h1.focus({ preventScroll: false }); try { window.scrollTo(0, 0); } catch (_) {} });
+try { const t = localStorage.getItem('ss-theme'); if (t) document.documentElement.dataset.theme = t; } catch (_) {}
+setInterval(() => { if (/#\/(home|leads|lead\/)/.test(location.hash) && !$('[role=dialog]') && !document.activeElement?.matches('input,textarea,select')) render(); }, 60000);
+render();
+</script>
+</body>
+</html>
