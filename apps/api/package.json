@@ -1,0 +1,41 @@
+{
+  "name": "@ss/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/functions.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "seed": "tsx src/seed-cli.ts",
+    "migrate": "tsx src/migrate-cli.ts"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
+    "@ss/config": "workspace:*",
+    "@ss/contracts": "workspace:*",
+    "@ss/doc-templates": "workspace:*",
+    "@ss/domain": "workspace:*",
+    "cookie-parser": "^1.4.7",
+    "exceljs": "^4.4.0",
+    "express": "^5.0.1",
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.1",
+    "jose": "^5.9.6",
+    "otpauth": "^9.3.5",
+    "pino": "^9.5.0",
+    "zod": "^3.23.8",
+    "puppeteer-core": "^23.10.0",
+    "@sparticuz/chromium": "^131.0.0"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.8",
+    "@types/express": "^5.0.0",
+    "@types/supertest": "^6.0.2",
+    "esbuild": "^0.24.0",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.2"
+  }
+}
