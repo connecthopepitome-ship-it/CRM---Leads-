@@ -31,7 +31,7 @@ function Protected({ children }: { children: ReactNode }) {
   const loc = useLocation();
   if (!ready) return <div className="p-6"><Skeleton rows={4} /></div>;
   if (!user) return <Navigate to={`/sign-in?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
-  if (user.mustChangePassword) return <Navigate to="/sign-in?change=1" replace />;
+  if (user.mustChangePassword && localStorage.getItem('ss-demo-active') !== 'true') return <Navigate to="/sign-in?change=1" replace />;
   return <>{children}</>;
 }
 

@@ -23,6 +23,17 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  void import('virtual:pwa-register').then(({ registerSW }) => registerSW({ immediate: true }));
+if ('serviceWorker' in navigator) {
+  void import('virtual:pwa-register').then(({ registerSW }) =>
+    registerSW({
+      immediate: true,
+      onRegisteredSW(_swUrl, r) {
+        if (r) {
+          setInterval(() => {
+            void r.update();
+          }, 60 * 60 * 1000);
+        }
+      },
+    }),
+  );
 }

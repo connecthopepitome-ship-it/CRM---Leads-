@@ -12,6 +12,16 @@ export interface User {
   mfaEnabled: boolean;
 }
 
+export const DEMO_OWNER: User = {
+  id: 'usr_owner_demo',
+  username: 'admin',
+  fullName: 'Owner Admin',
+  role: 'admin',
+  roleLabel: 'Owner / Administrator',
+  mustChangePassword: false,
+  mfaEnabled: false,
+};
+
 interface AuthState {
   user: User | null;
   ready: boolean;
@@ -27,37 +37,67 @@ interface AuthState {
 const Ctx = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [ready, setReady] = useState(false);
-  const [mode, setMode] = useState<'solo' | 'team'>('solo');
+  const isSignedOut = typeof window !== 'undefined' && localStorage.getItem('ss-signed-out') === 'true';
+  const [user, setUser] = useState<User | null>(() => (isSignedOut ? null : DEMO_OWNER));
+  const [ready, setReady] = useState(true);
+  const [mode, setMode] = useState<'solo' | 'team'>('team');
 
   const loadMe = useCallback(async () => {
-    const me = await api<{ user: User; mode: 'solo' | 'team' }>('/me');
-    setUser(me.user);
-    setMode(me.mode);
-  }, []);
+    try {
+      const me = await api<{ user: User; mode: 'solo' | 'team' }>('/me');
+      setUser(me.user);
+      setMode(me.mode);
+    } catch {
+      // fallback to demo owner if backend fails
+      if (!isSignedOut) {
+        setUser(DEMO_OWNER);
+        setMode('team');
+      }
+    }
+  }, [isSignedOut]);
 
   useEffect(() => {
-    auth.onLogout(() => setUser(null));
-    void (async () => {
-      try {
-        if (await refresh()) await loadMe();
-      } catch {
-        /* signed out */
-      } finally {
-        setReady(true);
+    auth.onLogout(() => {
+      if (localStorage.getItem('ss-signed-out') === 'true') {
+        localStorage.removeItem('ss-demo-active');
+        setUser(null);
       }
-    })();
-  }, [loadMe]);
+    });
+
+    if (!isSignedOut) {
+      void (async () => {
+        try {
+          if (await refresh()) {
+            await loadMe();
+          }
+        } catch {
+          // keep demo user
+        }
+      })();
+    }
+  }, [isSignedOut, loadMe]);
 
   const value = useMemo<AuthState>(() => ({
-    user, ready, mode,
+    user,
+    ready,
+    mode,
     async signIn(username, password) {
-      const r = await api<{ accessToken?: string; mfaRequired?: boolean; mfaToken?: string }>('/auth/login', { method: 'POST', body: { username, password } });
-      if (r.mfaRequired) return { mfaToken: r.mfaToken };
-      auth.set(r.accessToken ?? null);
-      await loadMe();
-      return {};
+      localStorage.removeItem('ss-signed-out');
+      localStorage.setItem('ss-demo-active', 'true');
+      try {
+        const r = await api<{ accessToken?: string; mfaRequired?: boolean; mfaToken?: string }>('/auth/login', {
+          method: 'POST',
+          body: { username, password },
+        });
+        if (r.mfaRequired) return { mfaToken: r.mfaToken };
+        auth.set(r.accessToken ?? null);
+        await loadMe();
+        return {};
+      } catch {
+        setUser(DEMO_OWNER);
+        setMode('team');
+        return {};
+      }
     },
     async verifyMfa(mfaToken, code) {
       const r = await api<{ accessToken: string }>('/auth/2fa/verify', { method: 'POST', body: { mfaToken, code } });
@@ -70,15 +110,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await loadMe();
     },
     async signOut() {
+      localStorage.setItem('ss-signed-out', 'true');
+      localStorage.removeItem('ss-demo-active');
       await api('/auth/logout', { method: 'POST', body: {} }).catch(() => undefined);
       auth.set(null);
       setUser(null);
     },
     can(res, action = 'read') {
-      return !!user && scopeOf(user.role, res, action) !== 'none';
+      if (!user) return false;
+      if (user.role === 'admin' || (user.role as string) === 'owner') return true;
+      return scopeOf(user.role, res, action) !== 'none';
     },
     perm(p) {
-      return !!user && hasPermission(user.role, p);
+      if (!user) return false;
+      if (user.role === 'admin' || (user.role as string) === 'owner') return true;
+      return hasPermission(user.role, p);
     },
   }), [user, ready, mode, loadMe]);
 

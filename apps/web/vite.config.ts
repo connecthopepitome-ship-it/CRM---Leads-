@@ -13,10 +13,23 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'prompt',
+      registerType: 'autoUpdate',
+      devOptions: {
+        enabled: true,
+      },
       includeAssets: ['icon.svg'],
       manifest: manifestFor(client),
-      workbox: { navigateFallback: '/index.html', navigateFallbackDenylist: [/^\/api\//], runtimeCaching: [{ urlPattern: ({ url }) => url.pathname.startsWith('/api/v1/masters/'), handler: 'StaleWhileRevalidate', options: { cacheName: 'lookups' } }] },
+      workbox: {
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/v1/masters/'),
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'lookups' },
+          },
+        ],
+      },
     }),
   ],
   server: { port: 5173, proxy: { '/api': 'http://localhost:8787' } },

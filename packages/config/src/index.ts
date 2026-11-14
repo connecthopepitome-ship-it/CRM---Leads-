@@ -38,13 +38,45 @@ export function loadClientConfig(raw: unknown, source = 'config.json'): ClientCo
 /** FR-001 AC1/AC3: the PWA manifest is derived only from this client's config. */
 export function manifestFor(cfg: ClientConfig) {
   return {
-    name: cfg.appName === 'SaleSphere' ? `SaleSphere — ${cfg.companyName}` : cfg.appName,
+    name: cfg.appName === 'SaleSphere' ? `SaleSphere CRM` : cfg.appName,
     short_name: cfg.appName,
+    description: 'SaleSphere Enterprise CRM — Offline-ready Mobile Sales, Pipeline & GST Billing',
     start_url: '/',
+    scope: '/',
     display: 'standalone' as const,
-    background_color: '#F8FAFC',
-    theme_color: cfg.branding.primary,
-    icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }],
+    orientation: 'portrait' as const,
+    background_color: '#0c1024',
+    theme_color: '#0c1024',
+    categories: ['business', 'finance', 'productivity'],
+    icons: [
+      { src: '/icon.svg', sizes: '192x192 512x512 any', type: 'image/svg+xml', purpose: 'any maskable' },
+    ],
+    shortcuts: [
+      {
+        name: 'New Lead',
+        short_name: 'New Lead',
+        url: '/leads/new',
+        icons: [{ src: '/icon.svg', sizes: '192x192' }],
+      },
+      {
+        name: 'New Quotation',
+        short_name: 'New Quote',
+        url: '/sales/quotes/new',
+        icons: [{ src: '/icon.svg', sizes: '192x192' }],
+      },
+      {
+        name: 'Record Payment',
+        short_name: 'Payment',
+        url: '/sales/payments/new',
+        icons: [{ src: '/icon.svg', sizes: '192x192' }],
+      },
+      {
+        name: 'My Tasks',
+        short_name: 'Tasks',
+        url: '/follow-ups',
+        icons: [{ src: '/icon.svg', sizes: '192x192' }],
+      },
+    ],
   };
 }
 

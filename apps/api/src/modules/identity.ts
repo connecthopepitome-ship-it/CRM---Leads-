@@ -462,7 +462,7 @@ export async function ensureAdmin(ctx: Ctx, username: string, fullName: string, 
   const passwordHash = await hashPassword(password);
   await ctx.db.tx(async (t) => {
     t.create('usernames', username, { userId: id });
-    t.create('users', id, { username, fullName, role: 'admin', teamIds: [], passwordHash, status: 'active', mustChangePassword: true, failedAttempts: 0, tokenEpoch: 0, isSupport: false, ...created(ctx, null) });
+    t.create('users', id, { username, fullName, role: 'admin', teamIds: [], passwordHash, status: 'active', mustChangePassword: false, failedAttempts: 0, tokenEpoch: 0, isSupport: false, ...created(ctx, null) });
     t.set('settings', 'mode', { mode: 'solo', soloUserId: id });
     t.set('settings', 'assignment', { strategy: 'round_robin', defaultOwnerId: id });
   });

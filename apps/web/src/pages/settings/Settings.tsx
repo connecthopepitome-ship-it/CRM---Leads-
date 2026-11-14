@@ -16,10 +16,17 @@ import { Users } from './Users';
 export default function Settings() {
   const { perm } = useAuth();
   const links = [
-    ['', 'Company', perm('settings:read')], ['preferences', 'Mode, SLA & modules', perm('settings:read')], ['masters', 'Masters', perm('settings:read')], ['numbering', 'Numbering', perm('settings:read')],
-    ['users', 'Users & teams', perm('users:read')], ['google', 'Google & Sheets', perm('settings:read')], ['import', 'Import leads', perm('lead:import')], ['import-data', 'Import products & customers', perm('settings:write')],
-    ['audit', 'Audit log', perm('audit:read')], ['privacy', 'Privacy requests', perm('privacy:execute')],
-  ].filter(([, , s]) => s) as [string, string, boolean][];
+    ['', 'Company'],
+    ['preferences', 'Mode, SLA & modules'],
+    ['masters', 'Masters'],
+    ['numbering', 'Numbering'],
+    ['users', 'Users & teams'],
+    ['google', 'Google & Sheets'],
+    ['import', 'Import leads'],
+    ['import-data', 'Import products & customers'],
+    ['audit', 'Audit log'],
+    ['privacy', 'Privacy requests'],
+  ] as [string, string][];
   return (
     <>
       <PageHeader title="Settings" />

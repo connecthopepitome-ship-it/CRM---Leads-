@@ -20,6 +20,8 @@ export function create(text: string, tone: T['tone'] = 'success') {
   }, 4500);
 }
 
+export const toast = create;
+
 export function errorToast(e: unknown) {
   create((e as { title?: string })?.title ?? (e as Error)?.message ?? 'Something went wrong.', 'danger');
 }
