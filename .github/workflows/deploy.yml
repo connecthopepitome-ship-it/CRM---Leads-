@@ -1,0 +1,65 @@
+# Deploy one client environment (HLD §12, ADR-006). Manual; production environments require reviewer approval.
+# Per GitHub Environment (one per client) configure:
+#   vars:    CLIENT_ID (folder under clients/), FIREBASE_PROJECT, GCP_WIF_PROVIDER, GCP_DEPLOY_SA, CF_PAGES_PROJECT, APP_URL
+#   secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+# Runtime secrets (JWT_PRIVATE_JWK, EDGE_HMAC_SECRET, GOOGLE_CLIENT_SECRET, DATA_ENC_KEY) live in the client's
+# Secret Manager — never in GitHub. See docs/10-ops/RUNBOOK.md.
+name: deploy
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: GitHub Environment (client), e.g. staging or client-pilot
+        required: true
+      ref:
+        description: Git tag to deploy, e.g. v1.0.0
+        required: true
+permissions:
+  contents: read
+  id-token: write # Workload Identity Federation — no long-lived Google keys
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ inputs.ref }}' }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint && pnpm typecheck && pnpm test
+      - name: Build (FR-001 — validates clients/<CLIENT_ID>/config.json; stops naming any bad key)
+        run: CLIENT_ID="${{ vars.CLIENT_ID }}" pnpm build
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - name: Migrations (expand-only, FR-006) — a failure stops here, before new code ships
+        env: { GCLOUD_PROJECT: "${{ vars.FIREBASE_PROJECT }}" }
+        run: pnpm --filter @ss/api migrate
+
+      - name: Firebase — functions, Firestore rules and indexes
+        run: npx --yes firebase-tools@13 deploy --only functions,firestore:rules,firestore:indexes --project "${{ vars.FIREBASE_PROJECT }}" --force --non-interactive
+
+      - name: Cloudflare Pages — PWA + /api proxy function
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@3 pages deploy dist --project-name "${{ vars.CF_PAGES_PROJECT }}" --branch main --commit-hash "$(git rev-parse HEAD)"
+
+      - name: Health check
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS "${{ vars.APP_URL }}/api/v1/health" | tee /dev/stderr | grep -q '"status":"ok"'; then exit 0; fi
+            sleep 10
+          done
+          echo "::error::Health check failed — roll back per RUNBOOK §Rollback"; exit 1
+
+      - name: Record version
+        run: echo "Deployed ${{ inputs.ref }} to ${{ inputs.environment }} at $(date -u +%FT%TZ)" >> "$GITHUB_STEP_SUMMARY"

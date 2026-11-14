@@ -1,0 +1,14 @@
+{
+  "clientId": "example",
+  "companyName": "Example Studio",
+  "appName": "SaleSphere",
+  "domain": "crm.example.com",
+  "firebaseProjectId": "salesphere-example",
+  "region": "asia-south1",
+  "mode": "solo",
+  "modules": { "orders": false, "sheetSync": true, "webForm": true },
+  "branding": { "primary": "#2563EB", "primaryDark": "#60A5FA", "poweredBy": true },
+  "terminology": {},
+  "seedCatalogue": "web-services",
+  "adminUsername": "admin"
+}
