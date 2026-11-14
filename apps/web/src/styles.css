@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html { -webkit-text-size-adjust: 100%; }
+body { font-family: Inter, 'Noto Sans', system-ui, sans-serif; background: rgb(var(--color-bg)); color: rgb(var(--color-text)); }
+:focus-visible { outline: 2px solid rgb(var(--color-primary)); outline-offset: 2px; }
+.doc-frame { width: 100%; min-height: 70vh; border: 1px solid rgb(var(--color-border)); border-radius: var(--radius-md); background: #fff; }
