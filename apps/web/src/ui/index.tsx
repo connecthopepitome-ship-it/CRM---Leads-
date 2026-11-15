@@ -12,10 +12,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
     <button
       ref={ref}
       className={cx(
-        'inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3D7952] disabled:opacity-50 disabled:cursor-not-allowed select-none',
+        'inline-flex items-center justify-center gap-2 rounded-xl font-semibold btn-spring transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3D7952] disabled:opacity-50 disabled:cursor-not-allowed select-none',
         size === 'md' ? 'min-h-[40px] px-4 text-xs sm:text-sm' : 'min-h-[34px] px-3 text-xs',
-        variant === 'primary' && 'bg-[#3D7952] text-white hover:bg-[#233D2D] active:bg-[#1C3224] shadow-xs',
-        variant === 'secondary' && 'border border-[#DCE7D9] bg-white text-[#202820] hover:bg-[#F5F9F2] hover:border-[#CFE5CB] shadow-2xs',
+        variant === 'primary' && 'bg-[#3D7952] text-white hover:bg-[#233D2D] active:bg-[#1C3224] shadow-xs btn-shimmer',
+        variant === 'secondary' && 'border border-white/80 bg-white/80 text-[#202820] hover:bg-white hover:border-[#CFE5CB] backdrop-blur-md shadow-2xs hover:shadow-xs',
         variant === 'ghost' && 'text-[#3D7952] hover:bg-[#E3EFDF]/70',
         variant === 'danger' && 'bg-[#D66B68] text-white hover:bg-[#C25855] shadow-xs',
         className,
@@ -36,8 +36,8 @@ export function LinkButton({ to, children, variant = 'secondary', className }: {
     <Link
       to={to}
       className={cx(
-        'inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl px-4 text-xs sm:text-sm font-semibold transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3D7952] select-none',
-        variant === 'primary' ? 'bg-[#3D7952] text-white hover:bg-[#233D2D] shadow-xs' : variant === 'ghost' ? 'text-[#3D7952] hover:bg-[#E3EFDF]/70' : 'border border-[#DCE7D9] bg-white text-[#202820] hover:bg-[#F5F9F2] hover:border-[#CFE5CB] shadow-2xs',
+        'inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl px-4 text-xs sm:text-sm font-semibold btn-spring transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3D7952] select-none',
+        variant === 'primary' ? 'bg-[#3D7952] text-white hover:bg-[#233D2D] shadow-xs btn-shimmer' : variant === 'ghost' ? 'text-[#3D7952] hover:bg-[#E3EFDF]/70' : 'border border-white/80 bg-white/80 text-[#202820] hover:bg-white hover:border-[#CFE5CB] backdrop-blur-md shadow-2xs hover:shadow-xs',
         className,
       )}
     >
@@ -97,10 +97,10 @@ export function SelectField({ label, error, options, required, placeholder, ...p
 // CMP-012 Card, CMP-013 StatTile
 export function Card({ children, className, title, actions }: { children: ReactNode; className?: string; title?: ReactNode; actions?: ReactNode }) {
   return (
-    <section className={cx('rounded-2xl border border-[#DCE7D9] bg-white p-5 shadow-2xs', className)}>
+    <section className={cx('rounded-2xl border border-white/80 bg-white/80 backdrop-blur-md p-5 shadow-[0_4px_20px_-2px_rgba(35,61,45,0.04)] interactive-card', className)}>
       {(title || actions) && (
-        <div className="mb-4 flex items-center justify-between gap-2 border-b border-[#DCE7D9]/60 pb-3">
-          {title && <h2 className="text-sm font-bold text-[#202820] tracking-tight">{title}</h2>}
+        <div className="mb-4 flex items-center justify-between gap-2 border-b border-[#DCE7D9]/70 pb-3">
+          {title && <h2 className="text-sm font-bold text-[#202820] tracking-tight hover-text-lift">{title}</h2>}
           {actions}
         </div>
       )}
@@ -111,9 +111,9 @@ export function Card({ children, className, title, actions }: { children: ReactN
 
 export function StatTile({ label, value, tone, to }: { label: string; value: ReactNode; tone?: 'danger' | 'warning' | 'success'; to?: string }) {
   const body = (
-    <div className={cx('flex h-full flex-col gap-1 rounded-2xl border border-[#DCE7D9] bg-white p-4 shadow-2xs transition-all', to && 'hover:border-[#3D7952] hover:shadow-xs')}>
-      <span className="text-xs font-semibold tracking-wide text-[#778477]">{label}</span>
-      <span className={cx('text-2xl font-bold tabular-nums tracking-tight text-[#202820]', tone === 'danger' && 'text-[#D66B68]', tone === 'warning' && 'text-[#D99A45]', tone === 'success' && 'text-[#3D7952]')}>{value}</span>
+    <div className={cx('flex h-full flex-col gap-1 rounded-2xl border border-white/85 bg-white/80 backdrop-blur-md p-4 shadow-2xs transition-all duration-300 interactive-tile group', to && 'hover:border-[#3D7952]/40 hover:shadow-xs')}>
+      <span className="text-xs font-semibold tracking-wide text-[#778477] transition-colors group-hover:text-[#202820]">{label}</span>
+      <span className={cx('text-2xl font-bold tabular-nums tracking-tight text-[#202820] transition-all group-hover:scale-[1.02] origin-left', tone === 'danger' && 'text-[#D66B68]', tone === 'warning' && 'text-[#D99A45]', tone === 'success' && 'text-[#3D7952]')}>{value}</span>
     </div>
   );
   return to ? <Link to={to} className="block rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3D7952]">{body}</Link> : body;
@@ -121,11 +121,11 @@ export function StatTile({ label, value, tone, to }: { label: string; value: Rea
 
 // CMP-019 Badge / StatusChip
 const TONES: Record<string, string> = {
-  success: 'bg-[#EAF5E8] text-[#3D7952] border border-[#CFE5CB]',
-  warning: 'bg-[#FDF5E8] text-[#D99A45] border border-[#FBE0B5]',
-  danger: 'bg-[#FDF0EF] text-[#D66B68] border border-[#F8CCCC]',
-  info: 'bg-[#EDF5EA] text-[#3D7952] border border-[#DCE7D9]',
-  neutral: 'bg-[#F5F9F2] text-[#778477] border border-[#DCE7D9]',
+  success: 'bg-[#EAF5E8]/80 text-[#3D7952] border border-[#CFE5CB]',
+  warning: 'bg-[#FDF5E8]/80 text-[#D99A45] border border-[#FBE0B5]',
+  danger: 'bg-[#FDF0EF]/80 text-[#D66B68] border border-[#F8CCCC]',
+  info: 'bg-[#EDF5EA]/80 text-[#3D7952] border border-[#DCE7D9]',
+  neutral: 'bg-[#F5F9F2]/80 text-[#778477] border border-[#DCE7D9]',
 };
 const STATUS_TONE: Record<string, keyof typeof TONES> = {
   paid: 'success', accepted: 'success', won: 'success', met: 'success', connected: 'success', active: 'success', done: 'success', delivered: 'success', closed: 'neutral',
@@ -135,7 +135,7 @@ const STATUS_TONE: Record<string, keyof typeof TONES> = {
 };
 export function Badge({ children, tone, status }: { children?: ReactNode; tone?: keyof typeof TONES; status?: string | null }) {
   const t = tone ?? (status ? STATUS_TONE[status] : undefined) ?? 'neutral';
-  return <span className={cx('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium', TONES[t])}>{children ?? (status ? status.replace(/_/g, ' ') : '')}</span>;
+  return <span className={cx('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold glass-badge transition-transform hover:scale-105', TONES[t])}>{children ?? (status ? status.replace(/_/g, ' ') : '')}</span>;
 }
 
 // CMP-018 Alert / Banner
@@ -193,7 +193,7 @@ export function PageHeader({ title, subtitle, actions, back }: { title: ReactNod
 // CMP-014 Tabs (Pill style matching Grovia reference)
 export function Tabs({ tabs, active, onChange }: { tabs: { id: string; label: string }[]; active: string; onChange(id: string): void }) {
   return (
-    <div role="tablist" className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-[#E3EFDF]/70 p-1 border border-[#DCE7D9]">
+    <div role="tablist" className="mb-4 inline-flex items-center gap-1.5 rounded-full glass-pill-container p-1">
       {tabs.map((t) => (
         <button
           key={t.id}
@@ -204,7 +204,7 @@ export function Tabs({ tabs, active, onChange }: { tabs: { id: string; label: st
             'rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3D7952]',
             active === t.id
               ? 'bg-[#233D2D] text-white shadow-xs'
-              : 'text-[#778477] hover:text-[#202820] hover:bg-white/60',
+              : 'text-[#778477] hover:text-[#202820] hover:bg-white/80',
           )}
         >
           {t.label}
@@ -224,15 +224,15 @@ export function Dialog({ open, onClose, title, children, footer, sheet }: { open
     if (!open && d.open) d.close();
   }, [open]);
   return (
-    <dialog ref={ref} onClose={onClose} aria-labelledby="dlg-title" className={cx('w-full max-w-lg rounded-2xl bg-white p-0 text-[#202820] shadow-xl border border-[#DCE7D9] backdrop:bg-[#202820]/40', sheet && 'mb-0 mt-auto max-w-none rounded-b-none md:mb-auto md:max-w-lg md:rounded-2xl')}>
+    <dialog ref={ref} onClose={onClose} aria-labelledby="dlg-title" className={cx('w-full max-w-lg rounded-2xl glass-dropdown p-0 text-[#202820] shadow-2xl backdrop:bg-[#202820]/40 backdrop:backdrop-blur-sm', sheet && 'mb-0 mt-auto max-w-none rounded-b-none md:mb-auto md:max-w-lg md:rounded-2xl')}>
       {open && (
         <div className="flex max-h-[85vh] flex-col">
-          <div className="flex items-center justify-between border-b border-[#DCE7D9] px-5 py-4 bg-[#F5F9F2]">
-            <h2 id="dlg-title" className="text-sm font-bold text-[#202820]">{title}</h2>
-            <button onClick={onClose} className="rounded-lg p-1 text-[#778477] hover:bg-white hover:text-[#202820]" aria-label="Close">✕</button>
+          <div className="flex items-center justify-between border-b border-[#DCE7D9]/80 px-5 py-4 bg-white/60 backdrop-blur-xs">
+            <h2 id="dlg-title" className="text-sm font-bold text-[#202820] hover-text-lift">{title}</h2>
+            <button onClick={onClose} className="rounded-lg p-1 text-[#778477] hover:bg-white hover:text-[#202820] transition-colors" aria-label="Close">✕</button>
           </div>
           <div className="overflow-y-auto p-5">{children}</div>
-          {footer && <div className="flex justify-end gap-2.5 border-t border-[#DCE7D9] px-5 py-3.5 bg-[#F5F9F2]">{footer}</div>}
+          {footer && <div className="flex justify-end gap-2.5 border-t border-[#DCE7D9]/80 px-5 py-3.5 bg-white/60 backdrop-blur-xs">{footer}</div>}
         </div>
       )}
     </dialog>
@@ -249,17 +249,17 @@ export interface Column<T> {
 export function Table<T extends { id?: string }>({ columns, rows, onRow, empty }: { columns: Column<T>[]; rows: T[]; onRow?: (r: T) => void; empty?: ReactNode }) {
   if (!rows.length) return <>{empty ?? <EmptyState title="Nothing here yet" />}</>;
   return (
-    <div className="overflow-x-auto rounded-2xl border border-[#DCE7D9] bg-white">
+    <div className="overflow-x-auto rounded-2xl border border-white/80 bg-white/75 backdrop-blur-md shadow-xs">
       <table className="w-full text-sm">
-        <thead className="bg-[#F5F9F2] text-left text-xs font-semibold uppercase tracking-wider text-[#778477] border-b border-[#DCE7D9]">
+        <thead className="bg-[#F5F9F2]/75 backdrop-blur-xs text-left text-xs font-semibold uppercase tracking-wider text-[#778477] border-b border-[#DCE7D9]/70">
           <tr>{columns.map((c) => <th key={c.key} scope="col" className={cx('px-4 py-3 font-semibold', c.align === 'right' && 'text-right')}>{c.label}</th>)}</tr>
         </thead>
-        <tbody className="divide-y divide-[#DCE7D9]/60">
+        <tbody className="divide-y divide-[#DCE7D9]/50">
           {rows.map((r, i) => (
-            <tr key={r.id ?? i} className={cx('transition-colors', onRow && 'cursor-pointer hover:bg-[#F5F9F2]/80')} onClick={onRow ? () => onRow(r) : undefined}>
+            <tr key={r.id ?? i} className={cx('glass-table-row transition-all', onRow && 'cursor-pointer hover:bg-white/90')} onClick={onRow ? () => onRow(r) : undefined}>
               {columns.map((c, ci) => (
                 <td key={c.key} className={cx('px-4 py-3 text-sm text-[#202820]', c.align === 'right' && 'text-right tabular-nums')}>
-                  {ci === 0 && onRow ? <button className="text-left font-semibold text-[#3D7952] hover:underline" onClick={(e) => { e.stopPropagation(); onRow(r); }}>{c.render ? c.render(r) : String((r as Record<string, unknown>)[c.key] ?? '')}</button> : c.render ? c.render(r) : String((r as Record<string, unknown>)[c.key] ?? '')}
+                  {ci === 0 && onRow ? <button className="text-left font-semibold text-[#3D7952] hover-text-slide" onClick={(e) => { e.stopPropagation(); onRow(r); }}>{c.render ? c.render(r) : String((r as Record<string, unknown>)[c.key] ?? '')}</button> : c.render ? c.render(r) : String((r as Record<string, unknown>)[c.key] ?? '')}
                 </td>
               ))}
             </tr>

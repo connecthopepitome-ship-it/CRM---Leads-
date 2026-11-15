@@ -206,7 +206,7 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
 
   return (
     <aside
-      className={`relative z-20 flex flex-col bg-[#203923] text-white border-l border-[#2E4E36] transition-all duration-300 ease-in-out shrink-0 select-none shadow-xl ${
+      className={`relative z-20 flex flex-col glass-dark-drawer text-white transition-all duration-300 ease-in-out shrink-0 select-none ${
         open ? 'w-80 xl:w-[320px]' : 'w-0 border-l-0 overflow-hidden'
       }`}
       aria-label="Tasks panel"
@@ -215,12 +215,12 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
       {!open && (
         <button
           onClick={onToggle}
-          className="fixed right-0 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-1.5 px-2 py-3 bg-[#203923] border-l border-y border-[#2E4E36] rounded-l-2xl shadow-xl text-emerald-200 hover:text-white hover:bg-[#28492C] transition-all focus:outline-none group"
+          className="fixed right-0 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-1.5 px-2 py-3 bg-[#203923]/90 backdrop-blur-xl border-l border-y border-white/20 rounded-l-2xl shadow-2xl text-emerald-200 hover:text-white hover:bg-[#28492C] transition-all focus:outline-none group interactive-tile"
           title="Open My Tasks"
           aria-label="Open tasks drawer"
         >
-          <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#3D7952] text-[10px] text-white font-bold shadow-xs">
+          <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#3D7952] text-[10px] text-white font-bold shadow-xs group-hover:scale-110 transition-transform">
             {todayCount}
           </span>
         </button>
@@ -229,16 +229,16 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
       {/* Drawer Container (fixed width inside) */}
       <div className="w-80 xl:w-[320px] flex flex-col h-full overflow-hidden">
         {/* Header (Grovia dark forest green) */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#2E4E36]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
           <div className="flex items-center gap-2">
-            <h2 className="text-base font-bold text-white tracking-tight">My Tasks</h2>
-            <span className="flex items-center justify-center px-2 py-0.5 text-xs font-semibold rounded-full bg-[#2E4E36] text-emerald-200">
+            <h2 className="text-base font-bold text-white tracking-tight hover-text-glow">My Tasks</h2>
+            <span className="flex items-center justify-center px-2 py-0.5 text-xs font-semibold rounded-full bg-[#2E4E36] text-emerald-200 glass-badge">
               {todayCount}
             </span>
           </div>
           <button
             onClick={onClose}
-            className="flex items-center justify-center w-7 h-7 rounded-lg text-emerald-300 hover:text-white hover:bg-[#28492C] transition-colors"
+            className="flex items-center justify-center w-7 h-7 rounded-lg text-emerald-300 hover:text-white hover:bg-[#28492C] transition-colors btn-spring"
             aria-label="Close task drawer"
           >
             <X size={16} />
@@ -246,38 +246,38 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
         </div>
 
         {/* Tabs: Today (3) | Upcoming (5) | Done */}
-        <div className="flex items-center border-b border-[#2E4E36] px-4 pt-1 gap-2 text-xs font-medium">
+        <div className="flex items-center border-b border-white/10 px-4 pt-1 gap-2 text-xs font-medium">
           <button
             onClick={() => setActiveTab('today')}
-            className={`pb-2.5 px-2 border-b-2 transition-colors relative flex items-center gap-1.5 ${
+            className={`pb-2.5 px-2 border-b-2 transition-all relative flex items-center gap-1.5 btn-spring ${
               activeTab === 'today'
                 ? 'border-emerald-400 text-white font-bold'
-                : 'border-transparent text-emerald-300/70 hover:text-white'
+                : 'border-transparent text-emerald-300/70 hover:text-white hover:border-white/20'
             }`}
           >
-            Today ({todayCount})
+            <span className="hover-text-lift">Today ({todayCount})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('upcoming')}
-            className={`pb-2.5 px-2 border-b-2 transition-colors relative flex items-center gap-1.5 ${
+            className={`pb-2.5 px-2 border-b-2 transition-all relative flex items-center gap-1.5 btn-spring ${
               activeTab === 'upcoming'
                 ? 'border-emerald-400 text-white font-bold'
-                : 'border-transparent text-emerald-300/70 hover:text-white'
+                : 'border-transparent text-emerald-300/70 hover:text-white hover:border-white/20'
             }`}
           >
-            Upcoming ({upcomingCount})
+            <span className="hover-text-lift">Upcoming ({upcomingCount})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('completed')}
-            className={`pb-2.5 px-2 border-b-2 transition-colors relative flex items-center gap-1.5 ${
+            className={`pb-2.5 px-2 border-b-2 transition-all relative flex items-center gap-1.5 btn-spring ${
               activeTab === 'completed'
                 ? 'border-emerald-400 text-white font-bold'
-                : 'border-transparent text-emerald-300/70 hover:text-white'
+                : 'border-transparent text-emerald-300/70 hover:text-white hover:border-white/20'
             }`}
           >
-            Done ({completedCount})
+            <span className="hover-text-lift">Done ({completedCount})</span>
           </button>
         </div>
 
@@ -301,12 +301,12 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
                 <div
                   key={task.id}
                   onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
-                  className={`group rounded-xl p-3 transition-all cursor-pointer border ${
+                  className={`group rounded-xl p-3 transition-all cursor-pointer border interactive-tile ${
                     task.completed
-                      ? 'bg-[#1C321F]/60 border-[#2E4E36]/40 opacity-70'
+                      ? 'bg-[#1C321F]/60 border-white/10 opacity-70'
                       : isExpanded
-                      ? 'bg-[#28492C] border-emerald-500/50 shadow-md'
-                      : 'bg-[#1C321F] border-[#2E4E36] hover:bg-[#28492C] hover:border-[#3D7952]'
+                      ? 'bg-[#28492C]/90 border-emerald-400/50 shadow-lg'
+                      : 'bg-[#1C321F]/80 border-white/10 hover:bg-[#28492C]/90 hover:border-emerald-400/30'
                   }`}
                 >
                   <div className="flex items-start gap-3">
@@ -314,10 +314,10 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
                     <button
                       type="button"
                       onClick={(e) => toggleTask(task.id, e)}
-                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border mt-0.5 transition-colors ${
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border mt-0.5 transition-all btn-spring ${
                         task.completed
                           ? 'border-emerald-400 bg-emerald-500 text-white'
-                          : 'border-emerald-400/60 bg-transparent hover:border-emerald-300'
+                          : 'border-emerald-400/60 bg-transparent hover:border-emerald-300 hover:scale-110'
                       }`}
                       aria-label={task.completed ? 'Mark incomplete' : 'Mark completed'}
                     >
@@ -327,8 +327,8 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
                     {/* Task Content */}
                     <div className="min-w-0 flex-1">
                       <p
-                        className={`text-xs font-medium leading-snug ${
-                          task.completed ? 'line-through text-emerald-300/60' : 'text-white'
+                        className={`text-xs font-medium leading-snug transition-transform group-hover:translate-x-1 ${
+                          task.completed ? 'line-through text-emerald-300/60' : 'text-white group-hover:text-emerald-100'
                         }`}
                       >
                         {task.title}
@@ -340,7 +340,7 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
                           {task.dueTime}
                         </span>
                         {task.contact && (
-                          <span className="truncate max-w-[120px] rounded-xs bg-[#2E4E36] px-1.5 py-0.2 text-[10px] text-emerald-200">
+                          <span className="truncate max-w-[120px] rounded-xs bg-[#2E4E36]/80 px-1.5 py-0.2 text-[10px] text-emerald-200 glass-badge">
                             {task.contact}
                           </span>
                         )}

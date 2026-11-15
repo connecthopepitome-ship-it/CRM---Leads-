@@ -159,39 +159,39 @@ export function Shell() {
       {/* ============================================================== */}
       {/* 1. GROVIA HORIZONTAL TOP NAVIGATION BAR */}
       {/* ============================================================== */}
-      <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-[#DCE7D9] bg-white/95 px-4 lg:px-7 shadow-xs backdrop-blur-md">
+      <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between glass-nav px-4 lg:px-7">
         {/* Left: Brand Emblem + Name */}
         <div className="flex items-center gap-3">
           <Link to="/" className="flex items-center gap-2.5 group">
             {/* Grovia-style Green Circular Emblem */}
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-tr from-[#233D2D] via-[#3D7952] to-[#5A9B68] p-1.5 shadow-xs group-hover:scale-105 transition-transform">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-tr from-[#233D2D] via-[#3D7952] to-[#5A9B68] p-1.5 shadow-xs group-hover:scale-105 group-hover:shadow-[0_0_16px_rgba(61,121,82,0.4)] transition-all">
               <svg viewBox="0 0 24 24" fill="none" className="w-full h-full text-white" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.4" />
                 <path d="M12 3a9 9 0 0 1 9 9c0 4.97-4.03 9-9 9" />
                 <path d="M7 12a5 5 0 0 1 5-5" stroke="white" strokeWidth="2.5" />
               </svg>
             </div>
-            <span className="font-extrabold text-[18px] tracking-tight text-[#202820]">
+            <span className="font-extrabold text-[18px] tracking-tight text-[#202820] hover-text-glow">
               SaleSphere
             </span>
           </Link>
         </div>
 
         {/* Center: Horizontal Navigation Pills (Grovia Minimalist Style) */}
-        <nav className="hidden md:flex items-center gap-1.5 rounded-full bg-[#F5F9F2] p-1 border border-[#DCE7D9]">
+        <nav className="hidden md:flex items-center gap-1.5 rounded-full glass-pill-container p-1">
           {navItems.map((item) => {
             const active = isNavActive(item);
             return (
               <Link
                 key={item.id}
                 to={item.to}
-                className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-200 select-none ${
+                className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-200 select-none btn-spring ${
                   active
                     ? 'bg-[#233D2D] text-white shadow-xs'
                     : 'text-[#778477] hover:text-[#202820] hover:bg-white/80'
                 }`}
               >
-                {item.label}
+                <span className="hover-text-lift">{item.label}</span>
               </Link>
             );
           })}
@@ -202,12 +202,12 @@ export function Shell() {
           {/* Global Search Button */}
           <button
             onClick={() => setSearchOpen(true)}
-            className="flex h-9 items-center gap-2 rounded-xl border border-[#DCE7D9] bg-[#F5F9F2]/70 px-3 py-1.5 text-xs text-[#778477] hover:bg-white hover:text-[#202820] hover:border-[#CFE5CB] transition-all"
+            className="flex h-9 items-center gap-2 rounded-xl border border-white/80 bg-white/70 backdrop-blur-md px-3 py-1.5 text-xs text-[#778477] hover:bg-white hover:text-[#202820] hover:border-[#CFE5CB] interactive-tile shadow-2xs"
             title="Global search (Ctrl+K)"
             aria-label="Search"
           >
             <Search size={14} className="text-[#778477]" />
-            <span className="hidden xl:inline text-[11px]">Search...</span>
+            <span className="hidden xl:inline text-[11px] hover-text-lift">Search...</span>
             <kbd className="hidden sm:inline-block rounded-md border border-[#DCE7D9] bg-white px-1.5 py-0.2 font-mono text-[9px] text-[#778477]">
               ⌘K
             </kbd>
@@ -216,16 +216,16 @@ export function Shell() {
           {/* Task Drawer Toggle Button */}
           <button
             onClick={toggleTaskDrawer}
-            className={`flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-xs font-semibold transition-all ${
+            className={`flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-xs font-semibold interactive-tile shadow-2xs ${
               taskDrawerOpen
                 ? 'bg-[#233D2D] text-white'
-                : 'border border-[#DCE7D9] bg-white text-[#202820] hover:bg-[#F5F9F2]'
+                : 'border border-white/80 bg-white/70 backdrop-blur-md text-[#202820] hover:bg-white'
             }`}
             title="Toggle My Tasks Drawer"
             aria-label="Toggle tasks drawer"
           >
             <CheckSquare size={15} />
-            <span className="hidden sm:inline">Tasks</span>
+            <span className="hidden sm:inline hover-text-lift">Tasks</span>
             <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#3D7952] text-[9px] text-white font-bold">
               3
             </span>
@@ -234,7 +234,7 @@ export function Shell() {
           {/* Notifications Bell */}
           <Link
             to="/notifications"
-            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-[#DCE7D9] bg-white text-[#778477] hover:text-[#202820] hover:bg-[#F5F9F2] transition-colors"
+            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-white/80 bg-white/70 backdrop-blur-md text-[#778477] hover:text-[#202820] hover:bg-white interactive-tile shadow-2xs"
             aria-label="Notifications"
           >
             <Bell size={16} />
@@ -246,16 +246,16 @@ export function Shell() {
             <button
               type="button"
               onClick={() => setQuickAddMenuOpen((prev) => !prev)}
-              className="flex h-9 items-center gap-1 rounded-xl bg-[#3D7952] px-3 text-xs font-bold text-white shadow-xs hover:bg-[#233D2D] active:scale-95 transition-all"
+              className="flex h-9 items-center gap-1 rounded-xl bg-[#3D7952] px-3 text-xs font-bold text-white shadow-xs hover:bg-[#233D2D] btn-spring btn-shimmer"
               aria-haspopup="true"
               aria-expanded={quickAddMenuOpen}
             >
               <Plus size={15} strokeWidth={2.5} />
-              <span className="hidden sm:inline">New</span>
+              <span className="hidden sm:inline hover-text-lift">New</span>
             </button>
 
             {quickAddMenuOpen && (
-              <div className="absolute right-0 mt-2 w-52 rounded-2xl border border-[#DCE7D9] bg-white p-1.5 shadow-xl z-50 text-xs animate-in fade-in duration-100">
+              <div className="absolute right-0 mt-2 w-52 rounded-2xl glass-dropdown p-1.5 shadow-2xl z-50 text-xs animate-in fade-in duration-100">
                 <div className="px-3 py-1.5 text-[11px] font-bold text-[#778477] uppercase tracking-wider">
                   Quick Create
                 </div>
@@ -264,40 +264,40 @@ export function Shell() {
                     setQuickAddMenuOpen(false);
                     nav('/leads/new');
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#202820] hover:bg-[#EDF5EA] hover:text-[#3D7952] transition-colors text-left"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#202820] hover:bg-white/80 hover:text-[#3D7952] transition-all text-left group"
                 >
-                  <UserPlus size={15} className="text-[#3D7952]" />
-                  <span>New Lead</span>
+                  <UserPlus size={15} className="text-[#3D7952] group-hover:scale-110 transition-transform" />
+                  <span className="hover-text-slide">New Lead</span>
                 </button>
                 <button
                   onClick={() => {
                     setQuickAddMenuOpen(false);
                     nav('/sales/quotes/new');
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#202820] hover:bg-[#EDF5EA] hover:text-[#3D7952] transition-colors text-left"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#202820] hover:bg-white/80 hover:text-[#3D7952] transition-all text-left group"
                 >
-                  <FilePlus size={15} className="text-[#3D7952]" />
-                  <span>New Quotation</span>
+                  <FilePlus size={15} className="text-[#3D7952] group-hover:scale-110 transition-transform" />
+                  <span className="hover-text-slide">New Quotation</span>
                 </button>
                 <button
                   onClick={() => {
                     setQuickAddMenuOpen(false);
                     nav('/sales/payments/new');
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#202820] hover:bg-[#EDF5EA] hover:text-[#3D7952] transition-colors text-left"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#202820] hover:bg-white/80 hover:text-[#3D7952] transition-all text-left group"
                 >
-                  <CreditCard size={15} className="text-[#3D7952]" />
-                  <span>Record Payment</span>
+                  <CreditCard size={15} className="text-[#3D7952] group-hover:scale-110 transition-transform" />
+                  <span className="hover-text-slide">Record Payment</span>
                 </button>
                 <button
                   onClick={() => {
                     setQuickAddMenuOpen(false);
                     nav('/customers/new');
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#202820] hover:bg-[#EDF5EA] hover:text-[#3D7952] transition-colors text-left"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#202820] hover:bg-white/80 hover:text-[#3D7952] transition-all text-left group"
                 >
-                  <UserCheck size={15} className="text-[#3D7952]" />
-                  <span>New Customer</span>
+                  <UserCheck size={15} className="text-[#3D7952] group-hover:scale-110 transition-transform" />
+                  <span className="hover-text-slide">New Customer</span>
                 </button>
               </div>
             )}
@@ -307,16 +307,16 @@ export function Shell() {
           <div className="relative" ref={userMenuRef}>
             <button
               onClick={() => setUserMenuOpen((prev) => !prev)}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#E3EFDF] border border-[#DCE7D9] text-xs font-bold text-[#233D2D] hover:ring-2 hover:ring-[#3D7952]/30 transition-all"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#E3EFDF]/80 border border-white/80 backdrop-blur-md text-xs font-bold text-[#233D2D] hover:ring-2 hover:ring-[#3D7952]/40 transition-all btn-spring"
               aria-label="User Profile Menu"
             >
               {user?.fullName?.slice(0, 2).toUpperCase() || 'OA'}
             </button>
 
             {userMenuOpen && (
-              <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-[#DCE7D9] bg-white p-2 shadow-xl z-50 text-xs animate-in fade-in duration-100">
+              <div className="absolute right-0 mt-2 w-56 rounded-2xl glass-dropdown p-2 shadow-2xl z-50 text-xs animate-in fade-in duration-100">
                 <div className="px-3 py-2 border-b border-[#DCE7D9]/60">
-                  <span className="font-bold text-[#202820] block truncate">
+                  <span className="font-bold text-[#202820] block truncate hover-text-glow">
                     {user?.fullName || 'Owner Admin'}
                   </span>
                   <span className="text-[11px] text-[#778477] block truncate">
@@ -327,18 +327,18 @@ export function Shell() {
                   <Link
                     to="/me"
                     onClick={() => setUserMenuOpen(false)}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#202820] hover:bg-[#EDF5EA] hover:text-[#3D7952] transition-colors"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#202820] hover:bg-white/80 hover:text-[#3D7952] transition-all group"
                   >
-                    <UserCheck size={15} />
-                    <span>My Account</span>
+                    <UserCheck size={15} className="group-hover:scale-110 transition-transform text-[#3D7952]" />
+                    <span className="hover-text-slide">My Account</span>
                   </Link>
                   <Link
                     to="/settings"
                     onClick={() => setUserMenuOpen(false)}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#202820] hover:bg-[#EDF5EA] hover:text-[#3D7952] transition-colors"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#202820] hover:bg-white/80 hover:text-[#3D7952] transition-all group"
                   >
-                    <Settings size={15} />
-                    <span>Settings</span>
+                    <Settings size={15} className="group-hover:rotate-45 transition-transform text-[#3D7952]" />
+                    <span className="hover-text-slide">Settings</span>
                   </Link>
                 </div>
                 <div className="border-t border-[#DCE7D9]/60 pt-1">
@@ -347,7 +347,7 @@ export function Shell() {
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#D66B68] hover:bg-[#FDF0EF] transition-colors text-left"
                   >
                     <LogOut size={15} />
-                    <span>Sign Out</span>
+                    <span className="hover-text-slide">Sign Out</span>
                   </button>
                 </div>
               </div>
@@ -357,7 +357,7 @@ export function Shell() {
           {/* Mobile Menu Hamburger (Visible on small screens) */}
           <button
             onClick={() => setMobileMenuOpen(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#DCE7D9] bg-white text-[#202820] md:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/80 bg-white/70 backdrop-blur-md text-[#202820] md:hidden interactive-tile shadow-2xs"
             aria-label="Open Mobile Menu"
           >
             <Menu size={18} />

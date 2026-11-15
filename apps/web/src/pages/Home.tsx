@@ -103,7 +103,7 @@ export default function Home() {
       {/* ============================================================== */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-[#202820]">
+          <h1 className="text-2xl font-extrabold tracking-tight text-[#202820] hover-text-glow">
             Good evening, {user?.fullName || 'Owner'} 👋
           </h1>
           <p className="text-xs sm:text-sm text-[#778477] mt-0.5">
@@ -117,7 +117,7 @@ export default function Home() {
             <select
               value={timeFilter}
               onChange={(e) => setTimeFilter(e.target.value)}
-              className="appearance-none rounded-full border border-[#DCE7D9] bg-white px-4 py-1.5 pr-8 text-xs font-semibold text-[#202820] shadow-2xs hover:border-[#CFE5CB] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/20 cursor-pointer"
+              className="appearance-none rounded-full border border-white/80 bg-white/80 backdrop-blur-md px-4 py-1.5 pr-8 text-xs font-semibold text-[#202820] shadow-2xs hover:border-[#CFE5CB] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/20 cursor-pointer transition-all hover:bg-white"
             >
               <option value="This Month">This Month</option>
               <option value="Last 30 Days">Last 30 Days</option>
@@ -129,7 +129,7 @@ export default function Home() {
 
           <button
             onClick={handleRefresh}
-            className={`rounded-full border border-[#DCE7D9] bg-white p-2 text-[#778477] hover:text-[#202820] hover:bg-[#F5F9F2] shadow-2xs transition-all ${
+            className={`rounded-full border border-white/80 bg-white/80 backdrop-blur-md p-2 text-[#778477] hover:text-[#202820] hover:bg-white shadow-2xs transition-all btn-spring ${
               isRefreshing ? 'animate-spin' : ''
             }`}
             title="Refresh statistics"
@@ -142,80 +142,80 @@ export default function Home() {
       {/* ============================================================== */}
       {/* 2. GROVIA 4/5 KPI STATS CARDS */}
       {/* ============================================================== */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
         {/* Card 1: New Leads */}
         <Link
           to="/leads"
-          className="group rounded-2xl border border-[#DCE7D9] bg-white p-4 shadow-2xs hover:border-[#CFE5CB] hover:shadow-xs transition-all"
+          className="group rounded-2xl border border-white/80 bg-white/80 backdrop-blur-md p-4 shadow-[0_4px_20px_-2px_rgba(35,61,45,0.04)] interactive-card"
         >
           <div className="flex items-center justify-between">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#EDF5EA] text-[#3D7952]">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#EDF5EA]/90 text-[#3D7952] transition-transform group-hover:scale-110">
               <UserPlus size={16} />
             </span>
-            <span className="flex items-center text-[11px] font-bold text-[#3D7952] bg-[#EAF5E8] px-2 py-0.5 rounded-full border border-[#CFE5CB]">
+            <span className="flex items-center text-[11px] font-bold text-[#3D7952] bg-[#EAF5E8]/90 px-2 py-0.5 rounded-full border border-[#CFE5CB] glass-badge">
               <ArrowUpRight size={12} className="mr-0.5" /> +25%
             </span>
           </div>
           <div className="mt-3">
-            <span className="text-xs font-medium text-[#778477]">New Leads</span>
-            <div className="text-2xl font-extrabold text-[#202820] tracking-tight">12</div>
+            <span className="text-xs font-semibold text-[#778477] transition-colors group-hover:text-[#202820]">New Leads</span>
+            <div className="text-2xl font-extrabold text-[#202820] tracking-tight transition-transform group-hover:scale-105 group-hover:text-[#3D7952] origin-left">12</div>
           </div>
         </Link>
 
         {/* Card 2: Contacted */}
         <Link
           to="/leads"
-          className="group rounded-2xl border border-[#DCE7D9] bg-white p-4 shadow-2xs hover:border-[#CFE5CB] hover:shadow-xs transition-all"
+          className="group rounded-2xl border border-white/80 bg-white/80 backdrop-blur-md p-4 shadow-[0_4px_20px_-2px_rgba(35,61,45,0.04)] interactive-card"
         >
           <div className="flex items-center justify-between">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#EDF5EA] text-[#3D7952]">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#EDF5EA]/90 text-[#3D7952] transition-transform group-hover:scale-110">
               <Phone size={16} />
             </span>
-            <span className="flex items-center text-[11px] font-bold text-[#778477] bg-[#F5F9F2] px-2 py-0.5 rounded-full border border-[#DCE7D9]">
+            <span className="flex items-center text-[11px] font-bold text-[#778477] bg-[#F5F9F2]/90 px-2 py-0.5 rounded-full border border-[#DCE7D9] glass-badge">
               <ArrowDownRight size={12} className="mr-0.5" /> -16%
             </span>
           </div>
           <div className="mt-3">
-            <span className="text-xs font-medium text-[#778477]">Contacted</span>
-            <div className="text-2xl font-extrabold text-[#202820] tracking-tight">8</div>
+            <span className="text-xs font-semibold text-[#778477] transition-colors group-hover:text-[#202820]">Contacted</span>
+            <div className="text-2xl font-extrabold text-[#202820] tracking-tight transition-transform group-hover:scale-105 group-hover:text-[#3D7952] origin-left">8</div>
           </div>
         </Link>
 
         {/* Card 3: Quotations */}
         <Link
           to="/sales?tab=quotes"
-          className="group rounded-2xl border border-[#DCE7D9] bg-white p-4 shadow-2xs hover:border-[#CFE5CB] hover:shadow-xs transition-all"
+          className="group rounded-2xl border border-white/80 bg-white/80 backdrop-blur-md p-4 shadow-[0_4px_20px_-2px_rgba(35,61,45,0.04)] interactive-card"
         >
           <div className="flex items-center justify-between">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#EDF5EA] text-[#3D7952]">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#EDF5EA]/90 text-[#3D7952] transition-transform group-hover:scale-110">
               <FileText size={16} />
             </span>
-            <span className="flex items-center text-[11px] font-bold text-[#3D7952] bg-[#EAF5E8] px-2 py-0.5 rounded-full border border-[#CFE5CB]">
+            <span className="flex items-center text-[11px] font-bold text-[#3D7952] bg-[#EAF5E8]/90 px-2 py-0.5 rounded-full border border-[#CFE5CB] glass-badge">
               <ArrowUpRight size={12} className="mr-0.5" /> +40%
             </span>
           </div>
           <div className="mt-3">
-            <span className="text-xs font-medium text-[#778477]">Quotations</span>
-            <div className="text-2xl font-extrabold text-[#202820] tracking-tight">5</div>
+            <span className="text-xs font-semibold text-[#778477] transition-colors group-hover:text-[#202820]">Quotations</span>
+            <div className="text-2xl font-extrabold text-[#202820] tracking-tight transition-transform group-hover:scale-105 group-hover:text-[#3D7952] origin-left">5</div>
           </div>
         </Link>
 
         {/* Card 4: Closed Sales */}
         <Link
           to="/sales"
-          className="group rounded-2xl border border-[#DCE7D9] bg-white p-4 shadow-2xs hover:border-[#CFE5CB] hover:shadow-xs transition-all"
+          className="group rounded-2xl border border-white/80 bg-white/80 backdrop-blur-md p-4 shadow-[0_4px_20px_-2px_rgba(35,61,45,0.04)] interactive-card"
         >
           <div className="flex items-center justify-between">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#EDF5EA] text-[#3D7952]">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#EDF5EA]/90 text-[#3D7952] transition-transform group-hover:scale-110">
               <CreditCard size={16} />
             </span>
-            <span className="flex items-center text-[11px] font-bold text-[#3D7952] bg-[#EAF5E8] px-2 py-0.5 rounded-full border border-[#CFE5CB]">
+            <span className="flex items-center text-[11px] font-bold text-[#3D7952] bg-[#EAF5E8]/90 px-2 py-0.5 rounded-full border border-[#CFE5CB] glass-badge">
               <ArrowUpRight size={12} className="mr-0.5" /> +50%
             </span>
           </div>
           <div className="mt-3">
-            <span className="text-xs font-medium text-[#778477]">Closed Sales</span>
-            <div className="text-2xl font-extrabold text-[#202820] tracking-tight">3</div>
+            <span className="text-xs font-semibold text-[#778477] transition-colors group-hover:text-[#202820]">Closed Sales</span>
+            <div className="text-2xl font-extrabold text-[#202820] tracking-tight transition-transform group-hover:scale-105 group-hover:text-[#3D7952] origin-left">3</div>
           </div>
         </Link>
       </div>
@@ -227,15 +227,15 @@ export default function Home() {
         {/* LEFT COLUMN: Sales Pipeline + Follow-ups Today (6 cols) */}
         <div className="space-y-5 lg:col-span-6">
           {/* Module A: Sales Pipeline Donut Chart */}
-          <div className="rounded-2xl border border-[#DCE7D9] bg-white p-5 shadow-2xs">
-            <div className="flex items-center justify-between border-b border-[#DCE7D9]/60 pb-3">
+          <div className="rounded-2xl border border-white/80 bg-white/80 backdrop-blur-md p-5 shadow-[0_4px_20px_-2px_rgba(35,61,45,0.04)] interactive-card">
+            <div className="flex items-center justify-between border-b border-[#DCE7D9]/70 pb-3">
               <div>
-                <h2 className="text-sm font-bold text-[#202820]">Sales Pipeline</h2>
+                <h2 className="text-sm font-bold text-[#202820] hover-text-lift">Sales Pipeline</h2>
                 <p className="text-[11px] text-[#778477]">Current distribution across deal stages</p>
               </div>
               <Link
                 to="/leads?view=board"
-                className="text-xs font-bold text-[#3D7952] hover:text-[#233D2D] transition-colors"
+                className="text-xs font-bold text-[#3D7952] hover:text-[#233D2D] transition-colors hover-text-slide"
               >
                 View Pipeline →
               </Link>
@@ -312,7 +312,7 @@ export default function Home() {
 
                 {/* Center Value */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                  <span className="text-2xl font-extrabold text-[#202820] leading-none">
+                  <span className="text-2xl font-extrabold text-[#202820] leading-none hover-text-glow">
                     {totalPipelineLeads}
                   </span>
                   <span className="text-[10px] font-semibold text-[#778477] uppercase tracking-wider mt-0.5">
@@ -324,10 +324,10 @@ export default function Home() {
               {/* Stage Breakdown Legend List */}
               <div className="flex-1 w-full space-y-2">
                 {pipelineStages.map((stage) => (
-                  <div key={stage.label} className="flex items-center justify-between text-xs">
+                  <div key={stage.label} className="flex items-center justify-between text-xs py-1 border-b border-[#F5F9F2] last:border-0 hover:bg-[#F5F9F2]/70 px-2 rounded-lg transition-colors group">
                     <div className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: stage.color }} />
-                      <span className="text-[#202820] font-medium">{stage.label}</span>
+                      <span className="h-2.5 w-2.5 rounded-full transition-transform group-hover:scale-125" style={{ backgroundColor: stage.color }} />
+                      <span className="text-[#202820] font-medium hover-text-slide">{stage.label}</span>
                     </div>
                     <span className="font-bold text-[#202820] tabular-nums">{stage.count}</span>
                   </div>
@@ -337,15 +337,15 @@ export default function Home() {
           </div>
 
           {/* Module C: Follow-ups Today */}
-          <div className="rounded-2xl border border-[#DCE7D9] bg-white p-5 shadow-2xs">
-            <div className="flex items-center justify-between border-b border-[#DCE7D9]/60 pb-3">
+          <div className="rounded-2xl border border-white/80 bg-white/80 backdrop-blur-md p-5 shadow-[0_4px_20px_-2px_rgba(35,61,45,0.04)] interactive-card">
+            <div className="flex items-center justify-between border-b border-[#DCE7D9]/70 pb-3">
               <div>
-                <h2 className="text-sm font-bold text-[#202820]">Follow-ups Today</h2>
+                <h2 className="text-sm font-bold text-[#202820] hover-text-lift">Follow-ups Today</h2>
                 <p className="text-[11px] text-[#778477]">High priority customer follow-ups</p>
               </div>
               <Link
                 to="/follow-ups"
-                className="text-xs font-bold text-[#3D7952] hover:text-[#233D2D] transition-colors"
+                className="text-xs font-bold text-[#3D7952] hover:text-[#233D2D] transition-colors hover-text-slide"
               >
                 View All →
               </Link>
@@ -353,12 +353,12 @@ export default function Home() {
 
             <div className="mt-3 divide-y divide-[#DCE7D9]/50">
               {followUps.map((f) => (
-                <div key={f.id} className="flex items-center justify-between py-3">
+                <div key={f.id} className="flex items-center justify-between py-3 interactive-tile rounded-xl px-2 hover:bg-white/80">
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
                       onClick={() => toggleFollowUp(f.id)}
-                      className={`flex h-4 w-4 items-center justify-center rounded-sm border transition-colors ${
+                      className={`flex h-4 w-4 items-center justify-center rounded-sm border transition-all btn-spring ${
                         f.completed
                           ? 'border-[#3D7952] bg-[#3D7952] text-white'
                           : 'border-[#DCE7D9] bg-white hover:border-[#3D7952]'
@@ -372,11 +372,11 @@ export default function Home() {
                           f.completed ? 'line-through text-[#778477]' : 'text-[#202820]'
                         }`}
                       >
-                        {f.name} <span className="font-normal text-[#778477]">— {f.task}</span>
+                        <span className="hover-text-slide">{f.name}</span> <span className="font-normal text-[#778477]">— {f.task}</span>
                       </p>
                     </div>
                   </div>
-                  <span className="text-[11px] font-mono text-[#778477] bg-[#F5F9F2] px-2 py-0.5 rounded-md border border-[#DCE7D9]">
+                  <span className="text-[11px] font-mono text-[#778477] bg-[#F5F9F2]/90 px-2 py-0.5 rounded-md border border-[#DCE7D9] glass-badge">
                     {f.time}
                   </span>
                 </div>
@@ -388,13 +388,13 @@ export default function Home() {
         {/* RIGHT COLUMN: Revenue Progress + Leads Trend (6 cols) */}
         <div className="space-y-5 lg:col-span-6">
           {/* Module B: Revenue Progress */}
-          <div className="rounded-2xl border border-[#DCE7D9] bg-white p-5 shadow-2xs">
-            <div className="flex items-center justify-between border-b border-[#DCE7D9]/60 pb-3">
+          <div className="rounded-2xl border border-white/80 bg-white/80 backdrop-blur-md p-5 shadow-[0_4px_20px_-2px_rgba(35,61,45,0.04)] interactive-card">
+            <div className="flex items-center justify-between border-b border-[#DCE7D9]/70 pb-3">
               <div>
-                <h2 className="text-sm font-bold text-[#202820]">Revenue Progress</h2>
+                <h2 className="text-sm font-bold text-[#202820] hover-text-lift">Revenue Progress</h2>
                 <p className="text-[11px] text-[#778477]">Collected vs Target</p>
               </div>
-              <span className="text-xs font-bold text-[#3D7952] bg-[#EAF5E8] px-2.5 py-0.5 rounded-full border border-[#CFE5CB]">
+              <span className="text-xs font-bold text-[#3D7952] bg-[#EAF5E8]/90 px-2.5 py-0.5 rounded-full border border-[#CFE5CB] glass-badge">
                 49%
               </span>
             </div>
@@ -402,7 +402,7 @@ export default function Home() {
             <div className="mt-4">
               <div className="flex items-baseline justify-between">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-xl font-extrabold text-[#202820]">₹49,500</span>
+                  <span className="text-xl font-extrabold text-[#202820] hover-text-glow">₹49,500</span>
                   <span className="text-xs text-[#778477] font-medium">/ ₹1,00,000</span>
                 </div>
                 <span className="text-[11px] text-[#778477]">Monthly Target</span>
@@ -419,21 +419,21 @@ export default function Home() {
                   Weekly Collections
                 </span>
                 <div className="flex items-end justify-between gap-3 h-28 pt-2 border-b border-[#DCE7D9]/60">
-                  <div className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
-                    <div className="w-full bg-[#CFE5CB] rounded-t-lg transition-all hover:bg-[#3D7952]" style={{ height: '35%' }} />
-                    <span className="text-[10px] text-[#778477] font-medium">W1</span>
+                  <div className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group cursor-pointer">
+                    <div className="w-full bg-[#CFE5CB] rounded-t-lg transition-all group-hover:bg-[#3D7952] group-hover:shadow-[0_0_12px_rgba(61,121,82,0.4)]" style={{ height: '35%' }} />
+                    <span className="text-[10px] text-[#778477] font-medium transition-colors group-hover:text-[#3D7952]">W1</span>
                   </div>
-                  <div className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
-                    <div className="w-full bg-[#CFE5CB] rounded-t-lg transition-all hover:bg-[#3D7952]" style={{ height: '55%' }} />
-                    <span className="text-[10px] text-[#778477] font-medium">W2</span>
+                  <div className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group cursor-pointer">
+                    <div className="w-full bg-[#CFE5CB] rounded-t-lg transition-all group-hover:bg-[#3D7952] group-hover:shadow-[0_0_12px_rgba(61,121,82,0.4)]" style={{ height: '55%' }} />
+                    <span className="text-[10px] text-[#778477] font-medium transition-colors group-hover:text-[#3D7952]">W2</span>
                   </div>
-                  <div className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
-                    <div className="w-full bg-[#3D7952] rounded-t-lg transition-all hover:bg-[#233D2D]" style={{ height: '80%' }} />
+                  <div className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group cursor-pointer">
+                    <div className="w-full bg-[#3D7952] rounded-t-lg transition-all group-hover:bg-[#233D2D] group-hover:shadow-[0_0_12px_rgba(35,61,45,0.4)]" style={{ height: '80%' }} />
                     <span className="text-[10px] text-[#3D7952] font-bold">W3</span>
                   </div>
-                  <div className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
-                    <div className="w-full bg-[#CFE5CB] rounded-t-lg transition-all hover:bg-[#3D7952]" style={{ height: '25%' }} />
-                    <span className="text-[10px] text-[#778477] font-medium">W4</span>
+                  <div className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group cursor-pointer">
+                    <div className="w-full bg-[#CFE5CB] rounded-t-lg transition-all group-hover:bg-[#3D7952] group-hover:shadow-[0_0_12px_rgba(61,121,82,0.4)]" style={{ height: '25%' }} />
+                    <span className="text-[10px] text-[#778477] font-medium transition-colors group-hover:text-[#3D7952]">W4</span>
                   </div>
                 </div>
               </div>
@@ -441,10 +441,10 @@ export default function Home() {
           </div>
 
           {/* Module D: Leads Trend Sparkline Area Chart */}
-          <div className="rounded-2xl border border-[#DCE7D9] bg-white p-5 shadow-2xs">
-            <div className="flex items-center justify-between border-b border-[#DCE7D9]/60 pb-3">
+          <div className="rounded-2xl border border-white/80 bg-white/80 backdrop-blur-md p-5 shadow-[0_4px_20px_-2px_rgba(35,61,45,0.04)] interactive-card">
+            <div className="flex items-center justify-between border-b border-[#DCE7D9]/70 pb-3">
               <div>
-                <h2 className="text-sm font-bold text-[#202820]">Leads Trend</h2>
+                <h2 className="text-sm font-bold text-[#202820] hover-text-lift">Leads Trend</h2>
                 <p className="text-[11px] text-[#778477]">Acquisition volume throughout the month</p>
               </div>
               <span className="text-xs font-bold text-[#3D7952]">
