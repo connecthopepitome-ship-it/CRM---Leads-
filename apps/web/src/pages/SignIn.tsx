@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth, DEMO_OWNER } from '../lib/auth';
+import { useAuth } from '../lib/auth';
 import { Banner, Button, TextField } from '../ui';
-import { ArrowRight, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 
 export function SignIn() {
   const { user, ready, signIn, verifyMfa, changePassword } = useAuth();
@@ -49,20 +49,20 @@ export function SignIn() {
   const mustChange = user?.mustChangePassword;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f4f6fb] px-4 font-sans antialiased text-slate-800">
-      <div className="w-full max-w-md rounded-3xl border border-slate-200/90 bg-white p-8 shadow-xl shadow-slate-200/50">
+    <div className="flex min-h-screen items-center justify-center bg-[#EDF5EA] px-4 font-sans antialiased text-[#202820]">
+      <div className="w-full max-w-md rounded-3xl border border-[#DCE7D9] bg-white p-8 shadow-md">
         {/* Brand Logo & Name */}
         <div className="flex items-center gap-3 mb-6">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 via-blue-500 to-cyan-400 p-2 shadow-md shadow-indigo-500/20">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#233D2D] p-2 text-white shadow-xs">
             <svg viewBox="0 0 24 24" fill="none" className="w-full h-full text-white" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.4" />
+              <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.3" />
               <path d="M12 3a9 9 0 0 1 9 9c0 4.97-4.03 9-9 9" />
               <path d="M7 12a5 5 0 0 1 5-5" stroke="white" strokeWidth="2.5" />
             </svg>
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 leading-tight">SaleSphere</h1>
-            <p className="text-xs text-slate-500">Enterprise CRM for Growing Businesses</p>
+            <h1 className="text-xl font-bold tracking-tight text-[#202820] leading-tight">SaleSphere</h1>
+            <p className="text-xs text-[#778477]">Enterprise CRM for Growing Businesses</p>
           </div>
         </div>
 
@@ -76,20 +76,20 @@ export function SignIn() {
             className="flex flex-col gap-4"
             noValidate
           >
-            <h2 className="text-base font-bold text-slate-900">Set a new password</h2>
-            <p className="text-xs text-slate-500">For your security, choose a new password before continuing.</p>
+            <h2 className="text-base font-bold text-[#202820]">Set a new password</h2>
+            <p className="text-xs text-[#778477]">For your security, choose a new password before continuing.</p>
             {error && <Banner tone="danger">{error}</Banner>}
             <TextField label="Current password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
             <TextField label="New password" type="password" autoComplete="new-password" hint="At least 10 characters." value={newPw} onChange={(e) => setNewPw(e.target.value)} required />
             <TextField label="Confirm new password" type="password" autoComplete="new-password" value={newPw2} onChange={(e) => setNewPw2(e.target.value)} required />
-            <Button type="submit" busy={busy}>Save password</Button>
+            <Button type="submit" busy={busy} className="bg-[#3D7952] hover:bg-[#2F5E3F] text-white">Save password</Button>
           </form>
         ) : mfa ? (
           <form onSubmit={run(async () => verifyMfa(mfa, code))} className="flex flex-col gap-4" noValidate>
-            <h2 className="text-base font-bold text-slate-900">Enter your 6-digit code</h2>
+            <h2 className="text-base font-bold text-[#202820]">Enter your 6-digit code</h2>
             {error && <Banner tone="danger">{error}</Banner>}
             <TextField label="Authenticator code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} required />
-            <Button type="submit" busy={busy}>Verify</Button>
+            <Button type="submit" busy={busy} className="bg-[#3D7952] hover:bg-[#2F5E3F] text-white">Verify</Button>
           </form>
         ) : (
           <form
@@ -101,8 +101,8 @@ export function SignIn() {
             noValidate
           >
             <div>
-              <h2 className="text-base font-bold text-slate-900">Welcome back</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Enter your credentials to access your pipeline.</p>
+              <h2 className="text-base font-bold text-[#202820]">Welcome back</h2>
+              <p className="text-xs text-[#778477] mt-0.5">Enter your credentials to access your pipeline.</p>
             </div>
 
             {error && <Banner tone="danger">{error}</Banner>}
@@ -124,16 +124,20 @@ export function SignIn() {
               required
             />
 
-            <Button type="submit" busy={busy} className="w-full mt-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl">
+            <Button
+              type="submit"
+              busy={busy}
+              className="w-full mt-1 bg-[#3D7952] hover:bg-[#2F5E3F] text-white rounded-xl py-2.5 font-semibold transition-colors"
+            >
               Sign In
             </Button>
 
             {/* Quick Demo Mode Action */}
             <div className="relative my-2">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-200" />
+                <div className="w-full border-t border-[#DCE7D9]" />
               </div>
-              <div className="relative flex justify-center text-[10px] uppercase font-semibold text-slate-400">
+              <div className="relative flex justify-center text-[10px] uppercase font-semibold text-[#778477]">
                 <span className="bg-white px-2">or quick explore</span>
               </div>
             </div>
@@ -142,9 +146,9 @@ export function SignIn() {
               type="button"
               onClick={enterDemo}
               disabled={busy}
-              className="flex items-center justify-center gap-2 rounded-xl border border-indigo-200/80 bg-indigo-50/50 py-2.5 px-4 text-xs font-semibold text-indigo-700 hover:bg-indigo-100/70 hover:border-indigo-300 transition-colors"
+              className="flex items-center justify-center gap-2 rounded-xl border border-[#CFE5CB] bg-[#E3EFDF] py-2.5 px-4 text-xs font-semibold text-[#233D2D] hover:bg-[#D5E8D1] transition-colors"
             >
-              <Sparkles size={15} />
+              <Sparkles size={15} className="text-[#3D7952]" />
               <span>Explore Demo as Owner Admin</span>
               <ArrowRight size={14} />
             </button>

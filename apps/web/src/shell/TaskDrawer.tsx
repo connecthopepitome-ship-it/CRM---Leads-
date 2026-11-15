@@ -1,7 +1,7 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { 
   X, Check, Plus, Clock, Phone, FileText, Calendar, 
-  ChevronDown, ChevronUp, Trash2, AlertCircle, ChevronLeft, ChevronRight 
+  ChevronDown, ChevronUp, Trash2, AlertCircle, ChevronLeft, ChevronRight, CheckSquare 
 } from 'lucide-react';
 import { toast } from '../ui';
 
@@ -22,9 +22,9 @@ export interface Task {
 const DEFAULT_TASKS: Task[] = [
   {
     id: 'task-1',
-    title: 'Call Fatima Khan',
+    title: 'Follow up with Fatima Khan',
     dueCategory: 'today',
-    dueTime: '5:30 PM',
+    dueTime: '10:00 AM',
     iconType: 'phone',
     completed: false,
     contact: 'Fatima Khan',
@@ -36,7 +36,7 @@ const DEFAULT_TASKS: Task[] = [
     id: 'task-2',
     title: 'Send revised quotation',
     dueCategory: 'today',
-    dueTime: '6:00 PM',
+    dueTime: '11:30 AM',
     iconType: 'document',
     completed: false,
     contact: 'Iyer Consultancy',
@@ -46,10 +46,10 @@ const DEFAULT_TASKS: Task[] = [
   },
   {
     id: 'task-3',
-    title: 'Follow up with Iyer Consultancy',
+    title: 'Call Iyer Consultancy',
     dueCategory: 'today',
-    dueTime: '7:00 PM',
-    iconType: 'clock',
+    dueTime: '04:00 PM',
+    iconType: 'phone',
     completed: false,
     contact: 'Mr. Subramanian Iyer',
     company: 'Iyer Consultancy',
@@ -101,8 +101,8 @@ const DEFAULT_TASKS: Task[] = [
     contact: 'Deepa Reddy',
     company: 'Reddy Tech',
     priority: 'normal',
-    notes: 'Completed initial workspace walkthrough and assigned customer success manager.',
-    completedAt: 'Yesterday',
+    notes: 'Welcome kickoff meeting conducted successfully.',
+    completedAt: '3:45 PM',
   },
 ];
 
@@ -115,29 +115,29 @@ interface TaskDrawerProps {
 export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
   const [tasks, setTasks] = useState<Task[]>(() => {
     try {
-      const saved = localStorage.getItem('salesphere_tasks');
-      if (saved) return JSON.parse(saved);
+      const saved = localStorage.getItem('ss_tasks');
+      return saved ? JSON.parse(saved) : DEFAULT_TASKS;
     } catch {
-      // ignore
+      return DEFAULT_TASKS;
     }
-    return DEFAULT_TASKS;
   });
 
   const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'completed'>('today');
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
-  const [isAdding, setIsAdding] = useState(false);
 
-  // New task form state
+  // Add Task form state
+  const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState<'today' | 'upcoming'>('today');
   const [newTime, setNewTime] = useState('');
   const [newContact, setNewContact] = useState('');
-  const [newPriority, setNewPriority] = useState<'high' | 'medium' | 'normal'>('normal');
   const [newNotes, setNewNotes] = useState('');
+  const [newPriority, setNewPriority] = useState<'high' | 'medium' | 'normal'>('normal');
+  const [newCategory, setNewCategory] = useState<'today' | 'upcoming'>('today');
 
+  // Persist tasks in localStorage
   useEffect(() => {
     try {
-      localStorage.setItem('salesphere_tasks', JSON.stringify(tasks));
+      localStorage.setItem('ss_tasks', JSON.stringify(tasks));
     } catch {
       // ignore
     }
@@ -159,7 +159,7 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
       prev.map((t) => {
         if (t.id === id) {
           const next = !t.completed;
-          toast(next ? `Completed: "${t.title}"` : `Reopened: "${t.title}"`);
+          toast(next ? `Done: "${t.title}"` : `Reopened: "${t.title}"`);
           return {
             ...t,
             completed: next,
@@ -204,237 +204,167 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
     toast('Task removed');
   };
 
-  const getTaskIcon = (iconType: string) => {
-    switch (iconType) {
-      case 'phone':
-        return <Phone size={13} className="text-slate-400" aria-hidden />;
-      case 'document':
-        return <FileText size={13} className="text-slate-400" aria-hidden />;
-      case 'calendar':
-        return <Calendar size={13} className="text-slate-400" aria-hidden />;
-      default:
-        return <Clock size={13} className="text-slate-400" aria-hidden />;
-    }
-  };
-
   return (
     <aside
-      className={`relative z-20 flex flex-col bg-white border-l border-slate-200 transition-all duration-300 ease-in-out shrink-0 select-none ${
-        open ? 'w-80 xl:w-[340px]' : 'w-0 border-l-0 overflow-hidden'
+      className={`relative z-20 flex flex-col bg-[#203923] text-white border-l border-[#2E4E36] transition-all duration-300 ease-in-out shrink-0 select-none shadow-xl ${
+        open ? 'w-80 xl:w-[320px]' : 'w-0 border-l-0 overflow-hidden'
       }`}
       aria-label="Tasks panel"
     >
-      {/* Floating edge toggle handle on divider */}
+      {/* Floating edge toggle handle when closed */}
       {!open && (
         <button
           onClick={onToggle}
-          className="fixed right-0 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-1.5 px-1.5 py-3 bg-white border-l border-y border-slate-200/90 rounded-l-2xl shadow-md text-slate-500 hover:text-indigo-600 hover:bg-indigo-50/50 transition-all focus:outline-none group"
+          className="fixed right-0 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-1.5 px-2 py-3 bg-[#203923] border-l border-y border-[#2E4E36] rounded-l-2xl shadow-xl text-emerald-200 hover:text-white hover:bg-[#28492C] transition-all focus:outline-none group"
           title="Open My Tasks"
           aria-label="Open tasks drawer"
         >
-          <ChevronLeft size={15} className="group-hover:-translate-x-0.5 transition-transform" />
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] text-white font-bold shadow-xs">
+          <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#3D7952] text-[10px] text-white font-bold shadow-xs">
             {todayCount}
           </span>
         </button>
       )}
 
-      {/* Drawer Container (fixed width inside to prevent layout distortion during animation) */}
-      <div className="w-80 xl:w-[340px] flex flex-col h-full overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+      {/* Drawer Container (fixed width inside) */}
+      <div className="w-80 xl:w-[320px] flex flex-col h-full overflow-hidden">
+        {/* Header (Grovia dark forest green) */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#2E4E36]">
           <div className="flex items-center gap-2">
-            <h2 className="text-base font-bold text-slate-900 tracking-tight">My Tasks</h2>
-            <span className="flex items-center justify-center px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-50 text-blue-700">
-              {todayCount} today
+            <h2 className="text-base font-bold text-white tracking-tight">My Tasks</h2>
+            <span className="flex items-center justify-center px-2 py-0.5 text-xs font-semibold rounded-full bg-[#2E4E36] text-emerald-200">
+              {todayCount}
             </span>
           </div>
           <button
             onClick={onClose}
-            className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="flex items-center justify-center w-7 h-7 rounded-lg text-emerald-300 hover:text-white hover:bg-[#28492C] transition-colors"
             aria-label="Close task drawer"
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex items-center border-b border-slate-100 px-4 pt-1 gap-2 text-xs font-medium">
+        {/* Tabs: Today (3) | Upcoming (5) | Done */}
+        <div className="flex items-center border-b border-[#2E4E36] px-4 pt-1 gap-2 text-xs font-medium">
           <button
             onClick={() => setActiveTab('today')}
             className={`pb-2.5 px-2 border-b-2 transition-colors relative flex items-center gap-1.5 ${
               activeTab === 'today'
-                ? 'border-indigo-600 text-indigo-600 font-semibold'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'border-emerald-400 text-white font-bold'
+                : 'border-transparent text-emerald-300/70 hover:text-white'
             }`}
           >
-            Today
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                activeTab === 'today' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'
-              }`}
-            >
-              {todayCount}
-            </span>
+            Today ({todayCount})
           </button>
 
           <button
             onClick={() => setActiveTab('upcoming')}
             className={`pb-2.5 px-2 border-b-2 transition-colors relative flex items-center gap-1.5 ${
               activeTab === 'upcoming'
-                ? 'border-indigo-600 text-indigo-600 font-semibold'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'border-emerald-400 text-white font-bold'
+                : 'border-transparent text-emerald-300/70 hover:text-white'
             }`}
           >
-            Upcoming
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                activeTab === 'upcoming' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'
-              }`}
-            >
-              {upcomingCount}
-            </span>
+            Upcoming ({upcomingCount})
           </button>
 
           <button
             onClick={() => setActiveTab('completed')}
             className={`pb-2.5 px-2 border-b-2 transition-colors relative flex items-center gap-1.5 ${
               activeTab === 'completed'
-                ? 'border-indigo-600 text-indigo-600 font-semibold'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'border-emerald-400 text-white font-bold'
+                : 'border-transparent text-emerald-300/70 hover:text-white'
             }`}
           >
-            Completed
-            {completedCount > 0 && (
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                  activeTab === 'completed' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'
-                }`}
-              >
-                {completedCount}
-              </span>
-            )}
+            Done ({completedCount})
           </button>
         </div>
 
-        {/* Task List */}
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5">
+        {/* Tasks List Content */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 scrollbar-thin scrollbar-thumb-[#2E4E36]">
           {currentTasks.length === 0 ? (
-            <div className="py-12 px-4 text-center">
-              <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-2">
-                <Check size={18} />
-              </div>
-              <p className="text-sm font-medium text-slate-700">No {activeTab} tasks</p>
-              <p className="text-xs text-slate-400 mt-1">
+            <div className="flex flex-col items-center justify-center h-48 text-center px-4">
+              <CheckSquare size={32} className="text-emerald-500/40 mb-2" />
+              <p className="text-xs font-semibold text-emerald-200">No {activeTab} tasks</p>
+              <p className="text-[11px] text-emerald-300/60 mt-0.5">
                 {activeTab === 'completed'
-                  ? 'Tasks you complete will show up here.'
-                  : 'You are all caught up! Add a new task below.'}
+                  ? 'Completed tasks will be recorded here.'
+                  : 'You have cleared all pending tasks in this list.'}
               </p>
             </div>
           ) : (
-            currentTasks.map((t) => {
-              const isExpanded = expandedTaskId === t.id;
+            currentTasks.map((task) => {
+              const isExpanded = expandedTaskId === task.id;
+
               return (
                 <div
-                  key={t.id}
-                  onClick={() => setExpandedTaskId(isExpanded ? null : t.id)}
-                  className={`group rounded-xl border transition-all duration-150 cursor-pointer ${
-                    t.completed
-                      ? 'bg-slate-50/70 border-slate-200/60 opacity-80'
+                  key={task.id}
+                  onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
+                  className={`group rounded-xl p-3 transition-all cursor-pointer border ${
+                    task.completed
+                      ? 'bg-[#1C321F]/60 border-[#2E4E36]/40 opacity-70'
                       : isExpanded
-                      ? 'bg-white border-indigo-200 shadow-sm ring-1 ring-indigo-500/10'
-                      : 'bg-white border-slate-200/80 hover:border-slate-300 hover:shadow-sm'
+                      ? 'bg-[#28492C] border-emerald-500/50 shadow-md'
+                      : 'bg-[#1C321F] border-[#2E4E36] hover:bg-[#28492C] hover:border-[#3D7952]'
                   }`}
                 >
-                  <div className="p-3 flex items-start gap-3">
+                  <div className="flex items-start gap-3">
                     {/* Completion Checkbox */}
                     <button
                       type="button"
-                      onClick={(e) => toggleTask(t.id, e)}
-                      className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
-                        t.completed
-                          ? 'border-indigo-600 bg-indigo-600 text-white'
-                          : 'border-slate-300 bg-white hover:border-indigo-500'
+                      onClick={(e) => toggleTask(task.id, e)}
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border mt-0.5 transition-colors ${
+                        task.completed
+                          ? 'border-emerald-400 bg-emerald-500 text-white'
+                          : 'border-emerald-400/60 bg-transparent hover:border-emerald-300'
                       }`}
-                      aria-label={t.completed ? 'Mark incomplete' : 'Mark complete'}
+                      aria-label={task.completed ? 'Mark incomplete' : 'Mark completed'}
                     >
-                      {t.completed && <Check size={12} strokeWidth={3} />}
+                      {task.completed && <Check size={11} strokeWidth={3} />}
                     </button>
 
                     {/* Task Content */}
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-1">
-                        <p
-                          className={`text-xs font-semibold leading-snug truncate ${
-                            t.completed ? 'text-slate-400 line-through' : 'text-slate-800'
-                          }`}
-                        >
-                          {t.title}
-                        </p>
-                        <span className="text-slate-300 hover:text-slate-500">
-                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                        </span>
-                      </div>
+                      <p
+                        className={`text-xs font-medium leading-snug ${
+                          task.completed ? 'line-through text-emerald-300/60' : 'text-white'
+                        }`}
+                      >
+                        {task.title}
+                      </p>
 
-                      {/* Sub-row: Time & Meta */}
-                      <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-500">
-                        <span className="flex items-center gap-1 text-slate-500">
-                          {getTaskIcon(t.iconType)}
-                          <span>{t.dueTime}</span>
+                      <div className="mt-1 flex items-center gap-2 text-[11px] text-emerald-300/80">
+                        <span className="flex items-center gap-1 font-mono text-[10px]">
+                          <Clock size={11} className="text-emerald-400" />
+                          {task.dueTime}
                         </span>
-
-                        {t.priority === 'high' && !t.completed && (
-                          <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-rose-50 text-rose-600">
-                            High
-                          </span>
-                        )}
-                        {t.priority === 'medium' && !t.completed && (
-                          <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-amber-50 text-amber-600">
-                            Medium
+                        {task.contact && (
+                          <span className="truncate max-w-[120px] rounded-xs bg-[#2E4E36] px-1.5 py-0.2 text-[10px] text-emerald-200">
+                            {task.contact}
                           </span>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Expandable Details */}
+                  {/* Expanded Task Notes & Details */}
                   {isExpanded && (
-                    <div
-                      className="px-3 pb-3 pt-1 border-t border-slate-100 text-xs text-slate-600 space-y-2"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {t.contact && (
-                        <div className="flex items-center gap-1.5 text-slate-600">
-                          <span className="text-slate-400 font-medium">Contact:</span>
-                          <span className="font-semibold text-slate-800">{t.contact}</span>
-                          {t.company && <span className="text-slate-400">({t.company})</span>}
-                        </div>
+                    <div className="mt-3 pt-2.5 border-t border-[#2E4E36] text-xs space-y-2 animate-in fade-in duration-150">
+                      {task.notes && (
+                        <p className="text-[11px] text-emerald-200/90 leading-relaxed bg-[#192E1C] p-2 rounded-lg border border-[#2E4E36]">
+                          {task.notes}
+                        </p>
                       )}
 
-                      {t.notes && (
-                        <div className="p-2 rounded bg-slate-50 border border-slate-100 text-slate-600 text-[11px] leading-relaxed">
-                          {t.notes}
-                        </div>
-                      )}
-
-                      <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center justify-between text-[11px] text-emerald-300/70 pt-1">
+                        <span>Company: {task.company || '—'}</span>
                         <button
                           type="button"
-                          onClick={(e) => toggleTask(t.id, e)}
-                          className={`text-xs font-medium px-2 py-1 rounded transition-colors ${
-                            t.completed
-                              ? 'text-slate-600 hover:bg-slate-100'
-                              : 'text-indigo-600 hover:bg-indigo-50'
-                          }`}
+                          onClick={(e) => deleteTask(task.id, e)}
+                          className="flex items-center gap-1 text-rose-300 hover:text-rose-200 text-[10px] transition-colors"
                         >
-                          {t.completed ? 'Reopen task' : 'Mark as done'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => deleteTask(t.id, e)}
-                          className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2 py-1 rounded flex items-center gap-1"
-                        >
-                          <Trash2 size={12} />
+                          <Trash2 size={11} />
                           Delete
                         </button>
                       </div>
@@ -445,105 +375,53 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
             })
           )}
 
-          {/* Add Task Form (inline when active) */}
+          {/* Inline Add Task Form */}
           {isAdding && (
-            <form
-              onSubmit={handleAddTask}
-              className="mt-3 p-3.5 rounded-xl border border-indigo-200 bg-indigo-50/30 space-y-3"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-900">New Task</span>
-                <button
-                  type="button"
-                  onClick={() => setIsAdding(false)}
-                  className="text-slate-400 hover:text-slate-600"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-
-              <div>
+            <form onSubmit={handleAddTask} className="rounded-xl border border-emerald-500/60 bg-[#1C321F] p-3 text-xs space-y-2.5 shadow-md">
+              <span className="block font-bold text-emerald-200 text-[11px]">New Task</span>
+              <input
+                type="text"
+                required
+                placeholder="What needs to be done?"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                className="w-full rounded-lg border border-[#2E4E36] bg-[#122314] px-2.5 py-1.5 text-xs text-white placeholder-emerald-400/50 focus:border-emerald-400 focus:outline-none"
+                autoFocus
+              />
+              <div className="grid grid-cols-2 gap-2">
                 <input
                   type="text"
-                  autoFocus
-                  placeholder="Task title (e.g. Call client)"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  required
+                  placeholder="e.g. 5:30 PM"
+                  value={newTime}
+                  onChange={(e) => setNewTime(e.target.value)}
+                  className="rounded-lg border border-[#2E4E36] bg-[#122314] px-2 py-1 text-xs text-white placeholder-emerald-400/50 focus:border-emerald-400 focus:outline-none"
+                />
+                <input
+                  type="text"
+                  placeholder="Customer name"
+                  value={newContact}
+                  onChange={(e) => setNewContact(e.target.value)}
+                  className="rounded-lg border border-[#2E4E36] bg-[#122314] px-2 py-1 text-xs text-white placeholder-emerald-400/50 focus:border-emerald-400 focus:outline-none"
                 />
               </div>
-
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Bucket</label>
-                  <select
-                    value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value as 'today' | 'upcoming')}
-                    className="w-full px-2 py-1.5 text-xs rounded-lg border border-slate-300 bg-white focus:outline-none"
-                  >
-                    <option value="today">Today</option>
-                    <option value="upcoming">Upcoming</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Time / Due</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 5:30 PM"
-                    value={newTime}
-                    onChange={(e) => setNewTime(e.target.value)}
-                    className="w-full px-2 py-1.5 text-xs rounded-lg border border-slate-300 bg-white focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Contact</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Fatima Khan"
-                    value={newContact}
-                    onChange={(e) => setNewContact(e.target.value)}
-                    className="w-full px-2 py-1.5 text-xs rounded-lg border border-slate-300 bg-white focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Priority</label>
-                  <select
-                    value={newPriority}
-                    onChange={(e) => setNewPriority(e.target.value as 'high' | 'medium' | 'normal')}
-                    className="w-full px-2 py-1.5 text-xs rounded-lg border border-slate-300 bg-white focus:outline-none"
-                  >
-                    <option value="normal">Normal</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <textarea
-                  placeholder="Notes or agenda details (optional)"
-                  value={newNotes}
-                  onChange={(e) => setNewNotes(e.target.value)}
-                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 bg-white focus:outline-none"
-                  rows={2}
-                />
-              </div>
-
+              <textarea
+                placeholder="Notes or agenda..."
+                value={newNotes}
+                onChange={(e) => setNewNotes(e.target.value)}
+                className="w-full rounded-lg border border-[#2E4E36] bg-[#122314] px-2.5 py-1 text-xs text-white placeholder-emerald-400/50 focus:border-emerald-400 focus:outline-none"
+                rows={2}
+              />
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setIsAdding(false)}
-                  className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                  className="rounded-lg px-2.5 py-1 text-[11px] text-emerald-300 hover:text-white"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-sm transition-colors"
+                  className="rounded-lg bg-[#3D7952] px-3 py-1 text-[11px] font-bold text-white hover:bg-emerald-600 shadow-xs"
                 >
                   Save Task
                 </button>
@@ -552,21 +430,23 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
           )}
         </div>
 
-        {/* Footer Add Task Button */}
-        <div className="p-3 border-t border-slate-100">
-          <button
-            onClick={() => {
-              setIsAdding(true);
-              setNewCategory(activeTab === 'completed' ? 'today' : activeTab);
-            }}
-            className="w-full py-2 px-3 flex items-center justify-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50/60 hover:bg-indigo-100/70 rounded-xl transition-colors"
-          >
-            <Plus size={15} />
-            <span>Add Task</span>
-          </button>
+        {/* Footer: + Add Task Button */}
+        <div className="p-3 border-t border-[#2E4E36] bg-[#1A301D]">
+          {!isAdding ? (
+            <button
+              onClick={() => setIsAdding(true)}
+              className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#2E4E36] py-2 text-xs font-semibold text-emerald-200 hover:text-white hover:border-emerald-400 hover:bg-[#203923] transition-all"
+            >
+              <Plus size={14} />
+              <span>Add Task</span>
+            </button>
+          ) : (
+            <div className="text-[11px] text-center text-emerald-400 font-medium">
+              Editing new task...
+            </div>
+          )}
         </div>
       </div>
     </aside>
   );
 }
-

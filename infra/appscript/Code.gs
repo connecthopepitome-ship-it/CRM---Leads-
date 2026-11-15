@@ -192,3 +192,4 @@ function jsonResponse(data, statusCode) {
     .setMimeType(ContentService.MimeType.JSON);
   return output;
 }
+

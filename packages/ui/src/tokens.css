@@ -1,57 +1,61 @@
-/* Clear Ledger design tokens (docs/04-ux/design-system.md §2). Values are RGB triplets for Tailwind alpha support. */
+/* Grovia-inspired Minimalist Sage-Green design tokens */
 :root {
-  --color-bg: 248 250 252;
-  --color-surface: 255 255 255;
-  --color-surface-2: 241 245 249;
-  --color-text: 15 23 42;
-  --color-text-muted: 71 85 105;
-  --color-border: 226 232 240;
-  --color-border-input: 100 116 139;
-  --color-primary: 37 99 235;
-  --color-primary-hover: 29 78 216;
+  --color-bg: 237 245 234;             /* #EDF5EA - Pale sage-green application background */
+  --color-bg-secondary: 227 239 223;   /* #E3EFDF */
+  --color-surface: 255 255 255;        /* #FFFFFF - Crisp white card surfaces */
+  --color-surface-2: 245 249 242;      /* #F5F9F2 - Secondary soft-green surface */
+  --color-text: 32 40 32;              /* #202820 - Primary dark charcoal-green text */
+  --color-text-muted: 119 132 119;     /* #778477 - Secondary muted sage text */
+  --color-border: 220 231 217;         /* #DCE7D9 - Soft subtle sage border */
+  --color-border-input: 190 205 186;   /* #BECDBA */
+  --color-primary: 61 121 82;          /* #3D7952 - Primary forest green */
+  --color-primary-hover: 35 61 45;     /* #233D2D - Dark forest green */
   --color-primary-fg: 255 255 255;
-  --color-primary-subtle: 239 246 255;
-  --color-success: 21 128 61;
-  --color-success-subtle: 240 253 244;
-  --color-warning: 180 83 9;
-  --color-warning-subtle: 255 251 235;
-  --color-danger: 185 28 28;
-  --color-danger-subtle: 254 242 242;
-  --color-info: 3 105 161;
-  --color-overlay: 15 23 42;
-  --radius-sm: 6px;
-  --radius-md: 10px;
+  --color-primary-subtle: 235 244 233; /* #EBF4E9 */
+  --color-success: 90 155 104;         /* #5A9B68 */
+  --color-success-subtle: 240 248 238;
+  --color-warning: 217 154 69;         /* #D99A45 */
+  --color-warning-subtle: 254 246 235;
+  --color-danger: 214 107 104;         /* #D66B68 */
+  --color-danger-subtle: 253 241 241;
+  --color-info: 61 121 82;
+  --color-overlay: 35 61 45;
+  --radius-sm: 8px;
+  --radius-md: 12px;
   --radius-lg: 16px;
-  --shadow-1: 0 1px 2px rgb(15 23 42 / 0.06), 0 1px 3px rgb(15 23 42 / 0.1);
-  --shadow-2: 0 4px 12px rgb(15 23 42 / 0.12);
-  --shadow-3: 0 12px 32px rgb(15 23 42 / 0.2);
+  --radius-xl: 20px;
+  --shadow-1: 0 1px 2px rgb(32 40 32 / 0.04), 0 1px 3px rgb(32 40 32 / 0.06);
+  --shadow-2: 0 4px 14px rgb(32 40 32 / 0.06);
+  --shadow-3: 0 12px 32px rgb(32 40 32 / 0.1);
   --motion-fast: 120ms;
   --motion-base: 200ms;
-  --motion-slow: 320ms;
+  --motion-slow: 300ms;
   color-scheme: light;
 }
+
 [data-theme='dark'] {
-  --color-bg: 11 18 32;
-  --color-surface: 17 24 39;
-  --color-surface-2: 31 41 55;
-  --color-text: 241 245 249;
-  --color-text-muted: 148 163 184;
-  --color-border: 51 65 85;
-  --color-border-input: 100 116 139;
-  --color-primary: 96 165 250;
-  --color-primary-hover: 147 197 253;
-  --color-primary-fg: 11 18 32;
-  --color-primary-subtle: 23 37 84;
-  --color-success: 74 222 128;
-  --color-success-subtle: 5 46 22;
-  --color-warning: 251 191 36;
-  --color-warning-subtle: 59 42 6;
-  --color-danger: 248 113 113;
-  --color-danger-subtle: 63 13 13;
-  --color-info: 56 189 248;
+  --color-bg: 24 34 26;
+  --color-surface: 32 44 35;
+  --color-surface-2: 40 54 44;
+  --color-text: 240 245 239;
+  --color-text-muted: 155 170 154;
+  --color-border: 50 68 55;
+  --color-border-input: 70 92 76;
+  --color-primary: 90 155 104;
+  --color-primary-hover: 120 185 134;
+  --color-primary-fg: 24 34 26;
+  --color-primary-subtle: 35 61 45;
+  --color-success: 90 155 104;
+  --color-success-subtle: 28 48 34;
+  --color-warning: 217 154 69;
+  --color-warning-subtle: 56 40 18;
+  --color-danger: 214 107 104;
+  --color-danger-subtle: 60 25 24;
+  --color-info: 90 155 104;
   --color-overlay: 0 0 0;
   color-scheme: dark;
 }
+
 @media (prefers-reduced-motion: reduce) {
   :root { --motion-fast: 0ms; --motion-base: 0ms; --motion-slow: 0ms; }
 }

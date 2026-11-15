@@ -181,9 +181,9 @@ export default function CustomerForm() {
         <PageHeader back="/customers" title="New Customer" />
 
         {/* Dummy Data Test Presets Toolbar */}
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-1.5 backdrop-blur-xs">
-          <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-indigo-800">
-            <Sparkles className="h-3.5 w-3.5 text-indigo-600 animate-pulse" />
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#CFE5CB] bg-[#E3EFDF] p-1.5 shadow-2xs">
+          <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-[#233D2D]">
+            <Sparkles className="h-3.5 w-3.5 text-[#3D7952]" />
             Test Data:
           </span>
           {Object.entries(PRESET_CUSTOMERS).map(([k, p]) => (
@@ -193,8 +193,8 @@ export default function CustomerForm() {
               onClick={() => applyPreset(k)}
               className={`rounded-xl px-3 py-1.5 text-xs font-medium transition-all ${
                 activePreset === k
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'bg-white/90 text-slate-700 hover:bg-white hover:text-indigo-600 shadow-2xs'
+                  ? 'bg-[#233D2D] text-white shadow-xs font-bold'
+                  : 'bg-white text-[#202820] hover:bg-[#F5F9F2] shadow-2xs'
               }`}
             >
               {p.label}
@@ -204,7 +204,7 @@ export default function CustomerForm() {
             type="button"
             onClick={resetForm}
             title="Reset form"
-            className="rounded-xl border border-slate-200 bg-white/90 p-1.5 text-slate-500 hover:bg-white hover:text-rose-600 transition-all shadow-2xs"
+            className="rounded-xl border border-[#DCE7D9] bg-white p-1.5 text-[#778477] hover:text-rose-600 transition-all shadow-2xs"
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>

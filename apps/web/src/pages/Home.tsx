@@ -18,6 +18,10 @@ import {
   Wallet,
   BarChart3,
   Check,
+  ArrowUpRight,
+  ArrowDownRight,
+  Clock,
+  Sparkles,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -30,18 +34,8 @@ interface FollowUpItem {
   id: string;
   name: string;
   task: string;
-  dueText: string;
-  dueTone: 'amber' | 'indigo' | 'slate';
+  time: string;
   completed: boolean;
-}
-
-interface QuotationItem {
-  id: string;
-  number: string;
-  partyName: string;
-  amount: number;
-  status: 'Sent' | 'Accepted' | 'Draft' | 'Expired';
-  validUntil: string;
 }
 
 export default function Home() {
@@ -49,176 +43,96 @@ export default function Home() {
   const nav = useNavigate();
 
   const [timeFilter, setTimeFilter] = useState('This Month');
-  const [trendMetric, setTrendMetric] = useState<'revenue' | 'leads'>('revenue');
   const [activeDonutSlice, setActiveDonutSlice] = useState<number | null>(null);
-  const [hoveredTrendIndex, setHoveredTrendIndex] = useState<number | null>(3); // Default hover on 10 Nov peak
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Follow-ups state with interactive checkboxes
+  // Follow-ups state matching Grovia Screen 1
   const [followUps, setFollowUps] = useState<FollowUpItem[]>([
     {
       id: 'fu-1',
       name: 'Fatima Khan',
-      task: 'Quote follow-up',
-      dueText: 'Due in 2 days',
-      dueTone: 'amber',
+      task: 'Quotation follow-up',
+      time: '10:00 AM',
       completed: false,
     },
     {
       id: 'fu-2',
       name: 'Mohan Das',
       task: 'Requirement confirmation',
-      dueText: 'Due in 2 days',
-      dueTone: 'amber',
+      time: '11:30 AM',
       completed: false,
     },
     {
       id: 'fu-3',
       name: 'Deepa Reddy',
       task: 'Proposal discussion',
-      dueText: 'In 3 days',
-      dueTone: 'indigo',
+      time: '04:00 PM',
       completed: false,
     },
   ]);
 
-  // Recent quotations data matching reference image
-  const quotations: QuotationItem[] = [
-    {
-      id: 'qt-1',
-      number: 'QT/26-27/0004',
-      partyName: 'Fatima Khan',
-      amount: 29500,
-      status: 'Sent',
-      validUntil: '28 Nov 2026',
-    },
-    {
-      id: 'qt-2',
-      number: 'QT/26-27/0003',
-      partyName: 'Iyer Consultancy',
-      amount: 29500,
-      status: 'Accepted',
-      validUntil: '20 Nov 2026',
-    },
-    {
-      id: 'qt-3',
-      number: 'QT/26-27/0002',
-      partyName: 'Nair Foods',
-      amount: 59000,
-      status: 'Accepted',
-      validUntil: '15 Nov 2026',
-    },
-  ];
+  const toggleFollowUp = (id: string) => {
+    setFollowUps((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, completed: !f.completed } : f))
+    );
+    toast('Follow-up status updated');
+  };
 
-  // Pipeline stages data
-  const pipelineStages = [
-    { name: 'New', count: 3, color: '#3b82f6', percent: 25 },
-    { name: 'Contacted', count: 2, color: '#8b5cf6', percent: 17 },
-    { name: 'Interested', count: 2, color: '#10b981', percent: 17 },
-    { name: 'Quotation Sent', count: 1, color: '#f59e0b', percent: 8 },
-    { name: 'Negotiation', count: 1, color: '#f43f5e', percent: 8 },
-  ];
-  const totalPipelineCount = 12;
-
-  // Trend Chart Data
-  const trendPoints =
-    trendMetric === 'revenue'
-      ? [
-          { date: '01 Nov', value: 20000, label: '₹20,000' },
-          { date: '04 Nov', value: 24000, label: '₹24,000' },
-          { date: '07 Nov', value: 28000, label: '₹28,000' },
-          { date: '10 Nov', value: 42500, label: '₹42,500' },
-          { date: '14 Nov', value: 36000, label: '₹36,000' },
-        ]
-      : [
-          { date: '01 Nov', value: 1, label: '1 Lead' },
-          { date: '04 Nov', value: 2, label: '2 Leads' },
-          { date: '07 Nov', value: 1, label: '1 Lead' },
-          { date: '10 Nov', value: 3, label: '3 Leads' },
-          { date: '14 Nov', value: 2, label: '2 Leads' },
-        ];
-
-  // API query (if backend is active)
-  const dashboardQuery = useQuery({
-    queryKey: ['dashboard', timeFilter],
-    queryFn: () => get<{ tiles: unknown[] }>('/dashboard').catch(() => null),
-    refetchInterval: 60_000,
-  });
-
-  const handleRefresh = async () => {
+  const handleRefresh = () => {
     setIsRefreshing(true);
-    await dashboardQuery.refetch().catch(() => undefined);
     setTimeout(() => {
       setIsRefreshing(false);
-      toast('Dashboard updated');
+      toast('Dashboard refreshed');
     }, 400);
   };
 
-  const toggleFollowUp = (id: string) => {
-    setFollowUps((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          const next = !item.completed;
-          toast(next ? `Completed follow-up for ${item.name}` : `Reopened follow-up for ${item.name}`);
-          return { ...item, completed: next };
-        }
-        return item;
-      })
-    );
-  };
-
-  // Determine dynamic greeting
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  const firstName = user?.fullName?.split(' ')[0] || 'Owner';
+  // Pipeline Stage Distribution
+  const pipelineStages = [
+    { label: 'New', count: 12, color: '#3D7952' },
+    { label: 'Contacted', count: 8, color: '#5A9B68' },
+    { label: 'Interested', count: 5, color: '#88B894' },
+    { label: 'Quotation Sent', count: 3, color: '#D99A45' },
+    { label: 'Negotiation', count: 3, color: '#D66B68' },
+  ];
+  const totalPipelineLeads = pipelineStages.reduce((sum, s) => sum + s.count, 0); // 31
 
   return (
-    <div className="space-y-6 pb-12 select-none">
+    <div className="space-y-6 pb-8">
       {/* ============================================================== */}
-      {/* HEADER / GREETING BAR */}
+      {/* 1. GREETING HEADER & DATE SELECTOR */}
       {/* ============================================================== */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-            <span>
-              {greeting}, {firstName}
-            </span>
-            <span role="img" aria-label="waving hand">
-              👏
-            </span>
+          <h1 className="text-2xl font-extrabold tracking-tight text-[#202820]">
+            Good evening, {user?.fullName || 'Owner'} 👋
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+          <p className="text-xs sm:text-sm text-[#778477] mt-0.5">
             Here's what's happening with your business today.
           </p>
         </div>
 
-        {/* Filters & Refresh */}
-        <div className="flex items-center gap-2.5">
+        {/* Date Selector Filter Pill */}
+        <div className="flex items-center gap-2">
           <div className="relative">
             <select
               value={timeFilter}
               onChange={(e) => setTimeFilter(e.target.value)}
-              className="appearance-none bg-white border border-slate-200/90 rounded-xl px-3 py-1.5 pr-8 text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
+              className="appearance-none rounded-full border border-[#DCE7D9] bg-white px-4 py-1.5 pr-8 text-xs font-semibold text-[#202820] shadow-2xs hover:border-[#CFE5CB] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/20 cursor-pointer"
             >
-              <option value="Today">Today</option>
-              <option value="This Week">This Week</option>
               <option value="This Month">This Month</option>
+              <option value="Last 30 Days">Last 30 Days</option>
               <option value="This Quarter">This Quarter</option>
               <option value="This Year">This Year</option>
             </select>
-            <ChevronDown
-              size={13}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-            />
+            <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[#778477]" />
           </div>
 
           <button
             onClick={handleRefresh}
-            className={`flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200/90 bg-white text-slate-600 shadow-2xs hover:bg-slate-50 transition-colors ${
+            className={`rounded-full border border-[#DCE7D9] bg-white p-2 text-[#778477] hover:text-[#202820] hover:bg-[#F5F9F2] shadow-2xs transition-all ${
               isRefreshing ? 'animate-spin' : ''
             }`}
-            title="Refresh dashboard"
-            aria-label="Refresh dashboard"
+            title="Refresh statistics"
           >
             <RotateCw size={14} />
           </button>
@@ -226,676 +140,355 @@ export default function Home() {
       </div>
 
       {/* ============================================================== */}
-      {/* 1. TOP 4 METRIC STAT CARDS WITH WAVE SPARKLINES */}
+      {/* 2. GROVIA 4/5 KPI STATS CARDS */}
       {/* ============================================================== */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {/* Card 1: New Leads */}
-        <div className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-start justify-between">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-              <User size={18} strokeWidth={2.2} />
-            </div>
-            <div className="flex-1 ml-3">
-              <span className="text-xs font-medium text-slate-500">New Leads</span>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <span className="text-2xl font-bold tracking-tight text-slate-900">3</span>
-                <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">
-                  ▲ +50%
-                </span>
-              </div>
-            </div>
+        <Link
+          to="/leads"
+          className="group rounded-2xl border border-[#DCE7D9] bg-white p-4 shadow-2xs hover:border-[#CFE5CB] hover:shadow-xs transition-all"
+        >
+          <div className="flex items-center justify-between">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#EDF5EA] text-[#3D7952]">
+              <UserPlus size={16} />
+            </span>
+            <span className="flex items-center text-[11px] font-bold text-[#3D7952] bg-[#EAF5E8] px-2 py-0.5 rounded-full border border-[#CFE5CB]">
+              <ArrowUpRight size={12} className="mr-0.5" /> +25%
+            </span>
           </div>
-          {/* Subtle Blue Wavy Sparkline */}
-          <div className="mt-3 -mx-4 -mb-4 h-11 overflow-hidden opacity-85">
-            <svg viewBox="0 0 200 40" preserveAspectRatio="none" className="w-full h-full">
-              <defs>
-                <linearGradient id="blueWave" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.25" />
-                  <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
-              <path
-                d="M0,30 Q30,10 70,25 T140,15 T200,20 L200,40 L0,40 Z"
-                fill="url(#blueWave)"
-              />
-              <path
-                d="M0,30 Q30,10 70,25 T140,15 T200,20"
-                fill="none"
-                stroke="#3b82f6"
-                strokeWidth="2.2"
-              />
-            </svg>
+          <div className="mt-3">
+            <span className="text-xs font-medium text-[#778477]">New Leads</span>
+            <div className="text-2xl font-extrabold text-[#202820] tracking-tight">12</div>
           </div>
-        </div>
+        </Link>
 
-        {/* Card 2: Follow-ups */}
-        <div className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-start justify-between">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
-              <Phone size={18} strokeWidth={2.2} />
-            </div>
-            <div className="flex-1 ml-3">
-              <span className="text-xs font-medium text-slate-500">Follow-ups</span>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <span className="text-2xl font-bold tracking-tight text-slate-900">0</span>
-                <span className="inline-flex items-center gap-0.5 rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-600">
-                  On track
-                </span>
-              </div>
-            </div>
+        {/* Card 2: Contacted */}
+        <Link
+          to="/leads"
+          className="group rounded-2xl border border-[#DCE7D9] bg-white p-4 shadow-2xs hover:border-[#CFE5CB] hover:shadow-xs transition-all"
+        >
+          <div className="flex items-center justify-between">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#EDF5EA] text-[#3D7952]">
+              <Phone size={16} />
+            </span>
+            <span className="flex items-center text-[11px] font-bold text-[#778477] bg-[#F5F9F2] px-2 py-0.5 rounded-full border border-[#DCE7D9]">
+              <ArrowDownRight size={12} className="mr-0.5" /> -16%
+            </span>
           </div>
-          {/* Subtle Purple Wavy Sparkline */}
-          <div className="mt-3 -mx-4 -mb-4 h-11 overflow-hidden opacity-85">
-            <svg viewBox="0 0 200 40" preserveAspectRatio="none" className="w-full h-full">
-              <defs>
-                <linearGradient id="purpleWave" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.25" />
-                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
-              <path
-                d="M0,25 Q40,35 90,15 T160,25 T200,10 L200,40 L0,40 Z"
-                fill="url(#purpleWave)"
-              />
-              <path
-                d="M0,25 Q40,35 90,15 T160,25 T200,10"
-                fill="none"
-                stroke="#8b5cf6"
-                strokeWidth="2.2"
-              />
-            </svg>
+          <div className="mt-3">
+            <span className="text-xs font-medium text-[#778477]">Contacted</span>
+            <div className="text-2xl font-extrabold text-[#202820] tracking-tight">8</div>
           </div>
-        </div>
+        </Link>
 
-        {/* Card 3: Quotes Sent */}
-        <div className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-start justify-between">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-              <FileText size={18} strokeWidth={2.2} />
-            </div>
-            <div className="flex-1 ml-3">
-              <span className="text-xs font-medium text-slate-500">Quotes Sent</span>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <span className="text-2xl font-bold tracking-tight text-slate-900">1</span>
-                <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">
-                  ▲ +100%
-                </span>
-              </div>
-            </div>
+        {/* Card 3: Quotations */}
+        <Link
+          to="/sales?tab=quotes"
+          className="group rounded-2xl border border-[#DCE7D9] bg-white p-4 shadow-2xs hover:border-[#CFE5CB] hover:shadow-xs transition-all"
+        >
+          <div className="flex items-center justify-between">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#EDF5EA] text-[#3D7952]">
+              <FileText size={16} />
+            </span>
+            <span className="flex items-center text-[11px] font-bold text-[#3D7952] bg-[#EAF5E8] px-2 py-0.5 rounded-full border border-[#CFE5CB]">
+              <ArrowUpRight size={12} className="mr-0.5" /> +40%
+            </span>
           </div>
-          {/* Subtle Emerald Wavy Sparkline */}
-          <div className="mt-3 -mx-4 -mb-4 h-11 overflow-hidden opacity-85">
-            <svg viewBox="0 0 200 40" preserveAspectRatio="none" className="w-full h-full">
-              <defs>
-                <linearGradient id="greenWave" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
-                  <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
-              <path
-                d="M0,28 Q50,12 100,24 T170,10 T200,15 L200,40 L0,40 Z"
-                fill="url(#greenWave)"
-              />
-              <path
-                d="M0,28 Q50,12 100,24 T170,10 T200,15"
-                fill="none"
-                stroke="#10b981"
-                strokeWidth="2.2"
-              />
-            </svg>
+          <div className="mt-3">
+            <span className="text-xs font-medium text-[#778477]">Quotations</span>
+            <div className="text-2xl font-extrabold text-[#202820] tracking-tight">5</div>
           </div>
-        </div>
+        </Link>
 
-        {/* Card 4: Collected */}
-        <div className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-start justify-between">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-              <Wallet size={18} strokeWidth={2.2} />
-            </div>
-            <div className="flex-1 ml-3">
-              <span className="text-xs font-medium text-slate-500">Collected</span>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <span className="text-2xl font-bold tracking-tight text-slate-900">₹49,500</span>
-                <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">
-                  ▲ +32%
-                </span>
-              </div>
-            </div>
+        {/* Card 4: Closed Sales */}
+        <Link
+          to="/sales"
+          className="group rounded-2xl border border-[#DCE7D9] bg-white p-4 shadow-2xs hover:border-[#CFE5CB] hover:shadow-xs transition-all"
+        >
+          <div className="flex items-center justify-between">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#EDF5EA] text-[#3D7952]">
+              <CreditCard size={16} />
+            </span>
+            <span className="flex items-center text-[11px] font-bold text-[#3D7952] bg-[#EAF5E8] px-2 py-0.5 rounded-full border border-[#CFE5CB]">
+              <ArrowUpRight size={12} className="mr-0.5" /> +50%
+            </span>
           </div>
-          {/* Subtle Amber Wavy Sparkline */}
-          <div className="mt-3 -mx-4 -mb-4 h-11 overflow-hidden opacity-85">
-            <svg viewBox="0 0 200 40" preserveAspectRatio="none" className="w-full h-full">
-              <defs>
-                <linearGradient id="amberWave" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.25" />
-                  <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
-              <path
-                d="M0,32 Q40,18 90,26 T160,12 T200,18 L200,40 L0,40 Z"
-                fill="url(#amberWave)"
-              />
-              <path
-                d="M0,32 Q40,18 90,26 T160,12 T200,18"
-                fill="none"
-                stroke="#f59e0b"
-                strokeWidth="2.2"
-              />
-            </svg>
+          <div className="mt-3">
+            <span className="text-xs font-medium text-[#778477]">Closed Sales</span>
+            <div className="text-2xl font-extrabold text-[#202820] tracking-tight">3</div>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* ============================================================== */}
-      {/* 2. SECOND ROW: SALES PIPELINE (DONUT) & REVENUE TREND (AREA) */}
+      {/* 3. MAIN DASHBOARD MODULES GRID (Left & Right Columns) */}
       {/* ============================================================== */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-        {/* Sales Pipeline Donut Chart (5 cols) */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm lg:col-span-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between pb-3">
-            <div className="flex items-center gap-1.5">
-              <h2 className="text-sm font-bold text-slate-900 tracking-tight">Sales Pipeline</h2>
-              <span title="Breakdown of leads by current active stage" className="text-slate-400 hover:text-slate-600 cursor-help">
-                <Info size={13} />
-              </span>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center justify-around gap-6 my-auto py-2">
-            {/* SVG Donut Chart with Center Total */}
-            <div className="relative w-40 h-40 flex items-center justify-center shrink-0">
-              <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-                {/* SVG Segments calculated for 100 circumference: r=15.9155 */}
-                {/* 1. New: 3 (25%) */}
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="38"
-                  fill="transparent"
-                  stroke="#3b82f6"
-                  strokeWidth="14"
-                  strokeDasharray="25 75"
-                  strokeDashoffset="0"
-                  className="transition-all duration-300 hover:opacity-80 cursor-pointer"
-                  onMouseEnter={() => setActiveDonutSlice(0)}
-                  onMouseLeave={() => setActiveDonutSlice(null)}
-                />
-                {/* 2. Contacted: 2 (16.6%) */}
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="38"
-                  fill="transparent"
-                  stroke="#8b5cf6"
-                  strokeWidth="14"
-                  strokeDasharray="16.6 83.4"
-                  strokeDashoffset="-25"
-                  className="transition-all duration-300 hover:opacity-80 cursor-pointer"
-                  onMouseEnter={() => setActiveDonutSlice(1)}
-                  onMouseLeave={() => setActiveDonutSlice(null)}
-                />
-                {/* 3. Interested: 2 (16.6%) */}
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="38"
-                  fill="transparent"
-                  stroke="#10b981"
-                  strokeWidth="14"
-                  strokeDasharray="16.6 83.4"
-                  strokeDashoffset="-41.6"
-                  className="transition-all duration-300 hover:opacity-80 cursor-pointer"
-                  onMouseEnter={() => setActiveDonutSlice(2)}
-                  onMouseLeave={() => setActiveDonutSlice(null)}
-                />
-                {/* 4. Quotation Sent: 1 (8.3%) */}
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="38"
-                  fill="transparent"
-                  stroke="#f59e0b"
-                  strokeWidth="14"
-                  strokeDasharray="8.3 91.7"
-                  strokeDashoffset="-58.2"
-                  className="transition-all duration-300 hover:opacity-80 cursor-pointer"
-                  onMouseEnter={() => setActiveDonutSlice(3)}
-                  onMouseLeave={() => setActiveDonutSlice(null)}
-                />
-                {/* 5. Negotiation: 1 (8.3%) */}
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="38"
-                  fill="transparent"
-                  stroke="#f43f5e"
-                  strokeWidth="14"
-                  strokeDasharray="8.3 91.7"
-                  strokeDashoffset="-66.5"
-                  className="transition-all duration-300 hover:opacity-80 cursor-pointer"
-                  onMouseEnter={() => setActiveDonutSlice(4)}
-                  onMouseLeave={() => setActiveDonutSlice(null)}
-                />
-              </svg>
-
-              {/* Center Donut Label */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-                <span className="text-2xl font-bold tracking-tight text-slate-900 leading-none">
-                  {totalPipelineCount}
-                </span>
-                <span className="text-[11px] font-medium text-slate-400 mt-0.5">Total</span>
+      <div className="grid gap-5 lg:grid-cols-12">
+        {/* LEFT COLUMN: Sales Pipeline + Follow-ups Today (6 cols) */}
+        <div className="space-y-5 lg:col-span-6">
+          {/* Module A: Sales Pipeline Donut Chart */}
+          <div className="rounded-2xl border border-[#DCE7D9] bg-white p-5 shadow-2xs">
+            <div className="flex items-center justify-between border-b border-[#DCE7D9]/60 pb-3">
+              <div>
+                <h2 className="text-sm font-bold text-[#202820]">Sales Pipeline</h2>
+                <p className="text-[11px] text-[#778477]">Current distribution across deal stages</p>
               </div>
+              <Link
+                to="/leads?view=board"
+                className="text-xs font-bold text-[#3D7952] hover:text-[#233D2D] transition-colors"
+              >
+                View Pipeline →
+              </Link>
             </div>
 
-            {/* Donut Legend */}
-            <div className="space-y-2 w-full max-w-[160px]">
-              {pipelineStages.map((stage, idx) => {
-                const isHovered = activeDonutSlice === idx;
-                return (
-                  <div
-                    key={stage.name}
-                    onMouseEnter={() => setActiveDonutSlice(idx)}
-                    onMouseLeave={() => setActiveDonutSlice(null)}
-                    className={`flex items-center justify-between text-xs py-0.5 px-1.5 rounded-lg transition-colors cursor-pointer ${
-                      isHovered ? 'bg-slate-50 font-semibold' : 'text-slate-600'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: stage.color }}
-                      />
-                      <span className="text-slate-700 truncate">{stage.name}</span>
-                    </div>
-                    <span className="font-semibold text-slate-900 ml-2">{stage.count}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+            <div className="mt-4 flex flex-col sm:flex-row items-center gap-6">
+              {/* Donut Chart (SVG) */}
+              <div className="relative flex h-40 w-40 shrink-0 items-center justify-center">
+                <svg className="h-full w-full -rotate-90" viewBox="0 0 100 100">
+                  {/* Background Track */}
+                  <circle cx="50" cy="50" r="38" fill="none" stroke="#F5F9F2" strokeWidth="13" />
+                  
+                  {/* Segment 1: New (12/31 = 38.7%) */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="38"
+                    fill="none"
+                    stroke="#3D7952"
+                    strokeWidth="13"
+                    strokeDasharray="92 238"
+                    strokeDashoffset="0"
+                    className="transition-all hover:opacity-85"
+                  />
+                  {/* Segment 2: Contacted (8/31 = 25.8%) */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="38"
+                    fill="none"
+                    stroke="#5A9B68"
+                    strokeWidth="13"
+                    strokeDasharray="61 238"
+                    strokeDashoffset="-92"
+                    className="transition-all hover:opacity-85"
+                  />
+                  {/* Segment 3: Interested (5/31 = 16.1%) */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="38"
+                    fill="none"
+                    stroke="#88B894"
+                    strokeWidth="13"
+                    strokeDasharray="38 238"
+                    strokeDashoffset="-153"
+                    className="transition-all hover:opacity-85"
+                  />
+                  {/* Segment 4: Quote Sent (3/31 = 9.7%) */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="38"
+                    fill="none"
+                    stroke="#D99A45"
+                    strokeWidth="13"
+                    strokeDasharray="23 238"
+                    strokeDashoffset="-191"
+                    className="transition-all hover:opacity-85"
+                  />
+                  {/* Segment 5: Negotiation (3/31 = 9.7%) */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="38"
+                    fill="none"
+                    stroke="#D66B68"
+                    strokeWidth="13"
+                    strokeDasharray="23 238"
+                    strokeDashoffset="-214"
+                    className="transition-all hover:opacity-85"
+                  />
+                </svg>
 
-        {/* Revenue Trend Interactive Area Chart (7 cols) */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm lg:col-span-7 flex flex-col justify-between">
-          <div className="flex items-center justify-between pb-2">
-            <h2 className="text-sm font-bold text-slate-900 tracking-tight">Revenue Trend</h2>
-
-            {/* Pill Toggle Switch: Revenue / Leads */}
-            <div className="flex items-center rounded-xl bg-slate-100 p-0.5 text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => setTrendMetric('revenue')}
-                className={`rounded-lg px-2.5 py-1 transition-all ${
-                  trendMetric === 'revenue'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                Revenue
-              </button>
-              <button
-                type="button"
-                onClick={() => setTrendMetric('leads')}
-                className={`rounded-lg px-2.5 py-1 transition-all ${
-                  trendMetric === 'leads'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                Leads
-              </button>
-            </div>
-          </div>
-
-          {/* Area Chart Container */}
-          <div className="relative pt-6 pb-2">
-            {/* Interactive Peak Tooltip */}
-            {hoveredTrendIndex !== null && (
-              <div
-                className="absolute z-10 -top-1 pointer-events-none -translate-x-1/2 transition-all duration-150"
-                style={{
-                  left: `${15 + (hoveredTrendIndex * (70 / (trendPoints.length - 1)))}%`,
-                }}
-              >
-                <div className="rounded-xl border border-slate-200 bg-white/95 px-2.5 py-1 text-center shadow-md backdrop-blur-sm">
-                  <div className="text-[10px] font-semibold text-slate-400">
-                    {trendPoints[hoveredTrendIndex]?.date}
-                  </div>
-                  <div className="text-xs font-bold text-indigo-600">
-                    {trendPoints[hoveredTrendIndex]?.label}
-                  </div>
+                {/* Center Value */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                  <span className="text-2xl font-extrabold text-[#202820] leading-none">
+                    {totalPipelineLeads}
+                  </span>
+                  <span className="text-[10px] font-semibold text-[#778477] uppercase tracking-wider mt-0.5">
+                    Total
+                  </span>
                 </div>
               </div>
-            )}
 
-            {/* SVG Chart */}
-            <div className="h-44 w-full">
-              <svg viewBox="0 0 500 160" preserveAspectRatio="none" className="w-full h-full overflow-visible">
-                <defs>
-                  <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.32" />
-                    <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.0" />
-                  </linearGradient>
-                </defs>
+              {/* Stage Breakdown Legend List */}
+              <div className="flex-1 w-full space-y-2">
+                {pipelineStages.map((stage) => (
+                  <div key={stage.label} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: stage.color }} />
+                      <span className="text-[#202820] font-medium">{stage.label}</span>
+                    </div>
+                    <span className="font-bold text-[#202820] tabular-nums">{stage.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
 
-                {/* Y-Axis Horizontal Grid Lines */}
-                <line x1="45" y1="20" x2="490" y2="20" stroke="#f1f5f9" strokeWidth="1" />
-                <line x1="45" y1="55" x2="490" y2="55" stroke="#f1f5f9" strokeWidth="1" />
-                <line x1="45" y1="90" x2="490" y2="90" stroke="#f1f5f9" strokeWidth="1" />
-                <line x1="45" y1="125" x2="490" y2="125" stroke="#f1f5f9" strokeWidth="1" />
-                <line x1="45" y1="150" x2="490" y2="150" stroke="#e2e8f0" strokeWidth="1" />
-
-                {/* Y-Axis Labels */}
-                <text x="35" y="24" fill="#94a3b8" fontSize="10" textAnchor="end">
-                  {trendMetric === 'revenue' ? '60K' : '4'}
-                </text>
-                <text x="35" y="59" fill="#94a3b8" fontSize="10" textAnchor="end">
-                  {trendMetric === 'revenue' ? '45K' : '3'}
-                </text>
-                <text x="35" y="94" fill="#94a3b8" fontSize="10" textAnchor="end">
-                  {trendMetric === 'revenue' ? '30K' : '2'}
-                </text>
-                <text x="35" y="129" fill="#94a3b8" fontSize="10" textAnchor="end">
-                  {trendMetric === 'revenue' ? '15K' : '1'}
-                </text>
-                <text x="35" y="153" fill="#94a3b8" fontSize="10" textAnchor="end">
-                  0
-                </text>
-
-                {/* Area Gradient Fill */}
-                <path
-                  d="M 60,110 Q 120,95 180,85 T 300,75 T 400,35 T 480,55 L 480,150 L 60,150 Z"
-                  fill="url(#trendGradient)"
-                />
-
-                {/* Smooth Bezier Line */}
-                <path
-                  d="M 60,110 Q 120,95 180,85 T 300,75 T 400,35 T 480,55"
-                  fill="none"
-                  stroke="#8b5cf6"
-                  strokeWidth="2.8"
-                  strokeLinecap="round"
-                />
-
-                {/* Interactive Points */}
-                {[
-                  { cx: 60, cy: 110, i: 0 },
-                  { cx: 165, cy: 90, i: 1 },
-                  { cx: 270, cy: 78, i: 2 },
-                  { cx: 375, cy: 35, i: 3 }, // 10 Nov Peak
-                  { cx: 480, cy: 55, i: 4 },
-                ].map((pt) => {
-                  const isHovered = hoveredTrendIndex === pt.i;
-                  return (
-                    <g key={pt.i}>
-                      <circle
-                        cx={pt.cx}
-                        cy={pt.cy}
-                        r={isHovered ? 6 : 4}
-                        fill={isHovered ? '#8b5cf6' : '#ffffff'}
-                        stroke="#8b5cf6"
-                        strokeWidth={isHovered ? 3 : 2}
-                        className="cursor-pointer transition-all duration-150"
-                        onMouseEnter={() => setHoveredTrendIndex(pt.i)}
-                      />
-                    </g>
-                  );
-                })}
-              </svg>
+          {/* Module C: Follow-ups Today */}
+          <div className="rounded-2xl border border-[#DCE7D9] bg-white p-5 shadow-2xs">
+            <div className="flex items-center justify-between border-b border-[#DCE7D9]/60 pb-3">
+              <div>
+                <h2 className="text-sm font-bold text-[#202820]">Follow-ups Today</h2>
+                <p className="text-[11px] text-[#778477]">High priority customer follow-ups</p>
+              </div>
+              <Link
+                to="/follow-ups"
+                className="text-xs font-bold text-[#3D7952] hover:text-[#233D2D] transition-colors"
+              >
+                View All →
+              </Link>
             </div>
 
-            {/* X-Axis Dates */}
-            <div className="flex justify-between pl-12 pr-2 text-[10px] font-medium text-slate-400 mt-1">
-              {trendPoints.map((p, idx) => (
-                <span
-                  key={p.date}
-                  className={`cursor-pointer transition-colors ${
-                    hoveredTrendIndex === idx ? 'text-indigo-600 font-bold' : ''
-                  }`}
-                  onMouseEnter={() => setHoveredTrendIndex(idx)}
-                >
-                  {p.date}
-                </span>
+            <div className="mt-3 divide-y divide-[#DCE7D9]/50">
+              {followUps.map((f) => (
+                <div key={f.id} className="flex items-center justify-between py-3">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => toggleFollowUp(f.id)}
+                      className={`flex h-4 w-4 items-center justify-center rounded-sm border transition-colors ${
+                        f.completed
+                          ? 'border-[#3D7952] bg-[#3D7952] text-white'
+                          : 'border-[#DCE7D9] bg-white hover:border-[#3D7952]'
+                      }`}
+                    >
+                      {f.completed && <Check size={11} strokeWidth={3} />}
+                    </button>
+                    <div>
+                      <p
+                        className={`text-xs font-semibold ${
+                          f.completed ? 'line-through text-[#778477]' : 'text-[#202820]'
+                        }`}
+                      >
+                        {f.name} <span className="font-normal text-[#778477]">— {f.task}</span>
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-mono text-[#778477] bg-[#F5F9F2] px-2 py-0.5 rounded-md border border-[#DCE7D9]">
+                    {f.time}
+                  </span>
+                </div>
               ))}
             </div>
           </div>
         </div>
-      </div>
 
-      {/* ============================================================== */}
-      {/* 3. THIRD ROW: RECENT QUOTATIONS TABLE & FOLLOW-UPS DUE */}
-      {/* ============================================================== */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-        {/* Recent Quotations (7 cols) */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm lg:col-span-7 flex flex-col justify-between">
-          <div className="flex items-center justify-between pb-3">
-            <h2 className="text-sm font-bold text-slate-900 tracking-tight">Recent Quotations</h2>
-            <Link
-              to="/sales?tab=quotes"
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:underline"
-            >
-              View All
-            </Link>
-          </div>
+        {/* RIGHT COLUMN: Revenue Progress + Leads Trend (6 cols) */}
+        <div className="space-y-5 lg:col-span-6">
+          {/* Module B: Revenue Progress */}
+          <div className="rounded-2xl border border-[#DCE7D9] bg-white p-5 shadow-2xs">
+            <div className="flex items-center justify-between border-b border-[#DCE7D9]/60 pb-3">
+              <div>
+                <h2 className="text-sm font-bold text-[#202820]">Revenue Progress</h2>
+                <p className="text-[11px] text-[#778477]">Collected vs Target</p>
+              </div>
+              <span className="text-xs font-bold text-[#3D7952] bg-[#EAF5E8] px-2.5 py-0.5 rounded-full border border-[#CFE5CB]">
+                49%
+              </span>
+            </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-slate-100 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  <th className="pb-2.5 font-semibold">Number</th>
-                  <th className="pb-2.5 font-semibold">For</th>
-                  <th className="pb-2.5 font-semibold">Amount</th>
-                  <th className="pb-2.5 font-semibold">Status</th>
-                  <th className="pb-2.5 font-semibold">Valid Until</th>
-                  <th className="pb-2.5 font-semibold text-right"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100/80">
-                {quotations.map((q) => (
-                  <tr
-                    key={q.id}
-                    onClick={() => nav(`/sales/quotes/${q.id}`)}
-                    className="hover:bg-slate-50/80 cursor-pointer transition-colors group"
-                  >
-                    <td className="py-3 font-semibold text-indigo-600 group-hover:underline">
-                      {q.number}
-                    </td>
-                    <td className="py-3 font-medium text-slate-800">{q.partyName}</td>
-                    <td className="py-3 font-bold text-slate-900">₹{q.amount.toLocaleString()}</td>
-                    <td className="py-3">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                          q.status === 'Sent'
-                            ? 'bg-blue-50 text-blue-700'
-                            : 'bg-emerald-50 text-emerald-700'
-                        }`}
-                      >
-                        {q.status}
-                      </span>
-                    </td>
-                    <td className="py-3 text-slate-500">{q.validUntil}</td>
-                    <td className="py-3 text-right text-slate-400 group-hover:text-slate-600">
-                      <MoreHorizontal size={14} className="ml-auto" />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+            <div className="mt-4">
+              <div className="flex items-baseline justify-between">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-extrabold text-[#202820]">₹49,500</span>
+                  <span className="text-xs text-[#778477] font-medium">/ ₹1,00,000</span>
+                </div>
+                <span className="text-[11px] text-[#778477]">Monthly Target</span>
+              </div>
 
-        {/* Follow-ups Due (3) (5 cols) */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm lg:col-span-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between pb-3">
-            <h2 className="text-sm font-bold text-slate-900 tracking-tight">
-              Follow-ups Due ({followUps.filter((f) => !f.completed).length})
-            </h2>
-            <Link
-              to="/follow-ups"
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:underline"
-            >
-              View All
-            </Link>
-          </div>
+              {/* Progress Bar */}
+              <div className="mt-2.5 h-3 w-full rounded-full bg-[#E3EFDF] overflow-hidden">
+                <div className="h-full rounded-full bg-[#3D7952] transition-all duration-500" style={{ width: '49%' }} />
+              </div>
 
-          <div className="space-y-2.5 my-auto">
-            {followUps.map((fu) => (
-              <div
-                key={fu.id}
-                onClick={() => toggleFollowUp(fu.id)}
-                className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
-                  fu.completed
-                    ? 'bg-slate-50/70 border-slate-100 opacity-60'
-                    : 'bg-white border-slate-200/80 hover:border-slate-300 hover:shadow-2xs'
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFollowUp(fu.id);
-                    }}
-                    className={`h-4 w-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
-                      fu.completed
-                        ? 'bg-indigo-600 border-indigo-600 text-white'
-                        : 'border-slate-300 bg-white hover:border-indigo-500'
-                    }`}
-                  >
-                    {fu.completed && <Check size={12} strokeWidth={3} />}
-                  </button>
-
-                  <div className="min-w-0">
-                    <p
-                      className={`text-xs font-semibold truncate ${
-                        fu.completed ? 'line-through text-slate-400' : 'text-slate-800'
-                      }`}
-                    >
-                      {fu.name} <span className="font-normal text-slate-500">— {fu.task}</span>
-                    </p>
+              {/* Mini Bar Chart for Weekly Progress */}
+              <div className="mt-6">
+                <span className="text-[11px] font-semibold text-[#778477] uppercase tracking-wider block mb-3">
+                  Weekly Collections
+                </span>
+                <div className="flex items-end justify-between gap-3 h-28 pt-2 border-b border-[#DCE7D9]/60">
+                  <div className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
+                    <div className="w-full bg-[#CFE5CB] rounded-t-lg transition-all hover:bg-[#3D7952]" style={{ height: '35%' }} />
+                    <span className="text-[10px] text-[#778477] font-medium">W1</span>
+                  </div>
+                  <div className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
+                    <div className="w-full bg-[#CFE5CB] rounded-t-lg transition-all hover:bg-[#3D7952]" style={{ height: '55%' }} />
+                    <span className="text-[10px] text-[#778477] font-medium">W2</span>
+                  </div>
+                  <div className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
+                    <div className="w-full bg-[#3D7952] rounded-t-lg transition-all hover:bg-[#233D2D]" style={{ height: '80%' }} />
+                    <span className="text-[10px] text-[#3D7952] font-bold">W3</span>
+                  </div>
+                  <div className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
+                    <div className="w-full bg-[#CFE5CB] rounded-t-lg transition-all hover:bg-[#3D7952]" style={{ height: '25%' }} />
+                    <span className="text-[10px] text-[#778477] font-medium">W4</span>
                   </div>
                 </div>
-
-                <span
-                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ml-2 ${
-                    fu.completed
-                      ? 'bg-slate-100 text-slate-400'
-                      : fu.dueTone === 'amber'
-                      ? 'bg-amber-50 text-amber-700'
-                      : 'bg-indigo-50 text-indigo-700'
-                  }`}
-                >
-                  {fu.completed ? 'Done' : fu.dueText}
-                </span>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ============================================================== */}
-      {/* 4. FOURTH ROW: LEADS BY STAGE & QUICK ACTIONS */}
-      {/* ============================================================== */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-        {/* Leads by Stage Progress Bars (6 cols) */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm lg:col-span-6 flex flex-col justify-between">
-          <div className="flex items-center justify-between pb-3">
-            <h2 className="text-sm font-bold text-slate-900 tracking-tight">Leads by Stage</h2>
+            </div>
           </div>
 
-          <div className="space-y-3 my-auto">
-            {[
-              { label: 'New', count: 3, width: '75%', color: 'from-cyan-400 to-blue-500' },
-              { label: 'Contacted', count: 2, width: '50%', color: 'from-blue-500 to-indigo-600' },
-              { label: 'Interested', count: 2, width: '50%', color: 'from-indigo-500 to-emerald-500' },
-              { label: 'Quotation Sent', count: 1, width: '25%', color: 'from-amber-400 to-orange-500' },
-              { label: 'Negotiation', count: 1, width: '25%', color: 'from-rose-400 to-pink-500' },
-            ].map((st) => (
-              <div key={st.label} className="flex items-center gap-4 text-xs">
-                <span className="w-28 text-slate-600 font-medium truncate">{st.label}</span>
-                <div className="flex-1 h-3 rounded-full bg-slate-100 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full bg-gradient-to-r ${st.color} transition-all duration-500`}
-                    style={{ width: st.width }}
+          {/* Module D: Leads Trend Sparkline Area Chart */}
+          <div className="rounded-2xl border border-[#DCE7D9] bg-white p-5 shadow-2xs">
+            <div className="flex items-center justify-between border-b border-[#DCE7D9]/60 pb-3">
+              <div>
+                <h2 className="text-sm font-bold text-[#202820]">Leads Trend</h2>
+                <p className="text-[11px] text-[#778477]">Acquisition volume throughout the month</p>
+              </div>
+              <span className="text-xs font-bold text-[#3D7952]">
+                +32% vs Last Month
+              </span>
+            </div>
+
+            {/* Sparkline Curve */}
+            <div className="mt-4">
+              <div className="h-32 w-full">
+                <svg className="h-full w-full overflow-visible" viewBox="0 0 400 100" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="sageTrendGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3D7952" stopOpacity="0.25" />
+                      <stop offset="100%" stopColor="#3D7952" stopOpacity="0.0" />
+                    </linearGradient>
+                  </defs>
+                  {/* Fill area */}
+                  <path
+                    d="M 0,80 Q 80,45 160,70 T 320,25 T 400,15 L 400,100 L 0,100 Z"
+                    fill="url(#sageTrendGrad)"
                   />
-                </div>
-                <span className="w-4 font-bold text-slate-800 text-right">{st.count}</span>
+                  {/* Line stroke */}
+                  <path
+                    d="M 0,80 Q 80,45 160,70 T 320,25 T 400,15"
+                    fill="none"
+                    stroke="#3D7952"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                  />
+                  {/* Highlight point */}
+                  <circle cx="320" cy="25" r="4.5" fill="#3D7952" stroke="#FFFFFF" strokeWidth="2" />
+                </svg>
               </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Quick Actions (6 cols) */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm lg:col-span-6 flex flex-col justify-between">
-          <div className="flex items-center justify-between pb-3">
-            <h2 className="text-sm font-bold text-slate-900 tracking-tight">Quick Actions</h2>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 my-auto">
-            {/* 1. New Lead */}
-            <button
-              onClick={() => nav('/leads/new')}
-              className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 hover:bg-indigo-50/60 hover:border-indigo-200 hover:text-indigo-600 transition-all group"
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-2xs group-hover:scale-105 transition-transform mb-2">
-                <UserPlus size={18} />
+              {/* X-Axis dates */}
+              <div className="mt-2 flex justify-between text-[10px] text-[#778477] font-medium border-t border-[#DCE7D9]/60 pt-2">
+                <span>1 Nov</span>
+                <span>7 Nov</span>
+                <span>14 Nov</span>
+                <span>21 Nov</span>
+                <span>28 Nov</span>
               </div>
-              <span className="text-xs font-semibold text-slate-700 group-hover:text-indigo-600 text-center">
-                New Lead
-              </span>
-            </button>
-
-            {/* 2. New Quotation */}
-            <button
-              onClick={() => nav('/sales/quotes/new')}
-              className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 hover:bg-indigo-50/60 hover:border-indigo-200 hover:text-indigo-600 transition-all group"
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-emerald-600 shadow-2xs group-hover:scale-105 transition-transform mb-2">
-                <FileText size={18} />
-              </div>
-              <span className="text-xs font-semibold text-slate-700 group-hover:text-indigo-600 text-center">
-                New Quotation
-              </span>
-            </button>
-
-            {/* 3. Record Payment */}
-            <button
-              onClick={() => nav('/sales/payments/new')}
-              className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 hover:bg-indigo-50/60 hover:border-indigo-200 hover:text-indigo-600 transition-all group"
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-amber-600 shadow-2xs group-hover:scale-105 transition-transform mb-2">
-                <CreditCard size={18} />
-              </div>
-              <span className="text-xs font-semibold text-slate-700 group-hover:text-indigo-600 text-center">
-                Record Payment
-              </span>
-            </button>
-
-            {/* 4. New Customer */}
-            <button
-              onClick={() => nav('/customers/new')}
-              className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 hover:bg-indigo-50/60 hover:border-indigo-200 hover:text-indigo-600 transition-all group"
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-blue-600 shadow-2xs group-hover:scale-105 transition-transform mb-2">
-                <Users size={18} />
-              </div>
-              <span className="text-xs font-semibold text-slate-700 group-hover:text-indigo-600 text-center">
-                New Customer
-              </span>
-            </button>
-
-            {/* 5. View Reports */}
-            <button
-              onClick={() => nav('/reports')}
-              className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 hover:bg-indigo-50/60 hover:border-indigo-200 hover:text-indigo-600 transition-all group"
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-purple-600 shadow-2xs group-hover:scale-105 transition-transform mb-2">
-                <BarChart3 size={18} />
-              </div>
-              <span className="text-xs font-semibold text-slate-700 group-hover:text-indigo-600 text-center">
-                View Reports
-              </span>
-            </button>
+            </div>
           </div>
         </div>
       </div>

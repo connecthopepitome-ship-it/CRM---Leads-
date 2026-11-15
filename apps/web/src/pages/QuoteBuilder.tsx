@@ -305,36 +305,36 @@ export default function QuoteBuilder() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {/* Quick Sample Data Preset Selector */}
-            <div className="flex items-center rounded-xl bg-slate-100 p-1 text-xs border border-slate-200/80 shadow-2xs">
-              <span className="flex items-center gap-1 px-2 font-semibold text-slate-500">
-                <Sparkles size={13} className="text-amber-500" />
+            <div className="flex items-center rounded-xl bg-[#E3EFDF] p-1 text-xs border border-[#CFE5CB] shadow-2xs">
+              <span className="flex items-center gap-1 px-2 font-semibold text-[#233D2D]">
+                <Sparkles size={13} className="text-[#3D7952]" />
                 <span>Test Presets:</span>
               </span>
               <button
                 type="button"
                 onClick={() => loadPreset('enterprise')}
-                className="px-2.5 py-1 rounded-lg font-semibold bg-white text-indigo-700 shadow-2xs hover:bg-slate-50 transition-colors"
+                className="px-2.5 py-1 rounded-lg font-semibold bg-[#233D2D] text-white shadow-2xs hover:bg-[#1a2e22] transition-colors"
               >
                 Enterprise (₹1.01L)
               </button>
               <button
                 type="button"
                 onClick={() => loadPreset('starter')}
-                className="px-2.5 py-1 rounded-lg font-medium text-slate-600 hover:text-slate-900 transition-colors"
+                className="px-2.5 py-1 rounded-lg font-medium text-[#202820] hover:bg-white/80 transition-colors"
               >
                 Starter (₹34K)
               </button>
               <button
                 type="button"
                 onClick={() => loadPreset('blank')}
-                className="px-2.5 py-1 rounded-lg font-medium text-slate-600 hover:text-slate-900 transition-colors"
+                className="px-2.5 py-1 rounded-lg font-medium text-[#778477] hover:text-[#202820] transition-colors"
               >
                 Reset Blank
               </button>
             </div>
 
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E3EFDF] text-[#233D2D] border border-[#CFE5CB]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#3D7952] animate-pulse" />
               Draft
             </span>
           </div>
@@ -759,18 +759,18 @@ export default function QuoteBuilder() {
         </div>
 
         {/* ============================================================== */}
-        {/* RIGHT STICKY TOTALS SUMMARY CARD (INDIGO / AMBER ACCENT) */}
+        {/* RIGHT STICKY TOTALS SUMMARY CARD */}
         {/* ============================================================== */}
         <aside className="lg:sticky lg:top-20 lg:self-start space-y-4">
-          <div className="rounded-2xl border border-indigo-200/80 border-t-[5px] border-t-indigo-600 bg-white p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="rounded-2xl border border-[#DCE7D9] bg-white p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-[#DCE7D9] pb-3">
               <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#E3EFDF] text-[#3D7952]">
                   <Calculator size={15} />
                 </div>
-                <h2 className="text-sm font-bold text-slate-900 tracking-tight">Quotation Summary</h2>
+                <h2 className="text-sm font-bold text-[#202820] tracking-tight">Quotation Summary</h2>
               </div>
-              <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full">
+              <span className="text-[10px] font-bold text-[#233D2D] bg-[#E3EFDF] px-2 py-0.5 rounded-full">
                 INR (₹)
               </span>
             </div>
@@ -779,60 +779,60 @@ export default function QuoteBuilder() {
               <p className="text-xs text-rose-600 font-medium">Please check rates and discount limits.</p>
             ) : (
               <dl className="text-xs space-y-2.5">
-                <div className="flex justify-between items-center text-slate-500">
+                <div className="flex justify-between items-center text-[#778477]">
                   <span>Gross Sub-total</span>
-                  <span className="font-semibold text-slate-800 tabular-nums">{money(t!.subTotal)}</span>
+                  <span className="font-semibold text-[#202820] tabular-nums">{money(t!.subTotal)}</span>
                 </div>
 
                 {t!.discountTotal > 0 && (
-                  <div className="flex justify-between items-center text-emerald-600">
+                  <div className="flex justify-between items-center text-[#3D7952]">
                     <span>Total Discount Applied</span>
                     <span className="font-semibold tabular-nums">-{money(t!.discountTotal)}</span>
                   </div>
                 )}
 
-                <div className="flex justify-between items-center text-slate-500">
+                <div className="flex justify-between items-center text-[#778477]">
                   <span>Net Taxable Value</span>
-                  <span className="font-semibold text-slate-800 tabular-nums">{money(t!.taxable)}</span>
+                  <span className="font-semibold text-[#202820] tabular-nums">{money(t!.taxable)}</span>
                 </div>
 
                 {t!.cgst > 0 && (
-                  <div className="flex justify-between items-center text-slate-500">
+                  <div className="flex justify-between items-center text-[#778477]">
                     <span>CGST (9%)</span>
-                    <span className="font-medium text-slate-700 tabular-nums">{money(t!.cgst)}</span>
+                    <span className="font-medium text-[#202820] tabular-nums">{money(t!.cgst)}</span>
                   </div>
                 )}
 
                 {t!.sgst > 0 && (
-                  <div className="flex justify-between items-center text-slate-500">
+                  <div className="flex justify-between items-center text-[#778477]">
                     <span>SGST (9%)</span>
-                    <span className="font-medium text-slate-700 tabular-nums">{money(t!.sgst)}</span>
+                    <span className="font-medium text-[#202820] tabular-nums">{money(t!.sgst)}</span>
                   </div>
                 )}
 
                 {t!.igst > 0 && (
-                  <div className="flex justify-between items-center text-slate-500">
+                  <div className="flex justify-between items-center text-[#778477]">
                     <span>IGST (18%)</span>
-                    <span className="font-medium text-slate-700 tabular-nums">{money(t!.igst)}</span>
+                    <span className="font-medium text-[#202820] tabular-nums">{money(t!.igst)}</span>
                   </div>
                 )}
 
                 {t!.roundOff !== 0 && (
-                  <div className="flex justify-between items-center text-slate-400 text-[11px]">
+                  <div className="flex justify-between items-center text-[#778477] text-[11px]">
                     <span>Round-off Adjustment</span>
                     <span className="tabular-nums">{money(t!.roundOff)}</span>
                   </div>
                 )}
 
                 {/* Highlighted Total Box */}
-                <div className="mt-3 p-4 rounded-xl bg-slate-900 text-white shadow-xs">
+                <div className="mt-3 p-4 rounded-xl bg-[#233D2D] text-white shadow-xs">
                   <div className="flex justify-between items-baseline">
-                    <span className="text-xs font-semibold text-slate-300">Total Payable</span>
+                    <span className="text-xs font-semibold text-[#CFE5CB]">Total Payable</span>
                     <span className="text-2xl font-bold tracking-tight text-white tabular-nums">
                       {money(t!.grandTotal)}
                     </span>
                   </div>
-                  <p className="mt-1.5 text-[10px] font-medium text-slate-300 leading-tight">
+                  <p className="mt-1.5 text-[10px] font-medium text-[#CFE5CB]/90 leading-tight">
                     {t!.inWords}
                   </p>
                 </div>
@@ -840,7 +840,7 @@ export default function QuoteBuilder() {
             )}
 
             <Button
-              className="mt-4 w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md shadow-indigo-500/20"
+              className="mt-4 w-full py-3.5 bg-[#3D7952] hover:bg-[#2F5E3F] text-white rounded-xl font-bold shadow-xs transition-colors"
               busy={busy}
               disabled={!partyId || !calc}
               onClick={() => void save()}
