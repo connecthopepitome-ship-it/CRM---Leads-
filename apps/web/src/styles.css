@@ -10,7 +10,7 @@ html {
 body {
   font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: #EDF5EA;
-  background-image: 
+  background-image:
     radial-gradient(at 0% 0%, rgba(207, 229, 203, 0.5) 0px, transparent 50%),
     radial-gradient(at 100% 0%, rgba(227, 239, 223, 0.65) 0px, transparent 50%),
     radial-gradient(at 100% 100%, rgba(61, 121, 82, 0.08) 0px, transparent 50%),
@@ -81,10 +81,10 @@ body {
 
 /* Card floating lift on cursor hover */
 .interactive-card {
-  transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1), 
-              box-shadow 0.26s cubic-bezier(0.16, 1, 0.3, 1), 
-              border-color 0.26s ease,
-              background-color 0.26s ease;
+  transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.26s ease,
+    background-color 0.26s ease;
   will-change: transform, box-shadow;
 }
 
@@ -97,9 +97,9 @@ body {
 
 /* Micro-lift for subtle elements like list rows or smaller tiles */
 .interactive-tile {
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), 
-              box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), 
-              border-color 0.2s ease;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.2s ease;
 }
 
 .interactive-tile:hover {
@@ -163,12 +163,10 @@ body {
   left: -50%;
   width: 200%;
   height: 200%;
-  background: linear-gradient(
-    60deg,
-    transparent,
-    rgba(255, 255, 255, 0.18),
-    transparent
-  );
+  background: linear-gradient(60deg,
+      transparent,
+      rgba(255, 255, 255, 0.18),
+      transparent);
   transform: rotate(30deg) translateY(-100%);
   transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: none;

@@ -24,16 +24,20 @@ createRoot(document.getElementById('root')!).render(
 );
 
 if ('serviceWorker' in navigator) {
-  void import('virtual:pwa-register').then(({ registerSW }) =>
-    registerSW({
+  void import('virtual:pwa-register').then(({ registerSW }) => {
+    const updateSW = registerSW({
       immediate: true,
+      onNeedRefresh() {
+        void updateSW(true);
+      },
       onRegisteredSW(_swUrl, r) {
         if (r) {
+          void r.update();
           setInterval(() => {
             void r.update();
-          }, 60 * 60 * 1000);
+          }, 30 * 1000);
         }
       },
-    }),
-  );
+    });
+  });
 }
