@@ -285,3 +285,4 @@ export function KeyValue({ items }: { items: [string, ReactNode][] }) {
 
 export const toast = create;
 export { Toaster } from './toast';
+export { ErrorBoundary } from './ErrorBoundary';
