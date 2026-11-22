@@ -28,7 +28,8 @@ export const problemHandler: ErrorRequestHandler = (err, req, res, _next) => {
   else if (err instanceof RangeError && err.message in ERRORS) e = new AppError(err.message as ErrorCode);
   else {
     (req as { log?: { error: (o: unknown, m: string) => void } }).log?.error({ err: { message: (err as Error)?.message, stack: (err as Error)?.stack } }, 'unhandled');
-    e = new AppError('INTERNAL');
+    console.error('Unhandled internal error on', req.method, req.url, ':', (err as Error)?.message);
+    e = new AppError('INTERNAL', (err as Error)?.message || 'Internal error');
   }
   res.status(e.status).type('application/problem+json').json({
     type: `https://salesphere.app/problems/${e.code.toLowerCase()}`,

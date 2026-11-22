@@ -77,11 +77,13 @@ google.sheets.set('demo-sheet/Leads', { headers: ['Timestamp', 'Full Name', 'Pho
 
 const { app, ctx } = await createApp({ db, cfg, google, logLevel: 'info' });
 const pw = process.env.DEV_ADMIN_PASSWORD ?? 'ChangeMe!2026';
-await seedInstall(ctx, { adminUsername: 'admin', adminName: 'Owner Admin', adminPassword: pw, webCatalogue: true });
-
-setInterval(() => void runTick(ctx, 'minute'), 60_000);
 const port = Number(process.env.PORT ?? 8787);
-
 app.listen(port, () => {
   console.log(`SaleSphere API ready on http://localhost:${port}/api/v1 (Admin: "admin" / pw: "${pw}")`);
 });
+
+seedInstall(ctx, { adminUsername: 'admin', adminName: 'Owner Admin', adminPassword: pw, webCatalogue: true }).catch((err) => {
+  console.warn('Seed install notice:', err?.message);
+});
+
+setInterval(() => void runTick(ctx, 'minute'), 60_000);

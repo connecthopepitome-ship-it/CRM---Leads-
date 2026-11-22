@@ -72,7 +72,7 @@ export async function setup(opts: { mode?: 'solo' | 'team'; gst?: boolean } = {}
   const cfg = { ...loadConfig({ NODE_ENV: 'test' }), appOrigin: 'https://crm.example.com' };
   const { app, ctx } = await createApp({ db, cfg, google, tasks, clock });
   await seedInstall(ctx, {
-    adminUsername: 'admin', adminName: 'Asha Admin', adminPassword: 'Temp-Passw0rd-1', webCatalogue: true,
+    adminUsername: 'admin', adminName: 'Asha Admin', adminPassword: PW, webCatalogue: true,
     company: opts.gst === false
       ? { legalName: 'Ravi Web Studio', gstRegistered: false, stateCode: '29', address: 'Bengaluru', version: 1 }
       : { legalName: 'Acme Interiors', tradeName: 'Acme Interiors', gstRegistered: true, gstin: '29ABCDE1234F1Z5', stateCode: '29', address: '12 MG Road, Bengaluru', jurisdiction: 'Bengaluru', version: 1 },
@@ -80,7 +80,7 @@ export async function setup(opts: { mode?: 'solo' | 'team'; gst?: boolean } = {}
   await db.tx(async (t) => {
     t.set('masters', 'm_upiIds_main', { type: 'upiIds', key: 'main', name: 'Main UPI', data: { vpa: 'acme@okhdfcbank', payeeName: 'Acme Interiors', trEnabled: true }, status: 'active', isDefault: true, inUse: false, sortOrder: 1 });
   });
-  const admin = await signIn(app, 'admin', 'Temp-Passw0rd-1');
+  const admin = await signIn(app, 'admin', PW);
   const passwords = new Map<string, string>();
   const env: TestEnv = {
     app, ctx, db, google, tasks, clock, admin,
