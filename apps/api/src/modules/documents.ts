@@ -9,6 +9,9 @@ import { AppError, fail } from '../http/errors.js';
 import { authn, clientIp, info, P, rateLimit, str } from '../http/pipeline.js';
 import { audit, getCompany, getSettings, inScope, newId, nowIso, seal, sha256, token, unseal, type Settings } from '../shared/core.js';
 import { respondToQuote, upiFor } from './sales.js';
+import { AppScriptDriveClient } from '../adapters/appscript.js';
+
+const appScript = new AppScriptDriveClient();
 
 const ALLOWED_MIME = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/csv', 'text/plain'];
@@ -36,8 +39,31 @@ function defaultExpiry(ctx: Ctx, type: string, doc: Doc) {
   return null; // invoices/receipts: 90 days after balance reaches zero (set by payments)
 }
 
-// ---------------- file storage (Drive when connected; Firestore blobs in dev/test) ----------------
+// ---------------- file storage (Apps Script Drive, Google Port, or Firestore blobs) ----------------
 export async function storeBlob(ctx: Ctx, path: string[], name: string, mimeType: string, data: Buffer, existing?: { storage: string; ref: string } | null) {
+  if (appScript.isConfigured()) {
+    const rawType = path[0]?.toLowerCase() ?? '';
+    const folderType = rawType.includes('quote') ? 'quotes'
+      : rawType.includes('invoice') ? 'invoices'
+      : rawType.includes('pay') ? 'payments'
+      : rawType.includes('lead') ? 'leads'
+      : 'customers';
+    try {
+      const res = await appScript.uploadFile({
+        folderType,
+        fileName: name,
+        mimeType,
+        data,
+        makePublic: true,
+      });
+      if (res?.fileId) {
+        return { storage: 'drive', ref: res.fileId };
+      }
+    } catch (e) {
+      console.warn('Apps Script upload failed, falling back:', e);
+    }
+  }
+
   const conn = await ctx.google.connected().catch(() => null);
   if (conn) {
     const ref = await ctx.google.uploadFile(path, name, mimeType, data, existing?.storage === 'drive' ? existing.ref : null);
@@ -48,7 +74,18 @@ export async function storeBlob(ctx: Ctx, path: string[], name: string, mimeType
   return { storage: 'blob', ref };
 }
 export async function readBlob(ctx: Ctx, f: { storage: string; ref: string }) {
-  if (f.storage === 'drive') return (await ctx.google.downloadFile(f.ref)).data;
+  if (f.storage === 'drive') {
+    if (appScript.isConfigured()) {
+      try {
+        const dlUrl = `https://drive.google.com/uc?export=download&id=${f.ref}`;
+        const r = await fetch(dlUrl);
+        if (r.ok) return Buffer.from(await r.arrayBuffer());
+      } catch (e) {
+        console.warn('Apps Script Drive read download failed, falling back:', e);
+      }
+    }
+    return (await ctx.google.downloadFile(f.ref)).data;
+  }
   const b = await ctx.db.get('blobs', f.ref);
   if (!b) fail('NOT_FOUND');
   return Buffer.from(String(b!.b64), 'base64');
@@ -155,14 +192,33 @@ export async function renderPdfTask(ctx: Ctx, kind: 'quote' | 'invoice' | 'recei
   const pdfState = (doc.pdf as { attempts?: number; fileId?: string; version?: number } | null) ?? {};
   try {
     const html = await renderDocumentHtml(built.input);
-    const pdf = await ctx.pdf.render(html);
-    const data = pdf ?? Buffer.from(html);
-    const mime = pdf ? 'application/pdf' : 'text/html';
-    const name = `${(built.input.number ?? id).replace(/\//g, '-')}.${pdf ? 'pdf' : 'html'}`;
+    let data: Buffer;
+    let mime: string;
+    let name: string;
+    let stored: { storage: string; ref: string };
     const existingFile = pdfState.fileId ? await ctx.db.get('files', pdfState.fileId) : null;
-    const customer = built.recordRef.customerId ? await ctx.db.get('customers', built.recordRef.customerId) : null;
-    const path = customer ? ['Customers', `${customer.code} – ${customer.displayName}`, built.folder] : ['Leads', String(built.recordRef.leadId)];
-    const stored = await storeBlob(ctx, path, name, mime, data, existingFile ? { storage: String(existingFile.storage), ref: String(existingFile.ref) } : null);
+
+    if (appScript.isConfigured()) {
+      const folderType = (kind === 'quote' ? 'quotes' : 'invoices') as 'quotes' | 'invoices';
+      name = `${(built.input.number ?? id).replace(/\//g, '-')}.pdf`;
+      const res = await appScript.generateAndSavePdf({
+        folderType,
+        fileName: name,
+        htmlContent: html,
+        makePublic: true,
+      });
+      stored = { storage: 'drive', ref: res.fileId };
+      data = Buffer.from(html);
+      mime = 'application/pdf';
+    } else {
+      const pdf = await ctx.pdf.render(html);
+      data = pdf ?? Buffer.from(html);
+      mime = pdf ? 'application/pdf' : 'text/html';
+      name = `${(built.input.number ?? id).replace(/\//g, '-')}.${pdf ? 'pdf' : 'html'}`;
+      const customer = built.recordRef.customerId ? await ctx.db.get('customers', built.recordRef.customerId) : null;
+      const path = customer ? ['Customers', `${customer.code} – ${customer.displayName}`, built.folder] : ['Leads', String(built.recordRef.leadId)];
+      stored = await storeBlob(ctx, path, name, mime, data, existingFile ? { storage: String(existingFile.storage), ref: String(existingFile.ref) } : null);
+    }
     const fileId = existingFile?.id ?? newId('f_');
     await ctx.db.tx(async (t) => {
       const base = { name, mimeType: mime, size: data.length, kind: 'generated', docType: kind, recordType: kind, recordId: id, customerId: built.recordRef.customerId, ownerId: doc.ownerId ?? null, ...stored, status: 'ready', updatedAt: nowIso(ctx) };
