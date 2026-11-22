@@ -9,3 +9,8 @@ coverage/
 playwright-report/
 test-results/
 .DS_Store
+serviceAccountKey.json
+*serviceAccountKey*.json
+*service-account*.json
+*.pem
+
