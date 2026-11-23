@@ -34,7 +34,7 @@ export function Google() {
         {s?.status === 'connected' ? (
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <span>Connected as <b>{s.email}</b></span>
-            {Object.entries(s.features).map(([k, v]) => <Badge key={k} tone={v ? 'success' : 'warning'}>{k}{v ? '' : ': not available — reconnect to enable'}</Badge>)}
+            {Object.entries(s.features ?? {}).map(([k, v]) => <Badge key={k} tone={v ? 'success' : 'warning'}>{k}{v ? '' : ': not available — reconnect to enable'}</Badge>)}
             <Button size="sm" variant="ghost" onClick={() => void post('/admin/google/disconnect').then(() => status.refetch())}>Disconnect</Button>
           </div>
         ) : <Button onClick={() => void connect()}>Connect Google account</Button>}

@@ -130,7 +130,7 @@ function Statement({ customerId }: { customerId: string }) {
       </div>
       {q.isLoading ? <Skeleton /> : q.data && (
         <Table
-          rows={[{ id: 'open', date: from, kind: 'Opening balance', docNumber: '', debit: 0, credit: 0, balance: q.data.opening }, ...q.data.rows.map((r) => ({ ...r, id: `${r.seq}` })), { id: 'close', date: to, kind: 'Closing balance', docNumber: '', debit: 0, credit: 0, balance: q.data.closing }]}
+          rows={[{ id: 'open', date: from, kind: 'Opening balance', docNumber: '', debit: 0, credit: 0, balance: q.data.opening }, ...(q.data.rows ?? []).map((r) => ({ ...r, id: `${r.seq}` })), { id: 'close', date: to, kind: 'Closing balance', docNumber: '', debit: 0, credit: 0, balance: q.data.closing }]}
           columns={[{ key: 'date', label: 'Date', render: (r) => date(r.date) }, { key: 'kind', label: 'Particulars', render: (r) => label(r.kind) }, { key: 'docNumber', label: 'Document' }, { key: 'debit', label: 'Debit', align: 'right', render: (r) => (r.debit ? money(r.debit) : '') }, { key: 'credit', label: 'Credit', align: 'right', render: (r) => (r.credit ? money(r.credit) : '') }, { key: 'balance', label: 'Balance', align: 'right', render: (r) => money(r.balance) }]}
         />
       )}

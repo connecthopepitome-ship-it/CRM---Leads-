@@ -64,7 +64,7 @@ export default function SalesHub() {
     can('quote') && { id: 'quotes', label: 'Quotations', icon: <FileText size={13} /> },
     can('invoice') && { id: 'invoices', label: 'Invoices', icon: <Receipt size={13} /> },
     can('payment') && { id: 'payments', label: 'Payments', icon: <CreditCard size={13} /> },
-    can('order') && cfg?.modules.orders && { id: 'orders', label: 'Orders' },
+    can('order') && cfg?.modules?.orders && { id: 'orders', label: 'Orders' },
   ].filter(Boolean) as { id: string; label: string; icon?: React.ReactNode }[];
 
   const tabs = rawTabs.length > 0 ? rawTabs : [{ id: 'quotes', label: 'Quotations', icon: <FileText size={13} /> }];

@@ -61,7 +61,7 @@ export default function PaymentDetail() {
         <Card title="Details">
           <KeyValue items={[['Amount', money(p.amount)], ['TDS', p.tdsAmount ? money(p.tdsAmount) : '—'], ['Date', date(p.date)], ['Mode', p.mode.toUpperCase()], ['Reference', p.reference], ['Advance kept', p.advance ? money(p.advance) : '—']]} />
           <h3 className="mt-3 text-sm font-semibold">Applied to</h3>
-          <ul className="text-sm">{p.allocations.map((a) => <li key={a.invoiceId} className="flex justify-between py-1"><Link to={`/sales/invoices/${a.invoiceId}`} className="text-primary hover:underline">{a.number}</Link><span>{money(a.amount)}</span></li>)}</ul>
+          <ul className="text-sm">{(p.allocations ?? []).map((a) => <li key={a.invoiceId} className="flex justify-between py-1"><Link to={`/sales/invoices/${a.invoiceId}`} className="text-primary hover:underline">{a.number}</Link><span>{money(a.amount)}</span></li>)}</ul>
         </Card>
       </div>
       <Dialog open={rev} onClose={() => setRev(false)} title="Reverse this payment?" footer={<><Button variant="secondary" onClick={() => setRev(false)}>Cancel</Button><Button variant="danger" disabled={reason.trim().length < 3} busy={reverse.isPending} onClick={() => reverse.mutate(undefined)}>Reverse payment</Button></>}>

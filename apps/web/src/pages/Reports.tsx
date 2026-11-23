@@ -121,9 +121,9 @@ export default function Reports() {
               onChange={(e) => set('id', e.target.value)}
               className="appearance-none rounded-xl border border-[#DCE7D9] bg-white py-2 pl-3.5 pr-8 text-xs font-semibold text-[#202820] shadow-xs hover:border-[#3D7952] focus:border-[#3D7952] focus:outline-hidden transition-colors"
             >
-              {list.data?.items.map((x) => (
+              {list.data?.items ? list.data.items.map((x) => (
                 <option key={x.id} value={x.id}>{x.name}</option>
-              )) ?? (
+              )) : (
                 <>
                   <option value="RPT-002">Pipeline by stage</option>
                   <option value="RPT-003">Sales</option>
@@ -316,12 +316,12 @@ export default function Reports() {
                   c.money ? money(Number(row[c.key] ?? 0)) : String(row[c.key] ?? '—'),
               }))}
             />
-            {r.data.totals && (
+            {r.data?.totals && (
               <div className="mt-4 flex flex-wrap gap-4 rounded-xl bg-[#F5F9F2] p-3 text-xs font-semibold text-[#202820] border border-[#DCE7D9]">
                 <span className="text-[#778477]">Totals:</span>
                 {Object.entries(r.data.totals).map(([k, v]) => (
                   <span key={k}>
-                    {r.data!.columns?.find((c) => c.key === k)?.label ?? k}:{' '}
+                    {r.data?.columns?.find((c) => c.key === k)?.label ?? k}:{' '}
                     <span className="text-[#3D7952]">{money(v)}</span>
                   </span>
                 ))}

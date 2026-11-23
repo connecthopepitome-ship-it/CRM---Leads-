@@ -55,7 +55,8 @@ export default function InvoiceDetail() {
       const contact = c.contacts.find((x) => x.isPrimary && x.phone) ?? c.contacts.find((x) => x.phone);
       if (!contact) return toast('Add a mobile number to the customer first.', 'danger');
       const tpl = templates.data?.find((t) => t.key === 'invoice');
-      const text = renderTemplate(String(tpl?.data.body ?? 'Invoice {{doc_no}}: {{link}}'), { name: contact.name, doc_no: q.data!.number, amount: (q.data!.balanceDue / 100).toFixed(2), link: r.url });
+      const bodyTpl = (tpl?.data as { body?: string } | undefined)?.body ?? 'Invoice {{doc_no}}: {{link}}';
+      const text = renderTemplate(String(bodyTpl), { name: contact.name, doc_no: q.data?.number ?? '', amount: ((q.data?.balanceDue ?? 0) / 100).toFixed(2), link: r.url });
       const w = await post<{ url: string }>('/messages/whatsapp', { recordType: 'customer', recordId: q.data!.customerId, text });
       window.open(w.url, '_blank', 'noopener');
     } catch (e) {
@@ -108,7 +109,7 @@ export default function InvoiceDetail() {
           )}
           {!!i.creditNotes?.length && (
             <Card title="Credit notes">
-              <ul className="text-sm">{i.creditNotes.map((c) => <li key={c.id} className="flex justify-between py-1"><span>{c.number} · {c.reason}</span><span>{money(c.amount)}</span></li>)}</ul>
+              <ul className="text-sm">{(i.creditNotes ?? []).map((c) => <li key={c.id} className="flex justify-between py-1"><span>{c.number} · {c.reason}</span><span>{money(c.amount)}</span></li>)}</ul>
             </Card>
           )}
         </div>

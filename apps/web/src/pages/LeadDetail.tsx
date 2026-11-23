@@ -91,7 +91,7 @@ export default function LeadDetail() {
 function ConvertDialog({ lead, onClose }: { lead: Lead; onClose(): void }) {
   const nav = useNavigate();
   const dup = useQuery({ queryKey: ['dup', lead.id], queryFn: () => post<{ matches: { type: string; id: string | null; name: string }[] }>('/leads/check-duplicate', { phone: lead.phone, email: lead.email }) });
-  const customerMatch = dup.data?.matches.find((m) => m.type === 'customer');
+  const customerMatch = dup.data?.matches?.find((m) => m.type === 'customer');
   const [mode, setMode] = useState<'new' | 'link'>('new');
   useEffect(() => {
     if (customerMatch || lead.customerId) setMode('link');

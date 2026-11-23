@@ -462,14 +462,14 @@ export default function Leads() {
       {/* ============================================================== */}
       {view === 'board' && (
         <div className="flex gap-4 overflow-x-auto pb-6" aria-label="Lead board">
-          {board.data?.columns.map((c) => (
+          {(board.data?.columns ?? []).map((c) => (
             <section
               key={c.stage}
               className="w-72 shrink-0 rounded-2xl border border-[#DCE7D9] bg-white p-3 shadow-2xs"
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 const id = e.dataTransfer.getData('text/plain');
-                const lead = board.data!.columns.flatMap((x) => x.cards).find((x) => x.id === id);
+                const lead = (board.data?.columns ?? []).flatMap((x) => x.cards ?? []).find((x) => x.id === id);
                 if (lead && lead.stage !== c.stage) setDrop({ lead, to: c.stage });
               }}
             >
@@ -481,7 +481,7 @@ export default function Leads() {
               </div>
 
               <div className="space-y-2.5">
-                {c.cards.map((l) => (
+                {(c.cards ?? []).map((l) => (
                   <div
                     key={l.id}
                     draggable

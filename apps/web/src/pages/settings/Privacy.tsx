@@ -58,7 +58,7 @@ export function Privacy() {
       </div>
       {found && (
         <div className="flex flex-col gap-3 text-sm">
-          <p>{Object.entries(found.counts).map(([k, v]) => `${v} ${k}`).join(' · ')}</p>
+          <p>{Object.entries(found.counts ?? {}).map(([k, v]) => `${v} ${k}`).join(' · ')}</p>
           <Banner tone="info">{found.plan.mode === 'delete' ? 'No financial documents: erasing deletes the leads, contacts, activities, quotations and files.' : `Financial documents exist: contact details, notes and activities are anonymised; ${found.plan.keep.join(', ')} are kept as required by law.`}</Banner>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => void exportData()}>Export personal data</Button>

@@ -62,16 +62,16 @@ export default function Me() {
         <Card title="Notifications">
           <div id="notifications" className="flex flex-col gap-2 text-sm">
             <Button variant="secondary" onClick={() => void enablePush()}>Allow push notifications on this device</Button>
-            {prefs.data?.events.map((e) => (
+            {(prefs.data?.events ?? []).map((e) => (
               <label key={e.id} className="flex min-h-touch items-center justify-between gap-3">
                 <span>{e.label}</span>
-                <input type="checkbox" className="h-5 w-5" checked={e.push} onChange={(ev) => savePrefs.mutate(Object.fromEntries(prefs.data!.events.map((x) => [x.id, x.id === e.id ? ev.target.checked : x.push])))} />
+                <input type="checkbox" className="h-5 w-5" checked={e.push} onChange={(ev) => savePrefs.mutate(Object.fromEntries((prefs.data?.events ?? []).map((x) => [x.id, x.id === e.id ? ev.target.checked : x.push])))} />
               </label>
             ))}
           </div>
         </Card>
         <Card title="Recent sign-ins" className="lg:col-span-2">
-          <ul className="text-sm">{history.data?.items.map((h, i) => <li key={i} className="flex justify-between border-b border-border py-1"><span>{h.action.replace('auth.', '').replace('_', ' ')}</span><span className="text-muted">{dateTime(h.at)} · {h.ipMasked}</span></li>)}</ul>
+          <ul className="text-sm">{(history.data?.items ?? []).map((h, i) => <li key={i} className="flex justify-between border-b border-border py-1"><span>{h.action.replace('auth.', '').replace('_', ' ')}</span><span className="text-muted">{dateTime(h.at)} · {h.ipMasked}</span></li>)}</ul>
         </Card>
       </div>
     </>

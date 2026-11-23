@@ -110,7 +110,7 @@ export default function QuoteDetail() {
           {!!d.revisions?.length && d.revisions.length > 1 && (
             <Card title="Revisions">
               <ul className="text-sm">
-                {d.revisions.map((r) => <li key={r.id} className="flex justify-between py-1"><Link className="text-primary hover:underline" to={`/sales/quotes/${r.id}`}>R{r.revision} {r.displayNumber ?? '(draft)'}</Link><span><Badge status={r.status} /> {money(r.grandTotal)}</span></li>)}
+                {(d.revisions ?? []).map((r) => <li key={r.id} className="flex justify-between py-1"><Link className="text-primary hover:underline" to={`/sales/quotes/${r.id}`}>R{r.revision} {r.displayNumber ?? '(draft)'}</Link><span><Badge status={r.status} /> {money(r.grandTotal)}</span></li>)}
               </ul>
             </Card>
           )}
