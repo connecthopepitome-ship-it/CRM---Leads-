@@ -38,7 +38,7 @@ export function Preferences() {
   }, [sla.data, sales.data, fin.data]);
   const saveMode = useAction((m: string) => put('/admin/mode', { mode: m }), [['settings']], () => toast('Mode changed — reload to update menus'));
   const saveSection = useAction((a: { section: string; data: object }) => put(`/admin/settings/${a.section}`, { data: a.data }), [['settings'], ['app-config']], () => toast('Saved'));
-  if (mode.isLoading || sla.isLoading) return <Skeleton rows={5} />;
+  if (mode.isLoading || sla.isLoading || modules.isLoading || perms.isLoading) return <Skeleton rows={5} />;
   const currentMode = (mode.data as any)?.data?.mode ?? (mode.data as any)?.mode ?? 'solo';
   const showOrders = !!((modules.data as any)?.data?.orders ?? (modules.data as any)?.orders ?? true);
   const execPayments = !!((perms.data as any)?.data?.execPaymentsEnabled ?? (perms.data as any)?.execPaymentsEnabled ?? true);

@@ -8,10 +8,10 @@ import { useAuth } from '../lib/auth';
 import { formatSla, getStageLabel, money, relative } from '../lib/format';
 import { useAction, useOptions, useUsers, type Lead } from '../features/hooks';
 import { StageDialog } from '../features/StageDialog';
-import { Badge, Button, EmptyState, ErrorState, Input, LinkButton, PageHeader, Select, Skeleton, Table, toast } from '../ui';
+import { Badge, Button, Dialog, EmptyState, ErrorState, Input, LinkButton, PageHeader, Select, Skeleton, Table, toast } from '../ui';
 import { 
   Search, Plus, Upload, Filter, MoreHorizontal, ChevronLeft, ChevronRight, 
-  User, CheckSquare, Phone, Calendar 
+  User, CheckSquare, Phone, Calendar, SlidersHorizontal, X 
 } from 'lucide-react';
 
 const SAMPLE_LEADS_FALLBACK: Lead[] = [
@@ -196,14 +196,17 @@ export default function Leads() {
     }
   };
 
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const activeFilterCount = [params.get('stage'), params.get('sourceId'), params.get('sla')].filter(Boolean).length;
+
   return (
-    <div className="space-y-5 pb-8">
+    <div className="space-y-4 sm:space-y-5 pb-8">
       {/* ============================================================== */}
       {/* 1. HEADER & PRIMARY ACTIONS */}
       {/* ============================================================== */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-[#202820]">
+          <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#202820]">
             {term('leads', 'Leads')}
           </h1>
           <p className="text-xs sm:text-sm text-[#778477] mt-0.5">
@@ -211,7 +214,7 @@ export default function Leads() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center justify-between sm:justify-end gap-2.5">
           {/* List / Board View Switcher Pills */}
           <div className="inline-flex rounded-full bg-[#E3EFDF]/70 p-1 border border-[#DCE7D9]">
             <button
@@ -236,80 +239,145 @@ export default function Leads() {
             </button>
           </div>
 
-          {perm('lead:import') && (
-            <LinkButton to="/settings/import" variant="secondary" className="gap-1.5">
-              <Upload size={14} />
-              <span>Import</span>
-            </LinkButton>
-          )}
+          <div className="flex items-center gap-2">
+            {perm('lead:import') && (
+              <LinkButton to="/settings/import" variant="secondary" className="gap-1.5 hidden sm:inline-flex">
+                <Upload size={14} />
+                <span>Import</span>
+              </LinkButton>
+            )}
 
-          <LinkButton to="/leads/new" variant="primary" className="gap-1.5 shadow-xs">
-            <Plus size={15} strokeWidth={2.5} />
-            <span>New Lead</span>
-          </LinkButton>
+            <LinkButton to="/leads/new" variant="primary" className="gap-1.5 shadow-xs">
+              <Plus size={15} strokeWidth={2.5} />
+              <span>New Lead</span>
+            </LinkButton>
+          </div>
         </div>
       </div>
 
       {/* ============================================================== */}
-      {/* 2. FILTER & SEARCH TOOLBAR (Grovia Screen 2 Style) */}
+      {/* 2. FILTER & SEARCH TOOLBAR (Mobile Responsive) */}
       {/* ============================================================== */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#DCE7D9] bg-white p-3 shadow-2xs">
-        {/* Left Filter Dropdowns */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Stage Filter */}
-          <select
-            value={params.get('stage') ?? ''}
-            onChange={(e) => set('stage', e.target.value)}
-            className="rounded-full border border-[#DCE7D9] bg-[#F5F9F2] px-3.5 py-1.5 text-xs font-medium text-[#202820] hover:border-[#CFE5CB] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/20 cursor-pointer"
-          >
-            <option value="">All Stages</option>
-            <option value="new">New</option>
-            <option value="contacted">Contacted</option>
-            <option value="interested">Interested</option>
-            <option value="quotation_sent">Quotation Sent</option>
-            <option value="negotiation">Negotiation</option>
-            <option value="won">Won</option>
-            <option value="lost">Lost</option>
-          </select>
+      <div className="rounded-2xl border border-[#DCE7D9] bg-white p-3 shadow-2xs space-y-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          {/* Full-width Search on Mobile */}
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#778477]" />
+            <input
+              type="text"
+              placeholder="Search leads..."
+              defaultValue={params.get('q') ?? ''}
+              onKeyDown={(e) => e.key === 'Enter' && set('q', (e.target as HTMLInputElement).value)}
+              className="w-full rounded-xl sm:rounded-full border border-[#DCE7D9] bg-[#F5F9F2] pl-9 pr-3.5 py-2 text-xs text-[#202820] placeholder-[#778477] focus:bg-white focus:border-[#3D7952] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/10"
+            />
+          </div>
 
-          {/* Source Filter */}
-          <select
-            value={params.get('sourceId') ?? ''}
-            onChange={(e) => set('sourceId', e.target.value)}
-            className="rounded-full border border-[#DCE7D9] bg-[#F5F9F2] px-3.5 py-1.5 text-xs font-medium text-[#202820] hover:border-[#CFE5CB] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/20 cursor-pointer"
-          >
-            <option value="">All Sources</option>
-            {sources.data?.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+          {/* Mobile Filter Button */}
+          <div className="flex items-center gap-2 md:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileFilterOpen(true)}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-semibold transition-colors ${
+                activeFilterCount > 0
+                  ? 'border-[#3D7952] bg-[#EAF5E8] text-[#233D2D]'
+                  : 'border-[#DCE7D9] bg-[#F5F9F2] text-[#202820]'
+              }`}
+            >
+              <SlidersHorizontal size={14} />
+              <span>Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="flex h-4.5 w-4.5 items-center justify-center rounded-full bg-[#3D7952] text-[10px] text-white font-bold ml-1">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const n = new URLSearchParams(params);
+                  n.delete('stage');
+                  n.delete('sourceId');
+                  n.delete('sla');
+                  setParams(n, { replace: true });
+                }}
+                className="py-2 px-2.5 rounded-xl border border-[#DCE7D9] text-xs font-semibold text-[#D66B68] hover:bg-[#FDF0EF]"
+              >
+                Clear
+              </button>
+            )}
+          </div>
 
-          {/* SLA Filter */}
-          <select
-            value={params.get('sla') ?? ''}
-            onChange={(e) => set('sla', e.target.value)}
-            className="rounded-full border border-[#DCE7D9] bg-[#F5F9F2] px-3.5 py-1.5 text-xs font-medium text-[#202820] hover:border-[#CFE5CB] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/20 cursor-pointer"
-          >
-            <option value="">Any SLA</option>
-            <option value="pending">SLA running</option>
-            <option value="breached">SLA breached</option>
-            <option value="met">Contacted in time</option>
-          </select>
+          {/* Desktop Filter Dropdowns */}
+          <div className="hidden md:flex items-center gap-2">
+            {/* Stage Filter */}
+            <select
+              value={params.get('stage') ?? ''}
+              onChange={(e) => set('stage', e.target.value)}
+              className="rounded-full border border-[#DCE7D9] bg-[#F5F9F2] px-3.5 py-1.5 text-xs font-medium text-[#202820] hover:border-[#CFE5CB] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/20 cursor-pointer"
+            >
+              <option value="">All Stages</option>
+              <option value="new">New</option>
+              <option value="contacted">Contacted</option>
+              <option value="interested">Interested</option>
+              <option value="quotation_sent">Quotation Sent</option>
+              <option value="negotiation">Negotiation</option>
+              <option value="won">Won</option>
+              <option value="lost">Lost</option>
+            </select>
+
+            {/* Source Filter */}
+            <select
+              value={params.get('sourceId') ?? ''}
+              onChange={(e) => set('sourceId', e.target.value)}
+              className="rounded-full border border-[#DCE7D9] bg-[#F5F9F2] px-3.5 py-1.5 text-xs font-medium text-[#202820] hover:border-[#CFE5CB] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/20 cursor-pointer"
+            >
+              <option value="">All Sources</option>
+              {sources.data?.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+
+            {/* SLA Filter */}
+            <select
+              value={params.get('sla') ?? ''}
+              onChange={(e) => set('sla', e.target.value)}
+              className="rounded-full border border-[#DCE7D9] bg-[#F5F9F2] px-3.5 py-1.5 text-xs font-medium text-[#202820] hover:border-[#CFE5CB] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/20 cursor-pointer"
+            >
+              <option value="">Any SLA</option>
+              <option value="pending">SLA running</option>
+              <option value="breached">SLA breached</option>
+              <option value="met">Contacted in time</option>
+            </select>
+          </div>
         </div>
 
-        {/* Right Search Bar */}
-        <div className="relative min-w-[240px] flex-1 sm:flex-initial">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#778477]" />
-          <input
-            type="text"
-            placeholder="Search leads..."
-            defaultValue={params.get('q') ?? ''}
-            onKeyDown={(e) => e.key === 'Enter' && set('q', (e.target as HTMLInputElement).value)}
-            className="w-full rounded-full border border-[#DCE7D9] bg-[#F5F9F2] pl-9 pr-3.5 py-1.5 text-xs text-[#202820] placeholder-[#778477] focus:bg-white focus:border-[#3D7952] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/10"
-          />
-        </div>
+        {/* Active Filter Chips */}
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[#DCE7D9]/60 text-xs">
+            <span className="text-[11px] font-medium text-[#778477]">Active filters:</span>
+            {params.get('stage') && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#EAF5E8] border border-[#CFE5CB] px-2.5 py-0.5 text-xs font-semibold text-[#233D2D]">
+                Stage: {stageLabel(params.get('stage')!)}
+                <button type="button" onClick={() => set('stage', '')} className="hover:text-red-600"><X size={12} /></button>
+              </span>
+            )}
+            {params.get('sla') && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#EAF5E8] border border-[#CFE5CB] px-2.5 py-0.5 text-xs font-semibold text-[#233D2D]">
+                SLA: {params.get('sla')}
+                <button type="button" onClick={() => set('sla', '')} className="hover:text-red-600"><X size={12} /></button>
+              </span>
+            )}
+            {params.get('sourceId') && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#EAF5E8] border border-[#CFE5CB] px-2.5 py-0.5 text-xs font-semibold text-[#233D2D]">
+                Source: {sources.data?.find((s) => s.id === params.get('sourceId'))?.label ?? params.get('sourceId')}
+                <button type="button" onClick={() => set('sourceId', '')} className="hover:text-red-600"><X size={12} /></button>
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Bulk action bar if items selected */}
@@ -343,7 +411,7 @@ export default function Leads() {
       )}
 
       {/* ============================================================== */}
-      {/* 3. LEADS TABLE (LIST VIEW) */}
+      {/* 3. LEADS LIST VIEW */}
       {/* ============================================================== */}
       {view === 'list' && (
         list.isLoading ? (
@@ -363,121 +431,211 @@ export default function Leads() {
             }
           />
         ) : (
-        <div className="rounded-2xl border border-[#DCE7D9] bg-white shadow-2xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-[#F5F9F2] text-left text-xs font-semibold text-[#778477] border-b border-[#DCE7D9]">
-                <tr>
-                  <th className="w-10 px-4 py-3">
-                    <input
-                      type="checkbox"
-                      className="rounded-sm border-[#DCE7D9] text-[#3D7952] focus:ring-[#3D7952]"
-                      checked={selected.length === rows.length && rows.length > 0}
-                      onChange={(e) => setSelected(e.target.checked ? rows.map((r) => r.id) : [])}
-                    />
-                  </th>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Phone</th>
-                  <th className="px-4 py-3">Stage</th>
-                  <th className="px-4 py-3">SLA</th>
-                  <th className="px-4 py-3">Next Follow-up</th>
-                  <th className="w-12 px-4 py-3 text-right"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#DCE7D9]/60">
-                {rows.map((lead) => {
-                  const isChecked = selected.includes(lead.id);
+          <>
+            {/* MOBILE LEADS CARDS (NO TABLE ON MOBILE) */}
+            <div className="space-y-3 md:hidden">
+              {rows.map((lead) => {
+                const sla = formatSla(lead.slaStatus, lead.slaDueAt);
+                const slaCls = sla.tone === 'danger' ? 'text-[#D66B68] bg-[#FDF0EF] border-[#F8D7D6]' : sla.tone === 'warning' ? 'text-[#D99A45] bg-[#FEF7EC] border-[#FBE3C3]' : 'text-[#3D7952] bg-[#EAF5E8] border-[#CFE5CB]';
+                const phone = lead.phone || lead.phoneRaw;
 
-                  return (
-                    <tr
-                      key={lead.id}
-                      onClick={() => nav(`/leads/${lead.id}`)}
-                      className="hover:bg-[#F5F9F2]/70 cursor-pointer transition-colors"
-                    >
-                      <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                return (
+                  <div
+                    key={lead.id}
+                    onClick={() => nav(`/leads/${lead.id}`)}
+                    className="rounded-2xl border border-[#DCE7D9] bg-white p-4 shadow-2xs hover:border-[#3D7952] active:bg-[#F5F9F2] transition-all cursor-pointer space-y-3"
+                  >
+                    {/* TOP ROW: Name + Stage Badge */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#E3EFDF] text-xs font-bold text-[#233D2D]">
+                          {lead.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-bold text-sm text-[#202820] truncate">
+                            {lead.name}
+                          </h3>
+                          {lead.company && (
+                            <p className="text-xs text-[#778477] truncate mt-0.5">
+                              {lead.company} {lead.city ? `· ${lead.city}` : ''}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <Badge status={lead.stage}>{stageLabel(lead.stage)}</Badge>
+                    </div>
+
+                    {/* CONTACT ROW: Phone & Quick Action */}
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#F5F9F2]">
+                      <div className="min-w-0">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-[#778477] block">Contact</span>
+                        {phone ? (
+                          <span className="text-xs font-mono font-semibold text-[#202820] block truncate">{phone}</span>
+                        ) : (
+                          <span className="text-xs text-[#778477] block truncate">{lead.email || 'No phone'}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        {phone && (
+                          <a
+                            href={`tel:${phone}`}
+                            className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl bg-[#E3EFDF] px-3 py-1.5 text-xs font-bold text-[#233D2D] hover:bg-[#3D7952] hover:text-white transition-colors"
+                            title="Call Lead"
+                          >
+                            <Phone size={13} />
+                            <span>Call</span>
+                          </a>
+                        )}
+                        <LinkButton
+                          to={`/leads/${lead.id}`}
+                          variant="secondary"
+                          className="min-h-[38px] px-3 text-xs"
+                        >
+                          Details
+                        </LinkButton>
+                      </div>
+                    </div>
+
+                    {/* BOTTOM ROW: SLA & Expected Value */}
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#DCE7D9]/60 text-xs">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[11px] font-medium text-[#778477]">SLA:</span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[10px] font-bold ${slaCls}`}>
+                          {sla.text}
+                        </span>
+                      </div>
+                      {lead.expectedValue && lead.expectedValue > 0 ? (
+                        <span className="text-xs font-bold text-[#3D7952] tabular-nums font-mono">
+                          {money(lead.expectedValue)}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-[#778477]">
+                          {lead.nextFollowUpAt ? 'Follow-up due' : 'No follow-up'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* DESKTOP LEADS TABLE (RETAINED ON DESKTOP) */}
+            <div className="hidden md:block rounded-2xl border border-[#DCE7D9] bg-white shadow-2xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-[#F5F9F2] text-left text-xs font-semibold text-[#778477] border-b border-[#DCE7D9]">
+                    <tr>
+                      <th className="w-10 px-4 py-3">
                         <input
                           type="checkbox"
                           className="rounded-sm border-[#DCE7D9] text-[#3D7952] focus:ring-[#3D7952]"
-                          checked={isChecked}
-                          onChange={(e) =>
-                            setSelected((prev) =>
-                              e.target.checked ? [...prev, lead.id] : prev.filter((id) => id !== lead.id)
-                            )
-                          }
+                          checked={selected.length === rows.length && rows.length > 0}
+                          onChange={(e) => setSelected(e.target.checked ? rows.map((r) => r.id) : [])}
                         />
-                      </td>
-
-                      {/* Name with initials avatar */}
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#E3EFDF] text-xs font-bold text-[#233D2D]">
-                            {lead.name.slice(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <span className="font-semibold text-[#202820] hover:text-[#3D7952] block">
-                              {lead.name}
-                            </span>
-                            {lead.company && (
-                              <span className="text-[11px] text-[#778477] block">
-                                {lead.company}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Phone */}
-                      <td className="px-4 py-3.5 text-xs text-[#202820] font-mono">
-                        {lead.phone ?? lead.phoneRaw ?? lead.email ?? '—'}
-                      </td>
-
-                      {/* Stage Pill */}
-                      <td className="px-4 py-3.5">
-                        <Badge status={lead.stage}>{stageLabel(lead.stage)}</Badge>
-                      </td>
-
-                      {/* SLA */}
-                      <td className="px-4 py-3.5 text-xs text-[#778477]">
-                        {(() => {
-                          const sla = formatSla(lead.slaStatus, lead.slaDueAt);
-                          const cls = sla.tone === 'danger' ? 'text-[#D66B68] font-medium' : sla.tone === 'warning' ? 'text-[#D99A45] font-medium' : 'text-[#3D7952] font-medium';
-                          return <span className={cls}>{sla.text}</span>;
-                        })()}
-                      </td>
-
-                      {/* Next Follow-up */}
-                      <td className="px-4 py-3.5 text-xs text-[#778477]">
-                        {lead.nextFollowUpAt ? '17 Nov' : '—'}
-                      </td>
-
-                      {/* Action Menu button */}
-                      <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => nav(`/leads/${lead.id}`)}
-                          className="rounded-lg p-1 text-[#778477] hover:text-[#202820] hover:bg-[#E3EFDF] transition-colors"
-                          title="View Lead details"
-                        >
-                          <MoreHorizontal size={16} />
-                        </button>
-                      </td>
+                      </th>
+                      <th className="px-4 py-3">Name</th>
+                      <th className="px-4 py-3">Phone</th>
+                      <th className="px-4 py-3">Stage</th>
+                      <th className="px-4 py-3">SLA</th>
+                      <th className="px-4 py-3">Next Follow-up</th>
+                      <th className="w-12 px-4 py-3 text-right"></th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody className="divide-y divide-[#DCE7D9]/60">
+                    {rows.map((lead) => {
+                      const isChecked = selected.includes(lead.id);
 
-          {/* Pagination Footer */}
-          <div className="flex items-center justify-between border-t border-[#DCE7D9] px-5 py-3 bg-[#F5F9F2] text-xs text-[#778477]">
-            <span>Showing {rows.length > 0 ? `1-${rows.length}` : '0'} of {rows.length}</span>
+                      return (
+                        <tr
+                          key={lead.id}
+                          onClick={() => nav(`/leads/${lead.id}`)}
+                          className="hover:bg-[#F5F9F2]/70 cursor-pointer transition-colors"
+                        >
+                          <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              className="rounded-sm border-[#DCE7D9] text-[#3D7952] focus:ring-[#3D7952]"
+                              checked={isChecked}
+                              onChange={(e) =>
+                                setSelected((prev) =>
+                                  e.target.checked ? [...prev, lead.id] : prev.filter((id) => id !== lead.id)
+                                )
+                              }
+                            />
+                          </td>
 
-            <div className="flex items-center gap-1.5">
-              <button className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#233D2D] text-white font-bold">
-                1
-              </button>
+                          {/* Name with initials avatar */}
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#E3EFDF] text-xs font-bold text-[#233D2D]">
+                                {lead.name.slice(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <span className="font-semibold text-[#202820] hover:text-[#3D7952] block">
+                                  {lead.name}
+                                </span>
+                                {lead.company && (
+                                  <span className="text-[11px] text-[#778477] block">
+                                    {lead.company}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Phone */}
+                          <td className="px-4 py-3.5 text-xs text-[#202820] font-mono">
+                            {lead.phone ?? lead.phoneRaw ?? lead.email ?? '—'}
+                          </td>
+
+                          {/* Stage Pill */}
+                          <td className="px-4 py-3.5">
+                            <Badge status={lead.stage}>{stageLabel(lead.stage)}</Badge>
+                          </td>
+
+                          {/* SLA */}
+                          <td className="px-4 py-3.5 text-xs text-[#778477]">
+                            {(() => {
+                              const sla = formatSla(lead.slaStatus, lead.slaDueAt);
+                              const cls = sla.tone === 'danger' ? 'text-[#D66B68] font-medium' : sla.tone === 'warning' ? 'text-[#D99A45] font-medium' : 'text-[#3D7952] font-medium';
+                              return <span className={cls}>{sla.text}</span>;
+                            })()}
+                          </td>
+
+                          {/* Next Follow-up */}
+                          <td className="px-4 py-3.5 text-xs text-[#778477]">
+                            {lead.nextFollowUpAt ? '17 Nov' : '—'}
+                          </td>
+
+                          {/* Action Menu button */}
+                          <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => nav(`/leads/${lead.id}`)}
+                              className="rounded-lg p-1 text-[#778477] hover:text-[#202820] hover:bg-[#E3EFDF] transition-colors"
+                              title="View Lead details"
+                            >
+                              <MoreHorizontal size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Footer */}
+              <div className="flex items-center justify-between border-t border-[#DCE7D9] px-5 py-3 bg-[#F5F9F2] text-xs text-[#778477]">
+                <span>Showing {rows.length > 0 ? `1-${rows.length}` : '0'} of {rows.length}</span>
+
+                <div className="flex items-center gap-1.5">
+                  <button className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#233D2D] text-white font-bold">
+                    1
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </>
         )
       )}
 
@@ -486,11 +644,11 @@ export default function Leads() {
       {/* ============================================================== */}
       {view === 'board' && (
         board.isLoading ? (
-          <Skeleton rows={6} />
+          <Skeleton rows={8} />
         ) : board.isError ? (
           <ErrorState error={board.error} retry={() => void board.refetch()} />
         ) : (
-          <div className="flex gap-4 overflow-x-auto pb-6" aria-label="Lead board">
+          <div className="flex gap-3.5 overflow-x-auto pb-6 -mx-3.5 sm:mx-0 px-3.5 sm:px-0 scrollbar-none snap-x" aria-label="Lead board">
             {BOARD_STAGES.map((s) => {
               const col = (board.data?.columns ?? []).find((c) => c.stage === s.stage);
               const cards = col?.cards ?? [];
@@ -498,7 +656,7 @@ export default function Leads() {
               return (
                 <section
                   key={s.stage}
-                  className="w-72 shrink-0 rounded-2xl border border-[#DCE7D9] bg-white p-3 shadow-2xs"
+                  className="w-[82vw] sm:w-72 shrink-0 rounded-2xl border border-[#DCE7D9] bg-white p-3.5 shadow-2xs snap-start"
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     const id = e.dataTransfer.getData('text/plain');
@@ -542,6 +700,89 @@ export default function Leads() {
           </div>
         )
       )}
+
+      {/* Mobile Filter Sheet Dialog */}
+      <Dialog
+        open={mobileFilterOpen}
+        onClose={() => setMobileFilterOpen(false)}
+        title="Filter Leads"
+        sheet
+        footer={
+          <div className="flex w-full gap-2">
+            <Button
+              variant="secondary"
+              className="flex-1"
+              onClick={() => {
+                const n = new URLSearchParams(params);
+                n.delete('stage');
+                n.delete('sourceId');
+                n.delete('sla');
+                setParams(n, { replace: true });
+                setMobileFilterOpen(false);
+              }}
+            >
+              Reset
+            </Button>
+            <Button
+              variant="primary"
+              className="flex-1"
+              onClick={() => setMobileFilterOpen(false)}
+            >
+              Apply Filters
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="block text-xs font-semibold text-[#202820] mb-1.5">Pipeline Stage</label>
+            <select
+              value={params.get('stage') ?? ''}
+              onChange={(e) => set('stage', e.target.value)}
+              className="w-full min-h-[44px] rounded-xl border border-[#DCE7D9] bg-white px-3 text-xs font-medium text-[#202820]"
+            >
+              <option value="">All Stages</option>
+              <option value="new">New</option>
+              <option value="contacted">Contacted</option>
+              <option value="interested">Interested</option>
+              <option value="quotation_sent">Quotation Sent</option>
+              <option value="negotiation">Negotiation</option>
+              <option value="won">Won</option>
+              <option value="lost">Lost</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#202820] mb-1.5">Lead Source</label>
+            <select
+              value={params.get('sourceId') ?? ''}
+              onChange={(e) => set('sourceId', e.target.value)}
+              className="w-full min-h-[44px] rounded-xl border border-[#DCE7D9] bg-white px-3 text-xs font-medium text-[#202820]"
+            >
+              <option value="">All Sources</option>
+              {sources.data?.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#202820] mb-1.5">SLA Compliance</label>
+            <select
+              value={params.get('sla') ?? ''}
+              onChange={(e) => set('sla', e.target.value)}
+              className="w-full min-h-[44px] rounded-xl border border-[#DCE7D9] bg-white px-3 text-xs font-medium text-[#202820]"
+            >
+              <option value="">Any SLA</option>
+              <option value="pending">SLA running</option>
+              <option value="breached">SLA breached</option>
+              <option value="met">Contacted in time</option>
+            </select>
+          </div>
+        </div>
+      </Dialog>
 
       {drop && <StageDialog lead={drop.lead} to={drop.to} onClose={() => setDrop(null)} />}
     </div>

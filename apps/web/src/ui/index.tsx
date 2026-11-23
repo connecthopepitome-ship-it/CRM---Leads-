@@ -243,42 +243,44 @@ export function ErrorState({ error, retry }: { error: unknown; retry?: () => voi
 // CMP-025 PageHeader
 export function PageHeader({ title, subtitle, actions, back }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; back?: string }) {
   return (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-      <div className="min-w-0">
+    <div className="mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+      <div className="min-w-0 flex-1">
         {back && (
-          <Link to={back} className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[#3D7952] hover:text-[#233D2D] transition-colors group">
+          <Link to={back} className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-semibold text-[#3D7952] hover:text-[#233D2D] transition-colors group">
             <span className="transition-transform group-hover:-translate-x-0.5">←</span>
             <span>Back</span>
           </Link>
         )}
-        <h1 className="truncate text-2xl font-bold tracking-tight text-[#202820]">{title}</h1>
-        {subtitle && <p className="text-xs sm:text-sm text-[#778477] mt-0.5 font-normal">{subtitle}</p>}
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#202820] break-words">{title}</h1>
+        {subtitle && <p className="text-xs sm:text-sm text-[#778477] mt-0.5 font-normal break-words">{subtitle}</p>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">{actions}</div>}
     </div>
   );
 }
 
-// CMP-014 Tabs (Pill style matching Grovia reference)
+// CMP-014 Tabs (Pill style matching Grovia reference, responsive scroll)
 export function Tabs({ tabs, active, onChange }: { tabs: { id: string; label: string }[]; active: string; onChange(id: string): void }) {
   return (
-    <div role="tablist" className="mb-4 inline-flex items-center gap-1.5 rounded-full glass-pill-container p-1">
-      {tabs.map((t) => (
-        <button
-          key={t.id}
-          role="tab"
-          aria-selected={active === t.id}
-          onClick={() => onChange(t.id)}
-          className={cx(
-            'rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3D7952]',
-            active === t.id
-              ? 'bg-[#233D2D] text-white shadow-xs'
-              : 'text-[#778477] hover:text-[#202820] hover:bg-white/80',
-          )}
-        >
-          {t.label}
-        </button>
-      ))}
+    <div className="mb-4 overflow-x-auto -mx-1 sm:mx-0 px-1 sm:px-0">
+      <div role="tablist" className="inline-flex items-center gap-1.5 rounded-full glass-pill-container p-1 shrink-0">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={active === t.id}
+            onClick={() => onChange(t.id)}
+            className={cx(
+              'rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3D7952] whitespace-nowrap',
+              active === t.id
+                ? 'bg-[#233D2D] text-white shadow-xs'
+                : 'text-[#778477] hover:text-[#202820] hover:bg-white/80',
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

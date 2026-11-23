@@ -136,46 +136,49 @@ export default function SalesHub() {
   return (
     <div className="space-y-5 pb-8">
       {/* ============================================================== */}
-      {/* 1. HEADER & SUB-TABS (Grovia Screen 3 Style) */}
+      {/* 1. HEADER & SUB-TABS */}
       {/* ============================================================== */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-[#202820]">
+          <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#202820]">
             Sales
           </h1>
           <p className="text-xs sm:text-sm text-[#778477] mt-0.5">
-            Manage quotations, invoices and payments.
+            Manage quotations, invoices, payments, and orders.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Submodule Tab Pills */}
-          <div className="inline-flex rounded-full bg-[#E3EFDF]/70 p-1 border border-[#DCE7D9]">
-            {tabs.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setParams({ tab: t.id })}
-                className={`flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-semibold transition-all ${
-                  tab === t.id
-                    ? 'bg-[#233D2D] text-white shadow-xs'
-                    : 'text-[#778477] hover:text-[#202820]'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
+          {/* Submodule Tab Pills with horizontal scroll on mobile */}
+          <div className="overflow-x-auto -mx-1 sm:mx-0 px-1 sm:px-0 pb-1 sm:pb-0">
+            <div className="inline-flex rounded-full bg-[#E3EFDF]/70 p-1 border border-[#DCE7D9] shrink-0">
+              {tabs.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setParams({ tab: t.id })}
+                  className={`flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-semibold whitespace-nowrap transition-all ${
+                    tab === t.id
+                      ? 'bg-[#233D2D] text-white shadow-xs'
+                      : 'text-[#778477] hover:text-[#202820]'
+                  }`}
+                >
+                  {t.icon}
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* New Action Button */}
           {tab === 'quotes' && can('quote', 'create') && (
-            <LinkButton to="/sales/quotes/new" variant="primary" className="gap-1.5 shadow-xs">
+            <LinkButton to="/sales/quotes/new" variant="primary" className="gap-1.5 shadow-xs w-full sm:w-auto justify-center">
               <Plus size={15} strokeWidth={2.5} />
               <span>New Quotation</span>
             </LinkButton>
           )}
 
           {tab === 'payments' && can('payment', 'create') && (
-            <LinkButton to="/sales/payments/new" variant="primary" className="gap-1.5 shadow-xs">
+            <LinkButton to="/sales/payments/new" variant="primary" className="gap-1.5 shadow-xs w-full sm:w-auto justify-center">
               <Plus size={15} strokeWidth={2.5} />
               <span>Record Payment</span>
             </LinkButton>
@@ -186,7 +189,7 @@ export default function SalesHub() {
       {/* ============================================================== */}
       {/* 2. FILTER & SEARCH TOOLBAR */}
       {/* ============================================================== */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#DCE7D9] bg-white p-3 shadow-2xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-[#DCE7D9] bg-white p-3 shadow-2xs">
         <div className="flex flex-wrap items-center gap-2">
           {/* Status Filter */}
           <select
@@ -199,6 +202,8 @@ export default function SalesHub() {
             <option value="sent">Sent</option>
             <option value="accepted">Accepted</option>
             <option value="rejected">Rejected</option>
+            <option value="paid">Paid</option>
+            <option value="active">Active</option>
           </select>
 
           {/* Time Filter */}
@@ -214,7 +219,7 @@ export default function SalesHub() {
         </div>
 
         {/* Search */}
-        <div className="relative min-w-[260px] flex-1 sm:flex-initial">
+        <div className="relative w-full sm:w-auto sm:min-w-[260px]">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#778477]" />
           <input
             type="text"
@@ -227,7 +232,7 @@ export default function SalesHub() {
       </div>
 
       {/* ============================================================== */}
-      {/* 3. SALES TABLE */}
+      {/* 3. SALES LIST (Mobile Cards + Desktop Table) */}
       {/* ============================================================== */}
       {q.isLoading ? (
         <Skeleton rows={6} />
@@ -236,81 +241,140 @@ export default function SalesHub() {
       ) : rows.length === 0 ? (
         <EmptyState title={`No ${tab} yet`} description={`No ${tab} have been created or recorded.`} />
       ) : (
-        <div className="rounded-2xl border border-[#DCE7D9] bg-white shadow-2xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-[#F5F9F2] text-left text-xs font-semibold text-[#778477] border-b border-[#DCE7D9]">
-                <tr>
-                  <th className="px-5 py-3">Number</th>
-                  <th className="px-5 py-3">Customer</th>
-                  <th className="px-5 py-3">Amount</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3">Valid Until</th>
-                  <th className="w-12 px-5 py-3 text-right"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#DCE7D9]/60">
-                {rows.map((row) => {
-                  const num = String(row.displayNumber ?? row.number ?? row.receiptNo ?? 'Draft');
-                  const customer = String(row.partyName ?? row.customerName ?? '—');
-                  const amountVal = g(row) || Number(row.amount ?? row.balanceDue ?? 0);
-                  const validDate = row.validUntil ? date(String(row.validUntil)) : (row.dueDate ? date(String(row.dueDate)) : '29 Nov 2026');
+        <div className="space-y-3">
+          {/* Mobile Cards (Visible only on < md screens) */}
+          <div className="grid grid-cols-1 gap-3 md:hidden">
+            {rows.map((row) => {
+              const num = String(row.displayNumber ?? row.number ?? row.receiptNo ?? 'Draft');
+              const customer = String(row.partyName ?? row.customerName ?? '—');
+              const amountVal = g(row) || Number(row.amount ?? row.balanceDue ?? 0);
+              const dateLabel = row.validUntil
+                ? `Valid: ${date(String(row.validUntil))}`
+                : row.dueDate
+                ? `Due: ${date(String(row.dueDate))}`
+                : row.date
+                ? `Date: ${date(String(row.date))}`
+                : '29 Nov 2026';
 
-                  return (
-                    <tr
-                      key={row.id}
-                      onClick={() => nav(`/sales/${tab}/${row.id}`)}
-                      className="hover:bg-[#F5F9F2]/70 cursor-pointer transition-colors"
-                    >
-                      {/* Document Number Link in primary green */}
-                      <td className="px-5 py-3.5 font-semibold text-[#3D7952] hover:underline">
-                        {num}
-                      </td>
+              return (
+                <div
+                  key={row.id}
+                  onClick={() => nav(`/sales/${tab}/${row.id}`)}
+                  className="rounded-2xl border border-[#DCE7D9] bg-white p-4 shadow-2xs hover:border-[#CFE5CB] active:bg-[#F5F9F2] transition-colors cursor-pointer space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-[#3D7952]">
+                      {num}
+                    </span>
+                    <Badge status={String(row.status)} />
+                  </div>
 
-                      {/* Customer Name */}
-                      <td className="px-5 py-3.5 font-medium text-[#202820]">
-                        {customer}
-                      </td>
+                  <div>
+                    <h3 className="font-bold text-sm text-[#202820] truncate">
+                      {customer}
+                    </h3>
+                    <p className="text-xs text-[#778477] mt-0.5 font-medium">
+                      {dateLabel}
+                    </p>
+                  </div>
 
-                      {/* Amount */}
-                      <td className="px-5 py-3.5 font-mono font-bold text-[#202820]">
-                        {amountVal ? money(amountVal) : '₹29,500'}
-                      </td>
+                  <div className="flex items-center justify-between pt-2 border-t border-[#DCE7D9]/60">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-[#778477] block">
+                        {tab === 'invoices' ? 'Total / Balance' : 'Amount'}
+                      </span>
+                      <span className="font-mono font-extrabold text-sm text-[#202820]">
+                        {amountVal ? money(amountVal) : '₹0'}
+                      </span>
+                    </div>
 
-                      {/* Status */}
-                      <td className="px-5 py-3.5">
-                        <Badge status={String(row.status)} />
-                      </td>
-
-                      {/* Valid Until / Due */}
-                      <td className="px-5 py-3.5 text-xs text-[#778477]">
-                        {validDate}
-                      </td>
-
-                      {/* Actions Menu */}
-                      <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => nav(`/sales/${tab}/${row.id}`)}
-                          className="rounded-lg p-1 text-[#778477] hover:text-[#202820] hover:bg-[#E3EFDF] transition-colors"
-                          title="View Details"
-                        >
-                          <MoreHorizontal size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-[#3D7952]">
+                      <span>Details</span>
+                      <span>→</span>
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
-          {/* Footer count */}
-          <div className="flex items-center justify-between border-t border-[#DCE7D9] px-5 py-3 bg-[#F5F9F2] text-xs text-[#778477]">
-            <span>Showing 1-{rows.length} of {rows.length}</span>
-            <div className="flex items-center gap-1.5">
-              <button className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#233D2D] text-white font-bold">
-                1
-              </button>
+          {/* Desktop Table (Visible only on >= md screens) */}
+          <div className="hidden md:block rounded-2xl border border-[#DCE7D9] bg-white shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-[#F5F9F2] text-left text-xs font-semibold text-[#778477] border-b border-[#DCE7D9]">
+                  <tr>
+                    <th className="px-5 py-3">Number</th>
+                    <th className="px-5 py-3">Customer</th>
+                    <th className="px-5 py-3">Amount</th>
+                    <th className="px-5 py-3">Status</th>
+                    <th className="px-5 py-3">Valid Until / Due</th>
+                    <th className="w-12 px-5 py-3 text-right"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#DCE7D9]/60">
+                  {rows.map((row) => {
+                    const num = String(row.displayNumber ?? row.number ?? row.receiptNo ?? 'Draft');
+                    const customer = String(row.partyName ?? row.customerName ?? '—');
+                    const amountVal = g(row) || Number(row.amount ?? row.balanceDue ?? 0);
+                    const validDate = row.validUntil ? date(String(row.validUntil)) : (row.dueDate ? date(String(row.dueDate)) : (row.date ? date(String(row.date)) : '29 Nov 2026'));
+
+                    return (
+                      <tr
+                        key={row.id}
+                        onClick={() => nav(`/sales/${tab}/${row.id}`)}
+                        className="hover:bg-[#F5F9F2]/70 cursor-pointer transition-colors"
+                      >
+                        {/* Document Number Link in primary green */}
+                        <td className="px-5 py-3.5 font-semibold text-[#3D7952] hover:underline">
+                          {num}
+                        </td>
+
+                        {/* Customer Name */}
+                        <td className="px-5 py-3.5 font-medium text-[#202820]">
+                          {customer}
+                        </td>
+
+                        {/* Amount */}
+                        <td className="px-5 py-3.5 font-mono font-bold text-[#202820]">
+                          {amountVal ? money(amountVal) : '₹29,500'}
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-5 py-3.5">
+                          <Badge status={String(row.status)} />
+                        </td>
+
+                        {/* Valid Until / Due */}
+                        <td className="px-5 py-3.5 text-xs text-[#778477]">
+                          {validDate}
+                        </td>
+
+                        {/* Actions Menu */}
+                        <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => nav(`/sales/${tab}/${row.id}`)}
+                            className="rounded-lg p-1 text-[#778477] hover:text-[#202820] hover:bg-[#E3EFDF] transition-colors"
+                            title="View Details"
+                          >
+                            <MoreHorizontal size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer count */}
+            <div className="flex items-center justify-between border-t border-[#DCE7D9] px-5 py-3 bg-[#F5F9F2] text-xs text-[#778477]">
+              <span>Showing 1-{rows.length} of {rows.length}</span>
+              <div className="flex items-center gap-1.5">
+                <button className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#233D2D] text-white font-bold">
+                  1
+                </button>
+              </div>
             </div>
           </div>
         </div>

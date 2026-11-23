@@ -369,7 +369,7 @@ export default function QuoteBuilder() {
           {/* CARD 1: RECIPIENT & CLIENT IDENTITY (ROYAL BLUE ACCENT) */}
           {/* ============================================================== */}
           <section className="rounded-2xl border border-blue-200/70 border-l-[5px] border-l-blue-600 bg-white p-5 shadow-sm space-y-4 transition-all">
-            <div className="flex items-center justify-between border-b border-blue-100/60 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-100/60 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
                   <User size={16} strokeWidth={2.2} />
@@ -528,31 +528,46 @@ export default function QuoteBuilder() {
                   className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs hover:border-emerald-300 hover:shadow-xs transition-all space-y-3"
                 >
                   {/* Line Item Header */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <span className="flex h-6 px-2.5 items-center justify-center rounded-md bg-emerald-50 border border-emerald-200/70 text-[11px] font-bold text-emerald-800">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                    <div className="flex items-center justify-between sm:justify-start gap-2.5 w-full sm:w-auto">
+                      <span className="flex h-6 px-2.5 items-center justify-center rounded-md bg-emerald-50 border border-emerald-200/70 text-[11px] font-bold text-emerald-800 shrink-0">
                         {l.kind === 'heading' ? 'Section Header' : `Line Item #${i + 1}`}
                       </span>
 
-                      {l.kind !== 'heading' && (
-                        <div className="w-60 sm:w-80">
-                          <select
-                            value={l.productId ?? ''}
-                            onChange={(e) => pickProduct(i, e.target.value)}
-                            className="w-full text-xs font-semibold text-emerald-800 bg-emerald-50/50 border border-emerald-200/80 rounded-lg px-2.5 py-1 focus:outline-none cursor-pointer"
-                          >
-                            <option value="">Custom Free Text</option>
-                            {availableProducts.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2 sm:hidden">
+                        <span className="text-xs font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md tabular-nums">
+                          {calc ? money(calc.lines[i]?.total ?? 0) : '—'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setLines((ls) => ls.filter((_x, j) => j !== i))}
+                          disabled={lines.length === 1}
+                          className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                          title="Remove item"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    {l.kind !== 'heading' && (
+                      <div className="w-full sm:w-72">
+                        <select
+                          value={l.productId ?? ''}
+                          onChange={(e) => pickProduct(i, e.target.value)}
+                          className="w-full text-xs font-semibold text-emerald-800 bg-emerald-50/50 border border-emerald-200/80 rounded-lg px-2.5 py-1.5 focus:outline-none cursor-pointer"
+                        >
+                          <option value="">Custom Free Text</option>
+                          {availableProducts.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="hidden sm:flex items-center gap-2">
                       <span className="text-[11px] font-semibold text-slate-400">Total:</span>
                       <span className="text-xs font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md tabular-nums">
                         {calc ? money(calc.lines[i]?.total ?? 0) : '—'}

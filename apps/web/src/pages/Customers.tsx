@@ -160,7 +160,7 @@ export default function Customers() {
       </div>
 
       {/* ============================================================== */}
-      {/* GROVIA SCREEN 4: TWO-COLUMN SPLIT CUSTOMER WORKSPACE */}
+      {/* 2. CUSTOMER LISTINGS (Mobile Directory Cards + Desktop Split Workspace) */}
       {/* ============================================================== */}
       {list.isLoading ? (
         <Skeleton rows={8} />
@@ -178,8 +178,95 @@ export default function Customers() {
             ) : undefined
           }
         />
-      ) : selectedCustomer && (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 items-start">
+      ) : (
+        <>
+          {/* Mobile Customers Directory (Visible only on < md screens) */}
+          <div className="space-y-3 md:hidden">
+            {/* Mobile Search */}
+            <div className="relative">
+              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#778477]" />
+              <input
+                type="text"
+                placeholder="Search by name, code..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-2xl border border-[#DCE7D9] bg-white pl-9 pr-3.5 py-2 text-xs text-[#202820] placeholder-[#778477] focus:border-[#3D7952] focus:outline-none shadow-2xs"
+              />
+            </div>
+
+            {filteredCustomers.map((c) => {
+              const initials = c.displayName
+                .split(' ')
+                .slice(0, 2)
+                .map((w) => w[0])
+                .join('')
+                .toUpperCase() || 'CU';
+
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => nav(`/customers/${c.id}`)}
+                  className="rounded-2xl border border-[#DCE7D9] bg-white p-4 shadow-2xs hover:border-[#CFE5CB] active:bg-[#F5F9F2] transition-colors cursor-pointer space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#E3EFDF] text-[#233D2D] font-bold text-xs">
+                        {initials}
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="font-bold text-sm text-[#202820] truncate">
+                          {c.displayName}
+                        </h3>
+                        <span className="text-[10px] text-[#778477] font-mono block">
+                          {c.code || 'C-0001'} {c.city ? `• ${c.city}` : ''}
+                        </span>
+                      </div>
+                    </div>
+
+                    {c.phone && (
+                      <a
+                        href={`tel:${c.phone}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex h-8 px-2.5 items-center justify-center gap-1.5 rounded-xl border border-[#CFE5CB] bg-[#E3EFDF] text-[#233D2D] font-semibold text-xs active:bg-[#D5E8D1]"
+                      >
+                        <Phone size={13} className="text-[#3D7952]" />
+                        <span>Call</span>
+                      </a>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-[#DCE7D9]/60 text-xs">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-[#778477] block">
+                        Outstanding
+                      </span>
+                      <span className={`font-mono font-bold ${c.outstanding && c.outstanding > 0 ? 'text-[#D99A45]' : 'text-[#3D7952]'}`}>
+                        {money(c.outstanding ?? 0)}
+                      </span>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-[#778477] block">
+                        Total Sales
+                      </span>
+                      <span className="font-mono font-bold text-[#202820]">
+                        {money(c.totalSales ?? 0)}
+                      </span>
+                    </div>
+
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-[#3D7952]">
+                      <span>Profile</span>
+                      <span>→</span>
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Split Workspace (Visible only on >= md screens) */}
+          {selectedCustomer && (
+            <div className="hidden md:grid grid-cols-1 gap-5 lg:grid-cols-12 items-start">
         {/* LEFT PANE: Customers Directory List (4 cols) */}
         <div className="rounded-2xl border border-[#DCE7D9] bg-white p-4 shadow-2xs space-y-3 lg:col-span-4">
           <div className="flex items-center justify-between border-b border-[#DCE7D9]/60 pb-2.5">
@@ -371,6 +458,8 @@ export default function Customers() {
         </div>
       </div>
       )}
-    </div>
+    </>
+    )}
+  </div>
   );
 }
