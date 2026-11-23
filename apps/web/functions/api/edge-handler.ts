@@ -854,9 +854,20 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     }
     if (method === 'POST') {
       const body = (await request.json().catch(() => ({}))) as any;
+      let nextNum = 'QT/26-27/0002';
+      if (db) {
+        try {
+          const qRow: any = await db.prepare("SELECT display_number FROM quotes WHERE display_number LIKE 'QT/26-27/%' AND deleted_at IS NULL ORDER BY display_number DESC LIMIT 1").first();
+          if (qRow?.display_number) {
+            const m = qRow.display_number.match(/(\d+)$/);
+            const seq = m ? parseInt(m[1], 10) + 1 : 2;
+            nextNum = `QT/26-27/${String(seq).padStart(4, '0')}`;
+          }
+        } catch (e) {}
+      }
       const newQt = {
         id: 'qt-' + Date.now(),
-        displayNumber: 'QT/26-27/' + String(Math.floor(1000 + Math.random() * 9000)),
+        displayNumber: nextNum,
         partyType: body.partyType || 'customer',
         partyId: body.partyId || 'cust-1',
         partyName: body.partyName || 'Customer',
@@ -887,9 +898,20 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     }
     if (method === 'POST') {
       const body = (await request.json().catch(() => ({}))) as any;
+      let nextOrdNum = 'SO/26-27/0002';
+      if (db) {
+        try {
+          const oRow: any = await db.prepare("SELECT number FROM orders WHERE number LIKE 'SO/26-27/%' AND deleted_at IS NULL ORDER BY number DESC LIMIT 1").first();
+          if (oRow?.number) {
+            const m = oRow.number.match(/(\d+)$/);
+            const seq = m ? parseInt(m[1], 10) + 1 : 2;
+            nextOrdNum = `SO/26-27/${String(seq).padStart(4, '0')}`;
+          }
+        } catch (e) {}
+      }
       const newOrd = {
         id: 'ord-' + Date.now(),
-        number: 'SO/26-27/' + String(Math.floor(1000 + Math.random() * 9000)),
+        number: nextOrdNum,
         customerId: body.customerId || 'cust-1',
         customerName: body.customerName || 'Customer',
         quoteId: body.quoteId || null,
@@ -937,9 +959,20 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     }
     if (method === 'POST') {
       const body = (await request.json().catch(() => ({}))) as any;
+      let nextInvNum = 'INV/26-27/0003';
+      if (db) {
+        try {
+          const iRow: any = await db.prepare("SELECT number FROM invoices WHERE number LIKE 'INV/26-27/%' AND deleted_at IS NULL ORDER BY number DESC LIMIT 1").first();
+          if (iRow?.number) {
+            const m = iRow.number.match(/(\d+)$/);
+            const seq = m ? parseInt(m[1], 10) + 1 : 3;
+            nextInvNum = `INV/26-27/${String(seq).padStart(4, '0')}`;
+          }
+        } catch (e) {}
+      }
       const newInv = {
         id: 'inv-' + Date.now(),
-        number: 'INV/26-27/' + String(Math.floor(1000 + Math.random() * 9000)),
+        number: nextInvNum,
         customerId: body.customerId || 'cust-1',
         customerName: body.customerName || 'Customer',
         orderId: body.orderId || null,
@@ -992,9 +1025,20 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (method === 'POST') {
       const body = (await request.json().catch(() => ({}))) as any;
       const amount = Number(body.amount) || 2950000;
+      let nextPayNum = 'RCT/26-27/0002';
+      if (db) {
+        try {
+          const pRow: any = await db.prepare("SELECT receipt_no FROM payments WHERE receipt_no LIKE 'RCT/26-27/%' AND deleted_at IS NULL ORDER BY receipt_no DESC LIMIT 1").first();
+          if (pRow?.receipt_no) {
+            const m = pRow.receipt_no.match(/(\d+)$/);
+            const seq = m ? parseInt(m[1], 10) + 1 : 2;
+            nextPayNum = `RCT/26-27/${String(seq).padStart(4, '0')}`;
+          }
+        } catch (e) {}
+      }
       const newPay = {
         id: 'pay-' + Date.now(),
-        receiptNo: 'RCT/26-27/' + String(Math.floor(1000 + Math.random() * 9000)),
+        receiptNo: nextPayNum,
         customerId: body.customerId || 'cust-1',
         customerName: body.customerName || 'Customer',
         date: body.date || new Date().toISOString().slice(0, 10),
@@ -1132,14 +1176,44 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     return jsonRes({ items: [] });
   }
 
-  // 18. /admin/number-series (Requirement 4)
-  if (path === '/admin/number-series' || path === '/admin/number-series/') {
+  // 18. /admin/number-series (Requirement 4 & Issue 1)
+  if (path === '/admin/number-series' || path === '/admin/number-series/' || path.startsWith('/admin/number-series/')) {
+    if (method === 'PUT') {
+      const docType = path.split('/').pop();
+      const body = await parseBody(request);
+      return jsonRes({ success: true, docType, ...body });
+    }
+
+    let quoteLast = 'QT/26-27/0001';
+    let invLast = 'INV/26-27/0002';
+    let payLast = 'RCT/26-27/0001';
+    let ordLast = 'SO/26-27/0001';
+
+    if (db) {
+      try {
+        const qRow: any = await db.prepare("SELECT display_number FROM quotes WHERE display_number LIKE 'QT/26-27/%' AND deleted_at IS NULL ORDER BY display_number DESC LIMIT 1").first();
+        if (qRow?.display_number) quoteLast = qRow.display_number;
+        const iRow: any = await db.prepare("SELECT number FROM invoices WHERE number LIKE 'INV/26-27/%' AND deleted_at IS NULL ORDER BY number DESC LIMIT 1").first();
+        if (iRow?.number) invLast = iRow.number;
+        const pRow: any = await db.prepare("SELECT receipt_no FROM payments WHERE receipt_no LIKE 'RCT/26-27/%' AND deleted_at IS NULL ORDER BY receipt_no DESC LIMIT 1").first();
+        if (pRow?.receipt_no) payLast = pRow.receipt_no;
+        const oRow: any = await db.prepare("SELECT number FROM orders WHERE number LIKE 'SO/26-27/%' AND deleted_at IS NULL ORDER BY number DESC LIMIT 1").first();
+        if (oRow?.number) ordLast = oRow.number;
+      } catch (e) {}
+    }
+
+    const calcNext = (last: string, prefix: string, pad = 4) => {
+      const match = last ? last.match(/(\d+)$/) : null;
+      const seq = match ? parseInt(match[1], 10) + 1 : 1;
+      return `${prefix}${String(seq).padStart(pad, '0')}`;
+    };
+
     return jsonRes({
       items: [
-        { id: 'ns-1', docType: 'quote', prefix: 'QT/26-27/', pad: 4, fyReset: true },
-        { id: 'ns-2', docType: 'invoice', prefix: 'INV/26-27/', pad: 4, fyReset: true },
-        { id: 'ns-3', docType: 'payment', prefix: 'RCT/26-27/', pad: 4, fyReset: true },
-        { id: 'ns-4', docType: 'order', prefix: 'SO/26-27/', pad: 4, fyReset: true },
+        { id: 'ns-1', docType: 'quote', prefix: 'QT/26-27/', pad: 4, fyReset: true, lastNumber: quoteLast, nextNumber: calcNext(quoteLast, 'QT/26-27/', 4) },
+        { id: 'ns-2', docType: 'invoice', prefix: 'INV/26-27/', pad: 4, fyReset: true, lastNumber: invLast, nextNumber: calcNext(invLast, 'INV/26-27/', 4) },
+        { id: 'ns-3', docType: 'payment', prefix: 'RCT/26-27/', pad: 4, fyReset: true, lastNumber: payLast, nextNumber: calcNext(payLast, 'RCT/26-27/', 4) },
+        { id: 'ns-4', docType: 'order', prefix: 'SO/26-27/', pad: 4, fyReset: true, lastNumber: ordLast, nextNumber: calcNext(ordLast, 'SO/26-27/', 4) },
       ],
     });
   }

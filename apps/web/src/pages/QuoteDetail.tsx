@@ -7,8 +7,19 @@ import { useAuth } from '../lib/auth';
 import { date, money, relative } from '../lib/format';
 import { useAction } from '../features/hooks';
 import { DocPreview } from '../features/DocPreview';
-import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, Field, KeyValue, LinkButton, PageHeader, Skeleton, Textarea, toast } from '../ui';
+import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, Field, KeyValue, LinkButton, PageHeader, Skeleton, Table, Textarea, toast } from '../ui';
 import { errorToast } from '../ui/toast';
+
+interface QuoteLine {
+  id: string;
+  kind?: string;
+  description: string;
+  qty: number;
+  rate: number;
+  taxRatePct?: number;
+  amount: number;
+  unit?: string;
+}
 
 interface Quote {
   id: string;
@@ -22,7 +33,17 @@ interface Quote {
   ownerId: string;
   date: string;
   validUntil: string;
-  totals: { grandTotal: number; maxDiscountPct: number };
+  totals: {
+    grandTotal: number;
+    subTotal?: number;
+    taxable?: number;
+    cgst?: number;
+    sgst?: number;
+    igst?: number;
+    discountTotal?: number;
+    maxDiscountPct?: number;
+  };
+  lines?: QuoteLine[];
   maxDiscountPct: number;
   viewCount: number;
   lastViewedAt: string | null;
@@ -110,7 +131,36 @@ export default function QuoteDetail() {
       {d.response && <div className="mb-3"><Banner tone={d.response.type === 'accept' ? 'success' : 'warning'}>{d.response.onBehalf ? 'Accepted on the customer’s behalf' : `Customer ${d.response.type === 'accept' ? `accepted (signed “${d.response.name}”)` : d.response.type === 'changes' ? 'requested changes' : 'rejected'}`}{d.response.comment ? `: “${d.response.comment}”` : ''} · {relative(d.response.at)}</Banner></div>}
       {d.status === 'superseded' && <div className="mb-3"><Banner tone="info">A newer revision replaced this quotation.</Banner></div>}
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
-        <DocPreview type="quote" id={id} version={d.version} />
+        <div className="flex flex-col gap-4">
+          <DocPreview type="quote" id={id} version={d.version} />
+          <Card title="Line items">
+            <Table
+              rows={(d.lines ?? []).filter((l) => l.kind !== 'heading')}
+              columns={[
+                { key: 'description', label: 'Item / Description' },
+                { key: 'qty', label: 'Qty', align: 'right', render: (l) => `${l.qty} ${l.unit ?? ''}` },
+                { key: 'rate', label: 'Rate', align: 'right', render: (l) => money(l.rate ?? 0) },
+                { key: 'taxRatePct', label: 'GST', align: 'right', render: (l) => `${l.taxRatePct ?? 18}%` },
+                { key: 'amount', label: 'Amount', align: 'right', render: (l) => money(l.amount ?? (l.qty * l.rate) ?? 0) },
+              ]}
+              empty={<p className="text-sm text-muted">No line items specified.</p>}
+            />
+            <div className="mt-4 flex flex-col items-end gap-1.5 border-t border-[#DCE7D9] pt-3 text-xs">
+              <div className="flex w-64 justify-between text-[#778477]">
+                <span>Taxable Subtotal:</span>
+                <span className="font-medium text-[#202820]">{money(d.totals?.subTotal ?? d.totals?.taxable ?? Math.round((d.totals?.grandTotal ?? 0) / 1.18))}</span>
+              </div>
+              <div className="flex w-64 justify-between text-[#778477]">
+                <span>GST ({((d.totals?.cgst ?? 0) + (d.totals?.sgst ?? 0) > 0) ? 'CGST + SGST 18%' : 'IGST 18%'}):</span>
+                <span className="font-medium text-[#202820]">{money(((d.totals?.cgst ?? 0) + (d.totals?.sgst ?? 0) + (d.totals?.igst ?? 0)) || Math.round((d.totals?.grandTotal ?? 0) - (d.totals?.grandTotal ?? 0) / 1.18))}</span>
+              </div>
+              <div className="flex w-64 justify-between border-t border-[#DCE7D9] pt-1.5 text-sm font-bold text-[#202820]">
+                <span>Grand Total:</span>
+                <span className="text-[#3D7952]">{money(d.totals?.grandTotal ?? 0)}</span>
+              </div>
+            </div>
+          </Card>
+        </div>
         <div className="flex flex-col gap-4">
           <Card title="Summary">
             <KeyValue items={[['Total', money(d.totals?.grandTotal ?? 0)], ['Date', date(d.date)], ['Valid until', date(d.validUntil)], ['Viewed', d.viewCount ? `${d.viewCount} times, last ${relative(d.lastViewedAt)}` : 'Not yet'], ['PDF', d.pdf?.status === 'failed' ? 'Failed — regenerate' : (d.pdf?.status ?? 'ready')]]} />

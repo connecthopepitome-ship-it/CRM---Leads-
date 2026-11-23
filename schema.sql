@@ -212,3 +212,4 @@ INSERT OR IGNORE INTO users (id, username, full_name, role, status, created_at)
 VALUES
   ('u_admin', 'admin', 'Owner Admin', 'admin', 'active', '2026-11-01T00:00:00Z'),
   ('u_sales_mgr', 'manager', 'Suresh Kumar', 'sales_manager', 'active', '2026-11-01T00:00:00Z');
+

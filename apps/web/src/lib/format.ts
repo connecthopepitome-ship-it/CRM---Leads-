@@ -56,3 +56,37 @@ export const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now(
 export const label = (s: string | null | undefined) => (s ? s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) : '');
 /** rupees string → paise */
 export const toPaise = (v: string | number) => Math.round(Number(String(v).replace(/[₹,\s]/g, '')) * 100) || 0;
+
+export const STAGE_LABELS: Record<string, string> = {
+  new: 'New',
+  contacted: 'Contacted',
+  interested: 'Interested',
+  quotation_sent: 'Quotation Sent',
+  negotiation: 'Negotiation',
+  won: 'Won',
+  lost: 'Lost',
+  junk: 'Junk',
+};
+
+export function getStageLabel(stage: string | null | undefined): string {
+  if (!stage) return 'New';
+  return STAGE_LABELS[stage.toLowerCase()] ?? label(stage);
+}
+
+export function formatSla(status?: string | null, dueAt?: string | null): { text: string; tone: 'warning' | 'danger' | 'success' | 'neutral' } {
+  if (status === 'met') return { text: 'Met SLA', tone: 'success' };
+  if (status === 'breached') return { text: 'Breached SLA', tone: 'danger' };
+  if (!dueAt) return { text: status ? label(status) : '—', tone: 'neutral' };
+
+  try {
+    const rel = relative(dueAt);
+    const isPast = new Date(dueAt).getTime() < Date.now();
+    if (isPast) {
+      return { text: `Overdue (${rel})`, tone: 'danger' };
+    }
+    const cleanRel = rel.replace(/^in\s+/, '');
+    return { text: `Due in ${cleanRel}`, tone: 'warning' };
+  } catch {
+    return { text: 'Pending SLA', tone: 'warning' };
+  }
+}

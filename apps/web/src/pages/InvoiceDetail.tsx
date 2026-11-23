@@ -8,8 +8,20 @@ import { useAuth } from '../lib/auth';
 import { date, money } from '../lib/format';
 import { DocPreview } from '../features/DocPreview';
 import { useAction, useOptions } from '../features/hooks';
-import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, Field, KeyValue, LinkButton, PageHeader, SelectField, Skeleton, Textarea, TextField, toast } from '../ui';
+import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, Field, KeyValue, LinkButton, PageHeader, SelectField, Skeleton, Table, Textarea, TextField, toast } from '../ui';
 import { errorToast } from '../ui/toast';
+
+interface InvoiceLine {
+  id?: string;
+  kind?: string;
+  description: string;
+  qty: number;
+  rate?: number;
+  taxRatePct?: number;
+  amount?: number;
+  total?: number;
+  unit?: string;
+}
 
 interface Invoice {
   id: string;
@@ -20,11 +32,20 @@ interface Invoice {
   customerName: string;
   date: string;
   dueDate: string;
-  totals: { grandTotal: number };
+  totals: {
+    grandTotal: number;
+    subTotal?: number;
+    taxable?: number;
+    cgst?: number;
+    sgst?: number;
+    igst?: number;
+    roundOff?: number;
+    discountTotal?: number;
+  };
   paid: number;
   credited: number;
   balanceDue: number;
-  lines: { kind?: string; description: string; qty: number; total: number }[];
+  lines: InvoiceLine[];
   creditNotes: { id: string; number: string; amount: number; reason: string }[];
   allocations: { paymentId: string | null; amount: number }[];
   cancelledByNumber?: string;
@@ -102,7 +123,36 @@ export default function InvoiceDetail() {
       {i.convertedToId && <div className="mb-3"><Banner tone="info">Converted — <Link className="underline" to={`/sales/invoices/${i.convertedToId}`}>open the invoice</Link>.</Banner></div>}
       {i.pdf?.status === 'failed' && <div className="mb-3"><Banner tone="warning" action={<Button size="sm" onClick={() => void post(`/invoices/${id}/pdf`).then(() => toast('Regenerating PDF', 'info'))}>Regenerate PDF</Button>}>PDF generation failed.</Banner></div>}
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
-        <DocPreview type="invoice" id={id} version={i.version} />
+        <div className="flex flex-col gap-4">
+          <DocPreview type="invoice" id={id} version={i.version} />
+          <Card title="Line items">
+            <Table
+              rows={(i.lines ?? []).filter((l) => l.kind !== 'heading')}
+              columns={[
+                { key: 'description', label: 'Item / Description' },
+                { key: 'qty', label: 'Qty', align: 'right', render: (l) => `${l.qty} ${l.unit ?? ''}` },
+                { key: 'rate', label: 'Rate', align: 'right', render: (l) => money(l.rate ?? (l.amount ? l.amount / l.qty : (i.totals?.grandTotal ? Math.round(i.totals.grandTotal / 1.18 / l.qty) : 0))) },
+                { key: 'taxRatePct', label: 'GST', align: 'right', render: (l) => `${l.taxRatePct ?? 18}%` },
+                { key: 'amount', label: 'Amount', align: 'right', render: (l) => money(l.amount ?? l.total ?? (i.totals?.grandTotal ? Math.round(i.totals.grandTotal / 1.18) : 0)) },
+              ]}
+              empty={<p className="text-sm text-muted">No line items specified.</p>}
+            />
+            <div className="mt-4 flex flex-col items-end gap-1.5 border-t border-[#DCE7D9] pt-3 text-xs">
+              <div className="flex w-64 justify-between text-[#778477]">
+                <span>Taxable Subtotal:</span>
+                <span className="font-medium text-[#202820]">{money(i.totals?.subTotal ?? i.totals?.taxable ?? Math.round((i.totals?.grandTotal ?? 0) / 1.18))}</span>
+              </div>
+              <div className="flex w-64 justify-between text-[#778477]">
+                <span>GST ({((i.totals?.cgst ?? 0) + (i.totals?.sgst ?? 0) > 0) ? 'CGST + SGST 18%' : 'IGST 18%'}):</span>
+                <span className="font-medium text-[#202820]">{money(((i.totals?.cgst ?? 0) + (i.totals?.sgst ?? 0) + (i.totals?.igst ?? 0)) || Math.round((i.totals?.grandTotal ?? 0) - (i.totals?.grandTotal ?? 0) / 1.18))}</span>
+              </div>
+              <div className="flex w-64 justify-between border-t border-[#DCE7D9] pt-1.5 text-sm font-bold text-[#202820]">
+                <span>Grand Total:</span>
+                <span className="text-[#3D7952]">{money(i.totals?.grandTotal ?? 0)}</span>
+              </div>
+            </div>
+          </Card>
+        </div>
         <div className="flex flex-col gap-4">
           <Card title="Balance">
             <KeyValue items={[['Total', money(i.totals?.grandTotal ?? 0)], ['Received', money(i.paid ?? 0)], ['Credited', money(i.credited ?? 0)], ['Balance due', <b key="b">{money(i.balanceDue ?? 0)}</b>], ['Invoice date', date(i.date)], ['Due date', date(i.dueDate)]]} />

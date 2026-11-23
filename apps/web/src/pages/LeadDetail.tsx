@@ -2,14 +2,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { get, post } from '../lib/api';
+import { del, get, post } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { cachePut, cacheGet } from '../lib/outbox';
-import { dateTime, label, money, relative } from '../lib/format';
+import { dateTime, formatSla, getStageLabel, label, money, relative } from '../lib/format';
 import { ActionBar, Timeline } from '../features/engagement';
 import { useAction, useOptions, type Lead } from '../features/hooks';
 import { StageDialog } from '../features/StageDialog';
 import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, KeyValue, LinkButton, PageHeader, Select, Skeleton, toast } from '../ui';
+import { errorToast } from '../ui/toast';
 
 export default function LeadDetail() {
   const { id = '' } = useParams();
@@ -39,6 +40,8 @@ export default function LeadDetail() {
   });
   const [stageTo, setStageTo] = useState<string | null>(null);
   const [convert, setConvert] = useState(params.get('convert') === '1');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   useEffect(() => setConvert(params.get('convert') === '1'), [params]);
   const reopen = useAction(() => post(`/leads/${id}/reopen`), [['lead', id], ['timeline', id]], () => toast('Lead reopened'));
 
@@ -57,6 +60,17 @@ export default function LeadDetail() {
   const l = q.data;
   if (l.mergedIntoId) return <Navigate to={`/leads/${l.mergedIntoId}`} replace />;
   const closed = ['won', 'lost', 'junk'].includes(l.stage);
+  const stageOptions = stages.data?.length ? stages.data : [
+    { id: 'stg-1', key: 'new', label: 'New' },
+    { id: 'stg-2', key: 'contacted', label: 'Contacted' },
+    { id: 'stg-3', key: 'interested', label: 'Interested' },
+    { id: 'stg-4', key: 'quotation_sent', label: 'Quotation Sent' },
+    { id: 'stg-5', key: 'negotiation', label: 'Negotiation' },
+    { id: 'stg-6', key: 'won', label: 'Won' },
+    { id: 'stg-7', key: 'lost', label: 'Lost' },
+  ];
+  const sla = formatSla(l.slaStatus, l.slaDueAt);
+
   return (
     <>
       <PageHeader back="/leads" title={l.name} subtitle={[l.company, l.city].filter(Boolean).join(' · ')} actions={<>
@@ -64,6 +78,7 @@ export default function LeadDetail() {
         {!closed && <Button variant="primary" onClick={() => setConvert(true)}>Convert to customer</Button>}
         {closed && perm('lead:reopen') && <Button variant="secondary" busy={reopen.isPending} onClick={() => reopen.mutate(undefined)}>Reopen</Button>}
         <LinkButton to={`/leads/${l.id}/edit`} variant="ghost">Edit</LinkButton>
+        <Button variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => setConfirmDelete(true)}>Delete</Button>
       </>} />
       {offline && <div className="mb-3"><Banner tone="warning">Offline — showing this lead as last synced.</Banner></div>}
       {l.customerId && <div className="mb-3"><Banner tone="success" action={<LinkButton to={`/customers/${l.customerId}`} variant="ghost">Open customer</LinkButton>}>{l.stage === 'won' ? 'Converted to a customer.' : 'This person is an existing customer.'}</Banner></div>}
@@ -72,16 +87,21 @@ export default function LeadDetail() {
         <Timeline recordType="lead" recordId={l.id} />
         <div className="flex flex-col gap-4">
           <Card title="Details">
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <label className="text-sm" htmlFor="stage">Stage</label>
-              <Select id="stage" value={l.stage} disabled={closed} onChange={(e) => setStageTo(e.target.value)} className="flex-1">
-                {stages.data?.map((s) => <option key={s.id} value={String(s.key)}>{s.label}</option>)}
-              </Select>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <label className="text-sm font-medium text-slate-700" htmlFor="stage">Stage</label>
+              <div className="flex items-center gap-2">
+                <Badge status={l.stage}>{getStageLabel(l.stage)}</Badge>
+                {!closed && (
+                  <Select id="stage" value={l.stage} onChange={(e) => setStageTo(e.target.value)} className="text-xs py-1">
+                    {stageOptions.map((s) => <option key={s.id} value={String(s.key)}>{s.label}</option>)}
+                  </Select>
+                )}
+              </div>
             </div>
             <KeyValue items={[
               ['Phone', l.phone ?? (l.phoneRaw ? <span>{l.phoneRaw} <Badge tone="warning">Check number</Badge></span> : null)],
               ['Email', l.email],
-              ['First-contact SLA', <Badge key="s" status={l.slaStatus}>{l.slaStatus === 'pending' ? `due ${relative(l.slaDueAt)}` : label(l.slaStatus)}</Badge>],
+              ['First-contact SLA', <Badge key="s" status={l.slaStatus}>{sla.text}</Badge>],
               ['Next follow-up', l.nextFollowUpAt ? dateTime(l.nextFollowUpAt) : null],
               ['Expected value', l.expectedValue ? money(l.expectedValue) : null],
               ['Consent', label(l.consentBasis)],
@@ -95,6 +115,37 @@ export default function LeadDetail() {
       </div>
       {stageTo && <StageDialog lead={l} to={stageTo} onClose={() => setStageTo(null)} />}
       {convert && <ConvertDialog lead={l} onClose={() => { setConvert(false); nav(`/leads/${l.id}`, { replace: true }); }} />}
+      {confirmDelete && (
+        <Dialog
+          open
+          onClose={() => setConfirmDelete(false)}
+          title="Delete Lead"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+              <Button
+                variant="danger"
+                busy={deleting}
+                onClick={async () => {
+                  setDeleting(true);
+                  try {
+                    await del(`/leads/${l.id}`);
+                    toast('Lead deleted successfully');
+                    nav('/leads', { replace: true });
+                  } catch (e) {
+                    errorToast(e);
+                    setDeleting(false);
+                  }
+                }}
+              >
+                Delete
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm">Are you sure you want to delete lead <b>{l.name}</b>? This action will remove the lead and preserve an audit log.</p>
+        </Dialog>
+      )}
     </>
   );
 }

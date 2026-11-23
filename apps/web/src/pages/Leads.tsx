@@ -5,7 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { get, post } from '../lib/api';
 import { useTerm } from '../lib/appConfig';
 import { useAuth } from '../lib/auth';
-import { money, relative } from '../lib/format';
+import { formatSla, getStageLabel, money, relative } from '../lib/format';
 import { useAction, useOptions, useUsers, type Lead } from '../features/hooks';
 import { StageDialog } from '../features/StageDialog';
 import { Badge, Button, EmptyState, ErrorState, Input, LinkButton, PageHeader, Select, Skeleton, Table, toast } from '../ui';
@@ -438,13 +438,11 @@ export default function Leads() {
 
                       {/* SLA */}
                       <td className="px-4 py-3.5 text-xs text-[#778477]">
-                        {lead.slaStatus === 'pending' ? (
-                          <span className="text-[#D99A45] font-medium">Due in 2 days</span>
-                        ) : lead.slaStatus === 'breached' ? (
-                          <span className="text-[#D66B68] font-medium">Due today</span>
-                        ) : (
-                          <span className="text-[#3D7952] font-medium">Met SLA</span>
-                        )}
+                        {(() => {
+                          const sla = formatSla(lead.slaStatus, lead.slaDueAt);
+                          const cls = sla.tone === 'danger' ? 'text-[#D66B68] font-medium' : sla.tone === 'warning' ? 'text-[#D99A45] font-medium' : 'text-[#3D7952] font-medium';
+                          return <span className={cls}>{sla.text}</span>;
+                        })()}
                       </td>
 
                       {/* Next Follow-up */}

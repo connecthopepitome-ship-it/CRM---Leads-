@@ -2,12 +2,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { get, post, waitForJob, download } from '../lib/api';
+import { del, get, post, waitForJob, download } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { date, label, money, today } from '../lib/format';
 import { ActionBar, Timeline } from '../features/engagement';
 import { Files } from '../features/Files';
-import { Badge, Button, Card, EmptyState, ErrorState, LinkButton, PageHeader, Skeleton, StatTile, Table, Tabs, TextField, toast } from '../ui';
+import { Badge, Button, Card, Dialog, EmptyState, ErrorState, LinkButton, PageHeader, Skeleton, StatTile, Table, Tabs, TextField, toast } from '../ui';
 import { errorToast } from '../ui/toast';
 
 interface C360 {
@@ -29,9 +29,12 @@ const TAB_LABEL: Record<string, string> = { overview: 'Overview', orders: 'Order
 
 export default function Customer360() {
   const { id = '' } = useParams();
+  const nav = useNavigate();
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') ?? 'overview';
   const { can } = useAuth();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const q = useQuery({ queryKey: ['c360', id], queryFn: () => get<C360>(`/customers/${id}/360`), enabled: Boolean(id && id !== 'undefined') });
   const detail = useQuery({ queryKey: ['customer', id], queryFn: () => get<C360['customer'] & { contacts: Contact[]; addresses: { line1: string; city: string }[] }>(`/customers/${id}`), enabled: Boolean(id && id !== 'undefined') });
   if (q.isLoading) return <Skeleton rows={6} />;
@@ -54,6 +57,7 @@ export default function Customer360() {
       <PageHeader back="/customers" title={customer.displayName} subtitle={`${customer.code}${customer.gstin ? ` · GSTIN ${customer.gstin}` : ''}`} actions={<>
         {can('quote', 'create') && <LinkButton to={`/sales/quotes/new?partyType=customer&partyId=${customer.id}`} variant="primary">New quote</LinkButton>}
         {can('payment', 'create') && <LinkButton to={`/sales/payments/new?customerId=${customer.id}`}>Record payment</LinkButton>}
+        <Button variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => setConfirmDelete(true)}>Delete</Button>
       </>} />
       <div className="mb-4"><ActionBar rec={{ recordType: 'customer', recordId: customer.id, name: primary?.name ?? customer.displayName, phone: primary?.phone ?? null, email: primary?.email ?? null, address: detail.data?.addresses?.[0] ? `${detail.data.addresses[0].line1}, ${detail.data.addresses[0].city}` : null }} /></div>
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -90,6 +94,37 @@ export default function Customer360() {
         <Table<Contact> rows={contacts} columns={[{ key: 'name', label: 'Name' }, { key: 'role', label: 'Role', render: (c) => label(c.role) }, { key: 'phone', label: 'Phone', render: (c) => c.phone ?? '—' }, { key: 'email', label: 'Email', render: (c) => c.email ?? '—' }, { key: 'p', label: '', render: (c) => (c.isPrimary ? <Badge tone="info">Primary</Badge> : null) }]} />
       )}
       {tab === 'documents' && <Files recordType="customer" recordId={customer.id} />}
+      {confirmDelete && (
+        <Dialog
+          open
+          onClose={() => setConfirmDelete(false)}
+          title="Delete Customer"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+              <Button
+                variant="danger"
+                busy={deleting}
+                onClick={async () => {
+                  setDeleting(true);
+                  try {
+                    await del(`/customers/${customer.id}`);
+                    toast('Customer deleted successfully');
+                    nav('/customers', { replace: true });
+                  } catch (e) {
+                    errorToast(e);
+                    setDeleting(false);
+                  }
+                }}
+              >
+                Delete
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm">Are you sure you want to delete customer <b>{customer.displayName}</b>? This action will remove the customer and record an audit log.</p>
+        </Dialog>
+      )}
     </>
   );
 }
