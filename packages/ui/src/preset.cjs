@@ -3,7 +3,7 @@ const c = (v) => `rgb(var(--color-${v}) / <alpha-value>)`;
 module.exports = {
   darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
-    screens: { sm: '360px', md: '768px', lg: '1024px', xl: '1280px', '2xl': '1536px' },
+    screens: { xs: '360px', sm: '640px', md: '768px', lg: '1024px', xl: '1280px', '2xl': '1536px' },
     extend: {
       colors: {
         bg: c('bg'), surface: c('surface'), 'surface-2': c('surface-2'), text: c('text'), muted: c('text-muted'), border: c('border'), 'border-input': c('border-input'),

@@ -144,8 +144,8 @@ export default function InvoiceDetail() {
       {/* ============================================================== */}
       {/* PHASE 3: REBUILT INVOICE HEADER & RESPONSIVE ACTIONS */}
       {/* ============================================================== */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-[#DCE7D9]/60 pb-5">
-        <div className="min-w-0 max-w-full">
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 border-b border-[#DCE7D9]/60 pb-5">
+        <div className="w-full md:w-auto min-w-0 max-w-full">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[10px] uppercase font-bold tracking-wider text-[#778477]">
               {i.type === 'proforma' ? 'Proforma Invoice' : 'Tax Invoice'}
@@ -154,8 +154,7 @@ export default function InvoiceDetail() {
           </div>
 
           <h1
-            className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#202820] font-mono break-normal whitespace-normal max-w-full overflow-wrap-normal"
-            style={{ wordBreak: 'normal', overflowWrap: 'normal', whiteSpace: 'normal' }}
+            className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#202820] font-mono break-all sm:break-normal max-w-full"
           >
             {i.number ?? `Draft ${i.type === 'proforma' ? 'proforma' : 'invoice'}`}
           </h1>
@@ -165,8 +164,8 @@ export default function InvoiceDetail() {
           </p>
         </div>
 
-        {/* Desktop Action Buttons (Visible only on >= sm screens) */}
-        <div className="hidden sm:flex flex-wrap items-center gap-2">
+        {/* Desktop Action Buttons (Visible only on >= md screens) */}
+        <div className="hidden md:flex flex-wrap items-center gap-2">
           {draft && perm('invoice:issue') && (
             <Button busy={issue.isPending} onClick={() => issue.mutate(undefined)}>
               Issue invoice
@@ -195,8 +194,8 @@ export default function InvoiceDetail() {
         </div>
       </div>
 
-      {/* Mobile Responsive Action Rows (Visible only on < sm screens) */}
-      <div className="flex flex-col gap-2.5 sm:hidden">
+      {/* Mobile Responsive Action Rows (Visible only on < md screens) */}
+      <div className="flex flex-col gap-2.5 md:hidden">
         {!draft && (
           <Button
             onClick={() => void share('whatsapp')}
@@ -299,7 +298,7 @@ export default function InvoiceDetail() {
       {/* PHASE 3: CUSTOMER INFORMATION FULL-WIDTH CARD */}
       {/* ============================================================== */}
       <Card title="Customer Information">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
           <div>
             <span className="text-[10px] uppercase font-bold tracking-wider text-[#778477] block mb-1">
               Customer Name
@@ -341,7 +340,7 @@ export default function InvoiceDetail() {
             </div>
           </div>
 
-          <div className="pt-2 border-t border-[#DCE7D9]/60 sm:border-0 sm:pt-0">
+          <div className="pt-2 border-t border-[#DCE7D9]/60 md:border-0 md:pt-0">
             <span className="text-[10px] uppercase font-bold tracking-wider text-[#778477] block mb-1">
               Invoice Date
             </span>
@@ -351,7 +350,7 @@ export default function InvoiceDetail() {
             </div>
           </div>
 
-          <div className="pt-2 border-t border-[#DCE7D9]/60 sm:border-0 sm:pt-0">
+          <div className="pt-2 border-t border-[#DCE7D9]/60 md:border-0 md:pt-0">
             <span className="text-[10px] uppercase font-bold tracking-wider text-[#778477] block mb-1">
               Payment Due Date
             </span>
@@ -361,7 +360,7 @@ export default function InvoiceDetail() {
             </div>
           </div>
 
-          <div className="pt-2 border-t border-[#DCE7D9]/60 sm:border-0 sm:pt-0">
+          <div className="pt-2 border-t border-[#DCE7D9]/60 md:border-0 md:pt-0">
             <span className="text-[10px] uppercase font-bold tracking-wider text-[#778477] block mb-1">
               Payment Status
             </span>

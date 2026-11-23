@@ -149,8 +149,8 @@ export default function QuoteDetail() {
       </div>
 
       {/* Header & Responsive Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-[#DCE7D9]/60 pb-5">
-        <div className="min-w-0 max-w-full">
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 border-b border-[#DCE7D9]/60 pb-5">
+        <div className="w-full md:w-auto min-w-0 max-w-full">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[10px] uppercase font-bold tracking-wider text-[#778477]">
               Commercial Quotation
@@ -159,8 +159,7 @@ export default function QuoteDetail() {
           </div>
 
           <h1
-            className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#202820] font-mono break-normal whitespace-normal max-w-full overflow-wrap-normal"
-            style={{ wordBreak: 'normal', overflowWrap: 'normal', whiteSpace: 'normal' }}
+            className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#202820] font-mono break-all sm:break-normal max-w-full"
           >
             {d.displayNumber ?? 'Draft Quotation'}
           </h1>
@@ -170,8 +169,8 @@ export default function QuoteDetail() {
           </p>
         </div>
 
-        {/* Desktop Actions (Visible on >= sm) */}
-        <div className="hidden sm:flex flex-wrap items-center gap-2">
+        {/* Desktop Actions (Visible on >= md) */}
+        <div className="hidden md:flex flex-wrap items-center gap-2">
           {editable && <LinkButton to={`/sales/quotes/${id}/edit`} variant="secondary">Edit</LinkButton>}
           {editable && (
             <Button busy={send.isPending} onClick={() => send.mutate('whatsapp')} className="bg-[#25D366] hover:bg-[#20bd5a] text-white">
@@ -200,8 +199,8 @@ export default function QuoteDetail() {
         </div>
       </div>
 
-      {/* Mobile Actions (Visible on < sm) */}
-      <div className="flex flex-col gap-2.5 sm:hidden">
+      {/* Mobile Actions (Visible on < md) */}
+      <div className="flex flex-col gap-2.5 md:hidden">
         {editable && (
           <Button
             busy={send.isPending}
