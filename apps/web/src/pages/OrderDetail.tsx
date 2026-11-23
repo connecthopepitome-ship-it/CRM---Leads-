@@ -43,16 +43,17 @@ export default function OrderDetail() {
   const invoice = useAction(() => post<{ id: string }>('/invoices', { type: cfg?.gstRegistered === false ? 'bill_of_supply' : 'tax_invoice', orderId: id }), [['order', id], ['sales']], (r) => nav(`/sales/invoices/${r.id}`));
 
   if (q.isLoading) return <Skeleton rows={6} />;
-  if (q.isError) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
-  if (!q.data) {
+  const is404 = !q.data || (q.error as any)?.status === 404 || (q.error as any)?.code === 'NOT_FOUND';
+  if (is404) {
     return (
       <EmptyState
         title="Order not found"
-        description="The requested order does not exist."
+        description="The requested order does not exist or has been removed."
         action={<LinkButton to="/sales?tab=orders">Back to orders</LinkButton>}
       />
     );
   }
+  if (q.error || q.isError) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
   const o = q.data;
   const lines = Array.isArray(o.lines) ? o.lines : [];
   const invoices = Array.isArray(o.invoices) ? o.invoices : [];

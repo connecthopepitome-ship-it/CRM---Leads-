@@ -47,16 +47,17 @@ export default function PaymentDetail() {
     }
   };
   if (q.isLoading) return <Skeleton rows={5} />;
-  if (q.error) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
-  if (!q.data) {
+  const is404 = !q.data || (q.error as any)?.status === 404 || (q.error as any)?.code === 'NOT_FOUND';
+  if (is404) {
     return (
       <EmptyState
         title="Payment not found"
-        description="The requested receipt does not exist."
+        description="The requested payment receipt does not exist or has been removed."
         action={<LinkButton to="/sales?tab=payments">Back to payments</LinkButton>}
       />
     );
   }
+  if (q.error) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
   const p = q.data;
   return (
     <>

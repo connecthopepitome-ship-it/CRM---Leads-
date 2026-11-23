@@ -73,16 +73,17 @@ export default function InvoiceDetail() {
   };
 
   if (q.isLoading) return <Skeleton rows={6} />;
-  if (q.error) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
-  if (!q.data) {
+  const is404 = !q.data || (q.error as any)?.status === 404 || (q.error as any)?.code === 'NOT_FOUND';
+  if (is404) {
     return (
       <EmptyState
         title="Invoice not found"
-        description="The requested invoice does not exist."
+        description="The requested invoice does not exist or has been removed."
         action={<LinkButton to="/sales?tab=invoices">Back to invoices</LinkButton>}
       />
     );
   }
+  if (q.error) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
   const i = q.data;
   const draft = i.status === 'draft';
   const live = ['issued', 'partly_paid'].includes(i.status);

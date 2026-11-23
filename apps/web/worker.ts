@@ -10,6 +10,7 @@ export interface WorkerEnv {
   ASSETS: { fetch(request: Request): Promise<Response> };
   API_ORIGIN: string;
   EDGE_HMAC_SECRET: string;
+  DB?: any;
 }
 
 export default {

@@ -16,7 +16,8 @@ export function SignIn() {
   const [newPw2, setNewPw2] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const next = params.get('next') ?? '/';
+  const rawNext = params.get('next') ?? '/';
+  const next = rawNext && !rawNext.startsWith('/sign-in') ? rawNext : '/';
 
   if (ready && user && !user.mustChangePassword) return <Navigate to={next} replace />;
 
@@ -36,6 +37,7 @@ export function SignIn() {
 
   const enterDemo = async () => {
     setBusy(true);
+    setError(null);
     localStorage.removeItem('ss-signed-out');
     localStorage.setItem('ss-demo-active', 'true');
     try {
@@ -123,6 +125,7 @@ export function SignIn() {
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              hint="Demo login: admin / ChangeMe!2026"
               required
             />
 

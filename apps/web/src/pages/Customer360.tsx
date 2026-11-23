@@ -35,16 +35,17 @@ export default function Customer360() {
   const q = useQuery({ queryKey: ['c360', id], queryFn: () => get<C360>(`/customers/${id}/360`), enabled: Boolean(id && id !== 'undefined') });
   const detail = useQuery({ queryKey: ['customer', id], queryFn: () => get<C360['customer'] & { contacts: Contact[]; addresses: { line1: string; city: string }[] }>(`/customers/${id}`), enabled: Boolean(id && id !== 'undefined') });
   if (q.isLoading) return <Skeleton rows={6} />;
-  if (q.error) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
-  if (!q.data || !q.data.customer) {
+  const is404 = !q.data || !q.data.customer || (q.error as any)?.status === 404 || (q.error as any)?.code === 'NOT_FOUND';
+  if (is404) {
     return (
       <EmptyState
         title="Customer not found"
-        description="The requested customer does not exist."
+        description="The requested customer does not exist or has been removed."
         action={<LinkButton to="/customers">Back to customers</LinkButton>}
       />
     );
   }
+  if (q.error) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
   const { customer, kpis = {}, ageing, tabs = [] } = q.data;
   const contacts = detail.data?.contacts ?? [];
   const primary = contacts.find((c) => c.isPrimary) ?? contacts[0];

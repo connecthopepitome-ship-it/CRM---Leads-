@@ -23,21 +23,16 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-if ('serviceWorker' in navigator) {
-  void import('virtual:pwa-register').then(({ registerSW }) => {
-    const updateSW = registerSW({
-      immediate: true,
-      onNeedRefresh() {
-        void updateSW(true);
-      },
-      onRegisteredSW(_swUrl, r) {
-        if (r) {
-          void r.update();
-          setInterval(() => {
-            void r.update();
-          }, 30 * 1000);
-        }
-      },
-    });
-  });
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  void import('virtual:pwa-register')
+    .then(({ registerSW }) => {
+      registerSW({
+        immediate: true,
+        onNeedRefresh() {},
+        onRegisterError(err) {
+          console.debug('SW register skipped:', err);
+        },
+      });
+    })
+    .catch(() => {});
 }

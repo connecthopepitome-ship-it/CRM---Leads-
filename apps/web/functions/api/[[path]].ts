@@ -13,6 +13,7 @@ import { handleEdgeApi } from './edge-handler';
 interface Env {
   API_ORIGIN: string;
   EDGE_HMAC_SECRET: string;
+  DB?: any;
 }
 interface Ctx {
   request: Request;
@@ -49,12 +50,12 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
     if (!env.API_ORIGIN) missing.push('API_ORIGIN');
     if (!env.EDGE_HMAC_SECRET) missing.push('EDGE_HMAC_SECRET');
     console.warn(`EDGE_NOT_CONFIGURED: Missing required environment variable(s): ${missing.join(', ')}. Serving via Edge API handler fallback.`);
-    return handleEdgeApi(request);
+    return handleEdgeApi(request, env.DB);
   }
 
   // If designated edge origin or local edge mode, handle directly
   if (env.API_ORIGIN.includes('salesphere.live') || env.API_ORIGIN.includes('internal') || env.API_ORIGIN === 'edge') {
-    return handleEdgeApi(request);
+    return handleEdgeApi(request, env.DB);
   }
 
   const headers = new Headers(request.headers);
@@ -77,6 +78,6 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
     return out;
   } catch (err: any) {
     console.warn(`Upstream fetch to ${env.API_ORIGIN} failed (${err?.message || err}), falling back to edge API handler`);
-    return handleEdgeApi(request);
+    return handleEdgeApi(request, env.DB);
   }
 };

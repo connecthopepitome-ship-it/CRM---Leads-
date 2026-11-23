@@ -35,7 +35,7 @@ export function refresh(): Promise<{ accessToken: string; user: unknown } | null
   const run = async () => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1200);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       const r = await fetch('/api/v1/auth/refresh', {
         method: 'POST',
         credentials: 'include',
@@ -72,7 +72,7 @@ export async function api<T = unknown>(path: string, opts: RequestOpts = {}, ret
   let r: Response;
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     r = await fetch(`/api/v1${path}`, {
       method: opts.method ?? (opts.body !== undefined ? 'POST' : 'GET'),
       headers,
@@ -82,46 +82,27 @@ export async function api<T = unknown>(path: string, opts: RequestOpts = {}, ret
     });
     clearTimeout(timeoutId);
   } catch {
-    const isDemo = typeof window !== 'undefined' && (localStorage.getItem('ss-demo-active') === 'true' || localStorage.getItem('ss-signed-out') !== 'true');
-    if (isDemo) {
-      if (path.includes('leads') && path.includes('board')) return { columns: [] } as unknown as T;
-      if (path.includes('leads')) return { items: [], nextCursor: null } as unknown as T;
-      if (path.includes('dashboard')) return { tiles: [] } as unknown as T;
-      if (path.includes('notifications')) return { items: [], unreadCount: 0 } as unknown as T;
-      if (path.includes('users')) return { items: [{ id: 'usr_owner_demo', fullName: 'Owner Admin', role: 'admin', status: 'active' }] } as unknown as T;
-      if (path.includes('masters') || path.includes('options')) return { items: [] } as unknown as T;
-      return { items: [] } as unknown as T;
-    }
-    throw new ApiError(0, 'OFFLINE', 'You are offline — check your connection.');
+    throw new ApiError(0, 'OFFLINE', 'Network or service timeout — check connection or retry.');
   }
   if (r.status === 401 && !retried && !path.startsWith('/auth/')) {
     const ok = await refresh();
     if (ok) return api<T>(path, opts, true);
-    const isDemo = typeof window !== 'undefined' && (localStorage.getItem('ss-demo-active') === 'true' || localStorage.getItem('ss-signed-out') !== 'true');
-    if (!isDemo) {
-      auth.set(null);
-      onUnauthenticated?.();
-    } else {
-      if (path.includes('leads') && path.includes('board')) return { columns: [] } as unknown as T;
-      if (path.includes('leads')) return { items: [], nextCursor: null } as unknown as T;
-      if (path.includes('dashboard')) return { tiles: [] } as unknown as T;
-      if (path.includes('notifications')) return { items: [], unreadCount: 0 } as unknown as T;
-      if (path.includes('users')) return { items: [{ id: 'usr_owner_demo', fullName: 'Owner Admin', role: 'admin', status: 'active' }] } as unknown as T;
-      if (path.includes('masters') || path.includes('options')) return { items: [] } as unknown as T;
-      return { items: [] } as unknown as T;
-    }
+    auth.set(null);
+    onUnauthenticated?.();
   }
   if (opts.raw) return r as unknown as T;
   if (r.status === 204) return undefined as T;
   const ct = r.headers.get('content-type') ?? '';
   const body = ct.includes('json') ? await r.json() : await r.text();
   if (!r.ok) {
-    const isDemo = typeof window !== 'undefined' && (localStorage.getItem('ss-demo-active') === 'true' || localStorage.getItem('ss-signed-out') !== 'true');
-    if (isDemo && !path.startsWith('/auth/')) {
-      return { items: [] } as unknown as T;
-    }
     const b = (typeof body === 'object' ? body : {}) as Record<string, unknown>;
-    throw new ApiError(r.status, String(b.code ?? 'ERROR'), String(b.title ?? 'Something went wrong — try again.'), b);
+    const defaultTitle = r.status === 404 ? 'Record not found' : r.status === 422 ? 'Validation error' : 'Something went wrong — try again.';
+    throw new ApiError(
+      r.status,
+      String(b.code ?? (r.status === 404 ? 'NOT_FOUND' : 'ERROR')),
+      String(b.title ?? b.message ?? defaultTitle),
+      b
+    );
   }
   return body as T;
 }

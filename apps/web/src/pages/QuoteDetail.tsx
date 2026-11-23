@@ -79,16 +79,17 @@ export default function QuoteDetail() {
   };
 
   if (q.isLoading) return <Skeleton rows={6} />;
-  if (q.error) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
-  if (!q.data) {
+  const is404 = !q.data || (q.error as any)?.status === 404 || (q.error as any)?.code === 'NOT_FOUND';
+  if (is404) {
     return (
       <EmptyState
         title="Quotation not found"
-        description="The requested quotation does not exist."
+        description="The requested quotation does not exist or has been removed."
         action={<LinkButton to="/sales?tab=quotes">Back to quotations</LinkButton>}
       />
     );
   }
+  if (q.error) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
   const d = q.data;
   const editable = ['draft', 'approved'].includes(d.status);
   const sent = ['sent', 'viewed', 'changes_requested', 'rejected', 'expired'].includes(d.status);

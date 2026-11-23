@@ -43,16 +43,17 @@ export default function LeadDetail() {
   const reopen = useAction(() => post(`/leads/${id}/reopen`), [['lead', id], ['timeline', id]], () => toast('Lead reopened'));
 
   if (q.isLoading) return <Skeleton rows={6} />;
-  if (q.error) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
-  if (!q.data) {
+  const is404 = !q.data || (q.error as any)?.status === 404 || (q.error as any)?.code === 'NOT_FOUND';
+  if (is404) {
     return (
       <EmptyState
         title="Lead not found"
-        description="The requested lead does not exist."
+        description="The requested lead does not exist or has been removed."
         action={<LinkButton to="/leads">Back to leads</LinkButton>}
       />
     );
   }
+  if (q.error) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
   const l = q.data;
   if (l.mergedIntoId) return <Navigate to={`/leads/${l.mergedIntoId}`} replace />;
   const closed = ['won', 'lost', 'junk'].includes(l.stage);

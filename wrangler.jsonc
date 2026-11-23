@@ -15,6 +15,13 @@
       "/api/*"
     ]
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "salesphere-db",
+      "database_id": "ea589533-b685-42d2-bf61-d1c4a94248b1"
+    }
+  ],
   "vars": {
     "API_ORIGIN": "https://api.salesphere.live",
     "EDGE_HMAC_SECRET": "SaleSphere_Edge_HMAC_Secret_2026_Secure_Key"

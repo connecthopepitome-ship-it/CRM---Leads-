@@ -224,13 +224,16 @@ export default function LeadForm() {
         nav(`/leads/${leadId}`);
       }
     } catch (err: any) {
-      if (err instanceof ApiError && err.code === 'LEAD_CONTACT_REQUIRED') {
-        setErrors({ phone: err.title });
-      } else {
-        const msg = err?.title || err?.message || 'Failed to save lead. Please try again.';
-        setFormError(msg);
-        errorToast(err);
+      if (err?.body?.errors || err?.errors) {
+        const fieldErrors = err.body?.errors || err.errors;
+        setErrors((prev) => ({ ...prev, ...fieldErrors }));
       }
+      if (err instanceof ApiError && err.code === 'LEAD_CONTACT_REQUIRED') {
+        setErrors((prev) => ({ ...prev, phone: err.title }));
+      }
+      const msg = err?.title || err?.message || 'Failed to save lead. Please try again.';
+      setFormError(msg);
+      errorToast(err);
     } finally {
       setBusy(false);
     }

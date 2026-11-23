@@ -92,6 +92,7 @@ export default function CustomerForm() {
   });
 
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [dup, setDup] = useState(false);
   const [busy, setBusy] = useState(false);
   const [activePreset, setActivePreset] = useState<string | null>(null);
@@ -164,6 +165,9 @@ export default function CustomerForm() {
       toast('Customer created successfully');
       nav(`/customers/${r.id}`);
     } catch (err: any) {
+      if (err?.body?.errors || err?.errors) {
+        setFieldErrors(err.body?.errors || err.errors);
+      }
       if (err instanceof ApiError && err.code === 'POSSIBLE_DUPLICATE') {
         setDup(true);
       } else {
@@ -251,7 +255,11 @@ export default function CustomerForm() {
               label="Display Name (Brand / Common Name)"
               required
               value={f.displayName}
-              onChange={set('displayName')}
+              onChange={(e) => {
+                setFieldErrors((prev) => ({ ...prev, displayName: '' }));
+                set('displayName')(e);
+              }}
+              error={fieldErrors.displayName}
               placeholder="e.g. Deshmukh Manufacturing Ltd"
             />
             <TextField

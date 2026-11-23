@@ -125,6 +125,9 @@ export default function Home() {
 
   const totalPipelineLeads = pipelineStages.reduce((sum, s) => sum + s.count, 0);
 
+  const currentHour = new Date().getHours();
+  const greeting = currentHour < 12 ? 'Good morning' : currentHour < 17 ? 'Good afternoon' : 'Good evening';
+
   return (
     <div className="space-y-6 pb-8">
       {/* ============================================================== */}
@@ -133,7 +136,7 @@ export default function Home() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-[#202820] hover-text-glow">
-            Good evening, {user?.fullName || 'Owner'} 👋
+            {greeting}, {user?.fullName || 'Owner'} 👋
           </h1>
           <p className="text-xs sm:text-sm text-[#778477] mt-0.5">
             Here's what's happening with your business today.
