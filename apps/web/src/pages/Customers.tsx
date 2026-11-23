@@ -121,16 +121,17 @@ export default function Customers() {
     getNextPageParam: (p) => p.nextCursor ?? undefined,
   });
 
-  const rawRows = list.data?.pages.flatMap((p) => p.items) ?? [];
+  const rawRows = list.data?.pages?.flatMap((p) => p.items ?? []) ?? [];
   const customers = rawRows.length > 0 ? rawRows : SAMPLE_CUSTOMERS_FALLBACK;
 
   const filteredCustomers = customers.filter((c) =>
-    c.displayName.toLowerCase().includes(search.toLowerCase()) ||
-    c.code?.toLowerCase().includes(search.toLowerCase())
+    (c.displayName || '').toLowerCase().includes(search.toLowerCase()) ||
+    (c.code || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const selectedCustomer =
     customers.find((c) => c.id === selectedId) ||
+    customers[0] ||
     SAMPLE_CUSTOMERS_FALLBACK[0]!;
 
   return (

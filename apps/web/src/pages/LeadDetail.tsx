@@ -76,7 +76,7 @@ export default function LeadDetail() {
               ['Consent', label(l.consentBasis)],
               ['Created', dateTime(l.createdAt)],
             ]} />
-            {!!l.tags.length && <div className="mt-3 flex flex-wrap gap-1">{l.tags.map((t) => <Badge key={t}>{t}</Badge>)}</div>}
+            {!!l.tags?.length && <div className="mt-3 flex flex-wrap gap-1">{l.tags.map((t) => <Badge key={t}>{t}</Badge>)}</div>}
             {l.notes && <p className="mt-3 whitespace-pre-wrap text-sm">{l.notes}</p>}
           </Card>
           <Link to={`/settings/audit?recordType=lead&recordId=${l.id}`} className="text-sm text-primary hover:underline">View change history</Link>

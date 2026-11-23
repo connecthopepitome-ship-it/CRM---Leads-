@@ -294,8 +294,8 @@ export function Timeline({ recordType, recordId }: { recordType: 'lead' | 'custo
               <Badge tone={i.status === 'failed' ? 'danger' : 'warning'}>{i.status === 'failed' ? `Sync failed: ${i.error}` : 'Will sync'}</Badge> <span className="ml-1">{String(i.payload.note ?? i.kind.replace('_', ' '))}</span>
             </li>
           ))}
-          {!q.data?.items.length && !queued.length && <EmptyState title="No activity yet" body="Calls, messages, notes and documents appear here." />}
-          {q.data?.items.map((a) => (
+          {!(q.data?.items ?? []).length && !queued.length && <EmptyState title="No activity yet" body="Calls, messages, notes and documents appear here." />}
+          {(q.data?.items ?? []).map((a) => (
             <li key={a.id} className="rounded-md border border-border bg-surface p-3 text-sm">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone={a.status === 'failed' ? 'danger' : a.status === 'pending' ? 'warning' : 'neutral'}>{TYPE_LABEL[a.type] ?? a.type}</Badge>

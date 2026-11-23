@@ -296,7 +296,7 @@ export default function Reports() {
             </h2>
           </div>
           <span className="text-xs text-[#778477]">
-            {r.data?.rows.length ?? 0} records
+            {r.data?.rows?.length ?? 0} records
           </span>
         </div>
 
@@ -307,8 +307,8 @@ export default function Reports() {
         ) : r.data && (
           <div className="overflow-x-auto">
             <Table
-              rows={r.data.rows.map((x, i) => ({ id: String(i), ...x }))}
-              columns={r.data.columns.map((c) => ({
+              rows={(r.data.rows ?? []).map((x, i) => ({ id: String(i), ...x }))}
+              columns={(r.data.columns ?? []).map((c) => ({
                 key: c.key,
                 label: c.label,
                 align: c.money ? ('right' as const) : undefined,
@@ -321,7 +321,7 @@ export default function Reports() {
                 <span className="text-[#778477]">Totals:</span>
                 {Object.entries(r.data.totals).map(([k, v]) => (
                   <span key={k}>
-                    {r.data!.columns.find((c) => c.key === k)?.label ?? k}:{' '}
+                    {r.data!.columns?.find((c) => c.key === k)?.label ?? k}:{' '}
                     <span className="text-[#3D7952]">{money(v)}</span>
                   </span>
                 ))}

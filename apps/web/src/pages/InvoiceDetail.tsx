@@ -106,7 +106,7 @@ export default function InvoiceDetail() {
               ) : <p className="text-sm text-muted">Add a UPI ID in Settings → Masters to show a QR.</p>}
             </Card>
           )}
-          {!!i.creditNotes.length && (
+          {!!i.creditNotes?.length && (
             <Card title="Credit notes">
               <ul className="text-sm">{i.creditNotes.map((c) => <li key={c.id} className="flex justify-between py-1"><span>{c.number} · {c.reason}</span><span>{money(c.amount)}</span></li>)}</ul>
             </Card>

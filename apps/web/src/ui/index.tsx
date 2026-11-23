@@ -246,8 +246,9 @@ export interface Column<T> {
   render?: (row: T) => ReactNode;
   align?: 'right';
 }
-export function Table<T extends { id?: string }>({ columns, rows, onRow, empty }: { columns: Column<T>[]; rows: T[]; onRow?: (r: T) => void; empty?: ReactNode }) {
-  if (!rows.length) return <>{empty ?? <EmptyState title="Nothing here yet" />}</>;
+export function Table<T extends { id?: string }>({ columns, rows = [], onRow, empty }: { columns: Column<T>[]; rows?: T[]; onRow?: (r: T) => void; empty?: ReactNode }) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  if (!safeRows.length) return <>{empty ?? <EmptyState title="Nothing here yet" />}</>;
   return (
     <div className="overflow-x-auto rounded-2xl border border-white/80 bg-white/75 backdrop-blur-md shadow-xs">
       <table className="w-full text-sm">
@@ -255,7 +256,7 @@ export function Table<T extends { id?: string }>({ columns, rows, onRow, empty }
           <tr>{columns.map((c) => <th key={c.key} scope="col" className={cx('px-4 py-3 font-semibold', c.align === 'right' && 'text-right')}>{c.label}</th>)}</tr>
         </thead>
         <tbody className="divide-y divide-[#DCE7D9]/50">
-          {rows.map((r, i) => (
+          {safeRows.map((r, i) => (
             <tr key={r.id ?? i} className={cx('glass-table-row transition-all', onRow && 'cursor-pointer hover:bg-white/90')} onClick={onRow ? () => onRow(r) : undefined}>
               {columns.map((c, ci) => (
                 <td key={c.key} className={cx('px-4 py-3 text-sm text-[#202820]', c.align === 'right' && 'text-right tabular-nums')}>

@@ -52,9 +52,9 @@ export function Files({ recordType, recordId }: { recordType: string; recordId: 
         <Button onClick={() => input.current?.click()} busy={progress !== null}>{progress !== null ? `Uploading ${progress}%` : 'Upload file'}</Button>
         <span className="text-xs text-muted">PDF, images, Word, Excel, CSV, text · up to 25 MB</span>
       </div>
-      {q.isLoading ? <Skeleton /> : !q.data?.items.length ? <EmptyState title="No documents yet" /> : (
+      {q.isLoading ? <Skeleton /> : !(q.data?.items ?? []).length ? <EmptyState title="No documents yet" /> : (
         <ul className="flex flex-col gap-2">
-          {q.data.items.map((f) => (
+          {(q.data?.items ?? []).map((f) => (
             <li key={f.id} className="flex items-center justify-between gap-2 rounded-md border border-border bg-surface p-3 text-sm">
               <span className="min-w-0 truncate">{f.name} <span className="text-muted">· {(f.size / 1024).toFixed(0)} KB · {dateTime(f.createdAt)}</span></span>
               <Button size="sm" variant="ghost" onClick={() => void download(`/api/v1/files/${f.id}/content?download=1`, f.name)}>Download</Button>

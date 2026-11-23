@@ -116,7 +116,8 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
   const [tasks, setTasks] = useState<Task[]>(() => {
     try {
       const saved = localStorage.getItem('ss_tasks');
-      return saved ? JSON.parse(saved) : DEFAULT_TASKS;
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) ? parsed : DEFAULT_TASKS;
     } catch {
       return DEFAULT_TASKS;
     }

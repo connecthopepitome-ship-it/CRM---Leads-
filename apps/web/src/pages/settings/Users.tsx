@@ -54,7 +54,7 @@ export function Users() {
       </Card>
       {mode === 'team' && (
         <Card title="Teams">
-          <ul className="mb-3 text-sm">{teams.data?.map((t) => <li key={t.id} className="border-b border-border py-1">{t.name} — manager {all.find((u) => u.id === t.managerId)?.fullName ?? t.managerId}, {t.memberIds.length} members</li>)}</ul>
+          <ul className="mb-3 text-sm">{teams.data?.map((t) => <li key={t.id} className="border-b border-border py-1">{t.name} — manager {all.find((u) => u.id === t.managerId)?.fullName ?? t.managerId}, {t.memberIds?.length ?? 0} members</li>)}</ul>
           {write && (
             <div className="grid gap-2 md:grid-cols-3">
               <TextField label="Team name" value={team.name} onChange={(e) => setTeam({ ...team, name: e.target.value })} />

@@ -12,9 +12,9 @@ export default function Notifications() {
   return (
     <>
       <PageHeader title="Notifications" actions={<><Button variant="secondary" onClick={() => read.mutate({ all: true })}>Mark all read</Button><Link to="/me#notifications" className="self-center text-sm text-primary hover:underline">Preferences</Link></>} />
-      {q.isLoading ? <Skeleton /> : q.error ? <ErrorState error={q.error} /> : !q.data!.items.length ? <EmptyState title="You're all caught up" /> : (
+      {q.isLoading ? <Skeleton /> : q.error ? <ErrorState error={q.error} /> : !(q.data?.items ?? []).length ? <EmptyState title="You're all caught up" /> : (
         <ul className="flex flex-col gap-2">
-          {q.data!.items.map((n) => (
+          {(q.data?.items ?? []).map((n) => (
             <li key={n.id} className={`rounded-md border p-3 ${n.readAt ? 'border-border bg-surface' : 'border-primary bg-primary-subtle'}`}>
               <Link to={n.link} onClick={() => !n.readAt && read.mutate({ ids: [n.id] })} className="block">
                 <span className="font-medium">{n.title}</span>

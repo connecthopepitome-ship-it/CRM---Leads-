@@ -124,7 +124,7 @@ function SheetWizard({ onClose }: { onClose(): void }) {
           <label className="grid grid-cols-2 items-center gap-2">Trigger
             <Select value={mode} onChange={(e) => setMode(e.target.value)}><option value="poll">Check every 4 minutes</option><option value="webhook">Instant (Apps Script) + 15-minute safety check</option></Select>
           </label>
-          <p className="text-muted">Preview: {preview.rows.length} rows, first “{preview.rows[0]?.join(' | ')}”</p>
+          <p className="text-muted">Preview: {preview.rows?.length ?? 0} rows, first “{preview.rows?.[0]?.join(' | ')}”</p>
         </div>
       )}
     </Dialog>

@@ -31,7 +31,7 @@ import { get } from '../lib/api';
 import { useBrandColours, useTerm } from '../lib/appConfig';
 import { useAuth } from '../lib/auth';
 import { onOutboxChange, pending } from '../lib/outbox';
-import { Banner, Dialog } from '../ui';
+import { Banner, Dialog, ErrorBoundary } from '../ui';
 import { CommandPalette } from './CommandPalette';
 import { TaskDrawer } from './TaskDrawer';
 
@@ -109,7 +109,7 @@ export function Shell() {
     const off = () => setOnline(false);
     window.addEventListener('online', on);
     window.addEventListener('offline', off);
-    const refresh = () => void pending().then((p) => setQueued(p.length));
+    const refresh = () => void pending().then((p) => setQueued(p?.length ?? 0));
     refresh();
     const un = onOutboxChange(refresh);
     const key = (e: KeyboardEvent) => {
@@ -382,7 +382,9 @@ export function Shell() {
           className="flex-1 overflow-y-auto px-4 py-5 pb-24 sm:px-6 sm:py-6 lg:px-8 lg:pb-8 transition-all duration-300"
         >
           <div className="mx-auto max-w-7xl">
-            <Outlet />
+            <ErrorBoundary key={loc.pathname}>
+              <Outlet />
+            </ErrorBoundary>
           </div>
         </main>
 

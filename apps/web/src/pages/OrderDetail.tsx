@@ -45,7 +45,9 @@ export default function OrderDetail() {
   if (q.isLoading) return <Skeleton rows={6} />;
   if (q.isError || !q.data) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
   const o = q.data;
-  const pending = o.lines.some((l) => l.kind !== 'heading' && l.pendingQty > 0);
+  const lines = Array.isArray(o.lines) ? o.lines : [];
+  const invoices = Array.isArray(o.invoices) ? o.invoices : [];
+  const pending = lines.some((l) => l.kind !== 'heading' && (l.pendingQty ?? 0) > 0);
   const moves = ORDER_TRANSITIONS[o.status] ?? [];
   return (
     <>
@@ -55,7 +57,7 @@ export default function OrderDetail() {
       </>} />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Items" className="lg:col-span-2">
-          <Table rows={o.lines.filter((l) => l.kind !== 'heading')} columns={[
+          <Table rows={lines.filter((l) => l.kind !== 'heading')} columns={[
             { key: 'description', label: 'Item' },
             { key: 'qty', label: 'Ordered', align: 'right', render: (l) => `${l.qty} ${l.unit ?? ''}` },
             { key: 'invoicedQty', label: 'Invoiced', align: 'right', render: (l) => String(l.invoicedQty ?? 0) },
@@ -72,7 +74,7 @@ export default function OrderDetail() {
           {!pending && <div className="mt-3"><Banner tone="success">Everything on this order has been invoiced.</Banner></div>}
         </Card>
         <Card title="Invoices" className="lg:col-span-3">
-          <Table rows={o.invoices} empty={<p className="text-sm text-muted">No invoices yet.</p>} onRow={(i) => nav(`/sales/invoices/${i.id}`)} columns={[
+          <Table rows={invoices} empty={<p className="text-sm text-muted">No invoices yet.</p>} onRow={(i) => nav(`/sales/invoices/${i.id}`)} columns={[
             { key: 'number', label: 'Number', render: (i) => i.number ?? 'Draft' },
             { key: 'type', label: 'Type', render: (i) => i.type.replace('_', ' ') },
             { key: 'status', label: 'Status', render: (i) => <Badge status={i.status} /> },

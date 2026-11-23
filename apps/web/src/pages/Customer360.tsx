@@ -36,15 +36,16 @@ export default function Customer360() {
   const detail = useQuery({ queryKey: ['customer', id], queryFn: () => get<C360['customer'] & { contacts: Contact[]; addresses: { line1: string; city: string }[] }>(`/customers/${id}`) });
   if (q.isLoading) return <Skeleton rows={6} />;
   if (q.error) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
-  const { customer, kpis, ageing, tabs } = q.data!;
-  const primary = detail.data?.contacts.find((c) => c.isPrimary) ?? detail.data?.contacts[0];
+  const { customer, kpis, ageing, tabs = [] } = q.data!;
+  const contacts = detail.data?.contacts ?? [];
+  const primary = contacts.find((c) => c.isPrimary) ?? contacts[0];
   return (
     <>
       <PageHeader back="/customers" title={customer.displayName} subtitle={`${customer.code}${customer.gstin ? ` · GSTIN ${customer.gstin}` : ''}`} actions={<>
         {can('quote', 'create') && <LinkButton to={`/sales/quotes/new?partyType=customer&partyId=${customer.id}`} variant="primary">New quote</LinkButton>}
         {can('payment', 'create') && <LinkButton to={`/sales/payments/new?customerId=${customer.id}`}>Record payment</LinkButton>}
       </>} />
-      <div className="mb-4"><ActionBar rec={{ recordType: 'customer', recordId: customer.id, name: primary?.name ?? customer.displayName, phone: primary?.phone ?? null, email: primary?.email ?? null, address: detail.data?.addresses[0] ? `${detail.data.addresses[0].line1}, ${detail.data.addresses[0].city}` : null }} /></div>
+      <div className="mb-4"><ActionBar rec={{ recordType: 'customer', recordId: customer.id, name: primary?.name ?? customer.displayName, phone: primary?.phone ?? null, email: primary?.email ?? null, address: detail.data?.addresses?.[0] ? `${detail.data.addresses[0].line1}, ${detail.data.addresses[0].city}` : null }} /></div>
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         {ageing ? <>
           <StatTile label="Outstanding" value={money(kpis.outstanding)} />
@@ -76,7 +77,7 @@ export default function Customer360() {
       {['orders', 'quotes', 'invoices', 'payments'].includes(tab) && <DocList customerId={customer.id} tab={tab} />}
       {tab === 'ledger' && <Statement customerId={customer.id} />}
       {tab === 'contacts' && (
-        <Table<Contact> rows={detail.data?.contacts ?? []} columns={[{ key: 'name', label: 'Name' }, { key: 'role', label: 'Role', render: (c) => label(c.role) }, { key: 'phone', label: 'Phone', render: (c) => c.phone ?? '—' }, { key: 'email', label: 'Email', render: (c) => c.email ?? '—' }, { key: 'p', label: '', render: (c) => (c.isPrimary ? <Badge tone="info">Primary</Badge> : null) }]} />
+        <Table<Contact> rows={contacts} columns={[{ key: 'name', label: 'Name' }, { key: 'role', label: 'Role', render: (c) => label(c.role) }, { key: 'phone', label: 'Phone', render: (c) => c.phone ?? '—' }, { key: 'email', label: 'Email', render: (c) => c.email ?? '—' }, { key: 'p', label: '', render: (c) => (c.isPrimary ? <Badge tone="info">Primary</Badge> : null) }]} />
       )}
       {tab === 'documents' && <Files recordType="customer" recordId={customer.id} />}
     </>
@@ -88,7 +89,7 @@ function DocList({ customerId, tab }: { customerId: string; tab: string }) {
   const q = useQuery({ queryKey: ['c360tab', customerId, tab], queryFn: () => get<{ items: Record<string, unknown>[] }>(`/customers/${customerId}/${tab}?limit=100`) });
   if (q.isLoading) return <Skeleton />;
   if (q.error) return <ErrorState error={q.error} />;
-  const items = q.data!.items as ({ id: string } & Record<string, unknown>)[];
+  const items = (q.data?.items ?? []) as ({ id: string } & Record<string, unknown>)[];
   const cols: Record<string, { key: string; label: string; render?: (r: Record<string, unknown>) => React.ReactNode; align?: 'right' }[]> = {
     quotes: [{ key: 'displayNumber', label: 'Number', render: (r) => String(r.displayNumber ?? 'Draft') }, { key: 'date', label: 'Date', render: (r) => date(String(r.date)) }, { key: 'status', label: 'Status', render: (r) => <Badge status={String(r.status)} /> }, { key: 'total', label: 'Total', align: 'right', render: (r) => money((r.totals as { grandTotal: number }).grandTotal) }],
     orders: [{ key: 'number', label: 'Number' }, { key: 'date', label: 'Date', render: (r) => date(String(r.date)) }, { key: 'status', label: 'Status', render: (r) => <Badge status={String(r.status)} /> }, { key: 'total', label: 'Total', align: 'right', render: (r) => money((r.totals as { grandTotal: number }).grandTotal) }],
@@ -96,7 +97,7 @@ function DocList({ customerId, tab }: { customerId: string; tab: string }) {
     payments: [{ key: 'receiptNo', label: 'Receipt' }, { key: 'date', label: 'Date', render: (r) => date(String(r.date)) }, { key: 'mode', label: 'Mode', render: (r) => String(r.mode).toUpperCase() }, { key: 'status', label: 'Status', render: (r) => <Badge status={String(r.status)} /> }, { key: 'amount', label: 'Amount', align: 'right', render: (r) => money(Number(r.amount)) }],
   };
   const path = { quotes: 'quotes', orders: 'orders', invoices: 'invoices', payments: 'payments' }[tab]!;
-  return <Table rows={items} columns={cols[tab]!} onRow={(r) => (path === 'orders' ? undefined : nav(`/sales/${path}/${r.id}`))} />;
+  return <Table rows={items} columns={cols[tab] ?? []} onRow={(r) => (path === 'orders' ? undefined : nav(`/sales/${path}/${r.id}`))} />;
 }
 
 function Statement({ customerId }: { customerId: string }) {

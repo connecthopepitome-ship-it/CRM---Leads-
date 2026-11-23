@@ -107,7 +107,7 @@ export default function QuoteDetail() {
             {d.customerId && <Link to={`/customers/${d.customerId}`} className="mt-3 block text-sm text-primary hover:underline">Open customer</Link>}
             {d.partyType === 'lead' && !d.customerId && <Link to={`/leads/${d.partyId}`} className="mt-3 block text-sm text-primary hover:underline">Open lead</Link>}
           </Card>
-          {d.revisions.length > 1 && (
+          {!!d.revisions?.length && d.revisions.length > 1 && (
             <Card title="Revisions">
               <ul className="text-sm">
                 {d.revisions.map((r) => <li key={r.id} className="flex justify-between py-1"><Link className="text-primary hover:underline" to={`/sales/quotes/${r.id}`}>R{r.revision} {r.displayNumber ?? '(draft)'}</Link><span><Badge status={r.status} /> {money(r.grandTotal)}</span></li>)}
