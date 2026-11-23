@@ -36,6 +36,8 @@ export function SignIn() {
 
   const enterDemo = async () => {
     setBusy(true);
+    localStorage.removeItem('ss-signed-out');
+    localStorage.setItem('ss-demo-active', 'true');
     try {
       await signIn('admin', 'ChangeMe!2026');
     } catch {

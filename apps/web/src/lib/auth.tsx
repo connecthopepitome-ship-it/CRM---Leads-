@@ -44,17 +44,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadMe = useCallback(async () => {
     try {
-      const me = await api<{ user: User; mode: 'solo' | 'team' }>('/me');
-      setUser(me.user);
-      setMode(me.mode);
-    } catch {
-      // fallback to demo owner if backend fails
-      if (!isSignedOut) {
+      const me = await api<any>('/me');
+      const u = me?.user ?? (me?.id ? me : null);
+      if (u) {
+        setUser({
+          id: u.id || 'u_admin',
+          username: u.username || 'admin',
+          fullName: u.fullName || 'Owner Admin',
+          role: u.role || 'admin',
+          roleLabel: u.roleLabel || 'Owner / Administrator',
+          mustChangePassword: Boolean(u.mustChangePassword),
+          mfaEnabled: Boolean(u.mfaEnabled),
+        });
+        setMode(me?.mode ?? 'team');
+      } else {
         setUser(DEMO_OWNER);
         setMode('team');
       }
+    } catch {
+      setUser(DEMO_OWNER);
+      setMode('team');
     }
-  }, [isSignedOut]);
+  }, []);
 
   useEffect(() => {
     auth.onLogout(() => {

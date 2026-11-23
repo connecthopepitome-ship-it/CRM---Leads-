@@ -312,28 +312,41 @@ export async function handleEdgeApi(request: Request): Promise<Response> {
 
   // 2. /auth/refresh & /auth/login
   if (path.startsWith('/auth/refresh') || path.startsWith('/auth/login')) {
+    const user = {
+      id: 'u_admin',
+      username: 'admin',
+      fullName: 'Owner Admin',
+      role: 'admin',
+      roleLabel: 'Owner / Administrator',
+      status: 'active',
+      mustChangePassword: false,
+      mfaEnabled: false,
+    };
     return jsonRes({
       accessToken: 'edge_session_' + Date.now(),
-      user: {
-        id: 'u_admin',
-        username: 'admin',
-        fullName: 'Owner Admin',
-        role: 'admin',
-        status: 'active',
-      },
+      user,
+      mode: 'solo',
     });
   }
 
   // 3. /me
   if (path === '/me' || path === '/me/') {
-    return jsonRes({
+    const user = {
       id: 'u_admin',
       username: 'admin',
       fullName: 'Owner Admin',
       role: 'admin',
+      roleLabel: 'Owner / Administrator',
       status: 'active',
       isSupport: false,
       mustChangePassword: false,
+      mfaEnabled: false,
+    };
+    return jsonRes({
+      ...user,
+      user,
+      mode: 'solo',
+      permissions: { execPayments: true },
     });
   }
 
@@ -763,3 +776,4 @@ export async function handleEdgeApi(request: Request): Promise<Response> {
   // Default fallback
   return jsonRes({ title: 'Not found', status: 404 }, 404);
 }
+

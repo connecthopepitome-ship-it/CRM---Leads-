@@ -9,18 +9,18 @@ import { download, get, post, waitForJob } from '../lib/api';
 import { money, today } from '../lib/format';
 import { Button, Card, ErrorState, Select, Skeleton, Table, TextField } from '../ui';
 import { errorToast, toast } from '../ui/toast';
-import { 
-  BarChart3, 
-  Download, 
-  FileSpreadsheet, 
-  Calendar, 
-  Filter, 
-  PieChart as PieIcon, 
-  TrendingUp, 
-  Users, 
-  DollarSign, 
-  CheckCircle2, 
-  FileText 
+import {
+  BarChart3,
+  Download,
+  FileSpreadsheet,
+  Calendar,
+  Filter,
+  PieChart as PieIcon,
+  TrendingUp,
+  Users,
+  DollarSign,
+  CheckCircle2,
+  FileText
 } from 'lucide-react';
 
 interface Report {
@@ -33,9 +33,9 @@ interface Report {
 
 export default function Reports() {
   const [params, setParams] = useSearchParams();
-  const list = useQuery({ 
-    queryKey: ['reports'], 
-    queryFn: () => get<{ items: { id: string; name: string }[] }>('/reports') 
+  const list = useQuery({
+    queryKey: ['reports'],
+    queryFn: () => get<{ items: { id: string; name: string }[] }>('/reports')
   });
 
   const id = params.get('id') ?? list.data?.items[0]?.id ?? 'RPT-002';
@@ -43,10 +43,10 @@ export default function Reports() {
   const to = params.get('to') ?? today();
   const [isExporting, setIsExporting] = useState(false);
 
-  const r = useQuery({ 
-    queryKey: ['report', id, from, to], 
-    queryFn: () => get<Report>(`/reports/${id}?from=${from}&to=${to}&asOf=${to}`), 
-    enabled: !!id 
+  const r = useQuery({
+    queryKey: ['report', id, from, to],
+    queryFn: () => get<Report>(`/reports/${id}?from=${from}&to=${to}&asOf=${to}`),
+    enabled: !!id
   });
 
   const set = (k: string, v: string) => {
