@@ -106,20 +106,19 @@ export default function SalesHub() {
   const extra = new URLSearchParams(params);
   extra.delete('tab');
 
+  const isDemo = import.meta.env.VITE_DEMO_MODE === 'true';
   const q = useQuery({
     queryKey: ['sales', tab, extra.toString()],
-    queryFn: () =>
-      get<{ items: Row[] }>(`/${tab}?limit=100&${extra.toString()}`).catch(() => ({
-        items: [],
-      })),
+    queryFn: () => get<{ items: Row[] }>(`/${tab}?limit=100&${extra.toString()}`),
   });
 
-  const fallback =
-    tab === 'invoices'
+  const fallback = isDemo
+    ? tab === 'invoices'
       ? SAMPLE_INVOICES_FALLBACK
       : tab === 'payments'
       ? SAMPLE_PAYMENTS_FALLBACK
-      : SAMPLE_QUOTES_FALLBACK;
+      : SAMPLE_QUOTES_FALLBACK
+    : [];
 
   const rawRows = q.data?.items ?? [];
   const rows = rawRows.length > 0 ? rawRows : fallback;
@@ -234,6 +233,8 @@ export default function SalesHub() {
         <Skeleton rows={6} />
       ) : q.error ? (
         <ErrorState error={q.error} retry={() => void q.refetch()} />
+      ) : rows.length === 0 ? (
+        <EmptyState title={`No ${tab} yet`} description={`No ${tab} have been created or recorded.`} />
       ) : (
         <div className="rounded-2xl border border-[#DCE7D9] bg-white shadow-2xs overflow-hidden">
           <div className="overflow-x-auto">

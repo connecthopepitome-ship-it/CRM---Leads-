@@ -149,12 +149,13 @@ export function Banner({ tone = 'info', children, action }: { tone?: 'info' | 'w
 }
 
 // CMP-021 EmptyState, CMP-022 Skeleton
-export function EmptyState({ title, body, action }: { title: string; body?: string; action?: ReactNode }) {
+export function EmptyState({ title, body, description, action }: { title: string; body?: string; description?: string; action?: ReactNode }) {
+  const text = body ?? description;
   return (
     <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-[#DCE7D9] bg-white p-8 text-center">
       <svg width="48" height="48" viewBox="0 0 48 48" aria-hidden className="text-[#3D7952]"><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" strokeWidth="2" /><path d="M16 26h16M16 20h10" stroke="currentColor" strokeWidth="2" /></svg>
       <p className="font-semibold text-[#202820]">{title}</p>
-      {body && <p className="text-sm text-[#778477]">{body}</p>}
+      {text && <p className="text-sm text-[#778477]">{text}</p>}
       {action}
     </div>
   );

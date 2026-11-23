@@ -9,7 +9,7 @@ import { dateTime, label, money, relative } from '../lib/format';
 import { ActionBar, Timeline } from '../features/engagement';
 import { useAction, useOptions, type Lead } from '../features/hooks';
 import { StageDialog } from '../features/StageDialog';
-import { Badge, Banner, Button, Card, Dialog, ErrorState, KeyValue, LinkButton, PageHeader, Select, Skeleton, toast } from '../ui';
+import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, KeyValue, LinkButton, PageHeader, Select, Skeleton, toast } from '../ui';
 
 export default function LeadDetail() {
   const { id = '' } = useParams();
@@ -35,6 +35,7 @@ export default function LeadDetail() {
         throw e;
       }
     },
+    enabled: Boolean(id && id !== 'undefined'),
   });
   const [stageTo, setStageTo] = useState<string | null>(null);
   const [convert, setConvert] = useState(params.get('convert') === '1');
@@ -43,7 +44,16 @@ export default function LeadDetail() {
 
   if (q.isLoading) return <Skeleton rows={6} />;
   if (q.error) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
-  const l = q.data!;
+  if (!q.data) {
+    return (
+      <EmptyState
+        title="Lead not found"
+        description="The requested lead does not exist."
+        action={<LinkButton to="/leads">Back to leads</LinkButton>}
+      />
+    );
+  }
+  const l = q.data;
   if (l.mergedIntoId) return <Navigate to={`/leads/${l.mergedIntoId}`} replace />;
   const closed = ['won', 'lost', 'junk'].includes(l.stage);
   return (

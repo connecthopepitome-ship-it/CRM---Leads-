@@ -7,6 +7,7 @@ import { useAuth } from '../lib/auth';
 import { money, toPaise } from '../lib/format';
 import { useOptions, type Lead } from '../features/hooks';
 import { Banner, Button, Field, PageHeader, SelectField, Skeleton, Textarea, TextField, toast } from '../ui';
+import { errorToast } from '../ui/toast';
 import { 
   Building2, CheckCircle2, ChevronRight, FileText, Globe2, HelpCircle, 
   IndianRupee, Mail, MapPin, Phone, RotateCcw, Sparkles, Tag, User, Users 
@@ -214,17 +215,21 @@ export default function LeadForm() {
         toast('Lead saved successfully');
         nav(`/leads/${id}`);
       } else {
-        const r = await post<{ outcome: string; lead: Lead }>('/leads', body);
+        const r = await post<{ outcome: string; lead?: Lead; id?: string }>('/leads', body);
+        const leadId = r.lead?.id || r.id;
+        if (!leadId) {
+          throw new Error('Server returned an invalid lead record without an ID');
+        }
         toast(r.outcome === 'merged' ? 'Existing lead updated with enquiry' : 'New lead created successfully');
-        nav(`/leads/${r.lead?.id || ''}`);
+        nav(`/leads/${leadId}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       if (err instanceof ApiError && err.code === 'LEAD_CONTACT_REQUIRED') {
         setErrors({ phone: err.title });
       } else {
-        // Fallback for offline demo mode
-        toast(id ? 'Lead changes saved (Demo Mode)' : 'Lead created (Demo Mode)');
-        nav('/leads');
+        const msg = err?.title || err?.message || 'Failed to save lead. Please try again.';
+        setFormError(msg);
+        errorToast(err);
       }
     } finally {
       setBusy(false);

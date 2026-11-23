@@ -97,6 +97,16 @@ const SAMPLE_LEADS_FALLBACK: Lead[] = [
   },
 ];
 
+const BOARD_STAGES = [
+  { stage: 'new', label: 'New' },
+  { stage: 'contacted', label: 'Contacted' },
+  { stage: 'interested', label: 'Interested' },
+  { stage: 'quotation_sent', label: 'Quotation Sent' },
+  { stage: 'negotiation', label: 'Negotiation' },
+  { stage: 'won', label: 'Won' },
+  { stage: 'lost', label: 'Lost' },
+];
+
 export default function Leads() {
   const term = useTerm();
   const [params, setParams] = useSearchParams();
@@ -107,6 +117,7 @@ export default function Leads() {
   const sources = useOptions('leadSources');
   const users = useUsers(perm('lead:assign'));
 
+  const isDemo = import.meta.env.VITE_DEMO_MODE === 'true';
   const qs = new URLSearchParams(params);
   qs.delete('view');
 
@@ -115,7 +126,10 @@ export default function Leads() {
     queryFn: ({ pageParam }) =>
       get<{ items: Lead[]; nextCursor: string | null }>(
         `/leads?${qs.toString()}${pageParam ? `&cursor=${pageParam}` : ''}&limit=50`
-      ).catch(() => ({ items: SAMPLE_LEADS_FALLBACK, nextCursor: null })),
+      ).catch((err) => {
+        if (isDemo) return { items: SAMPLE_LEADS_FALLBACK, nextCursor: null };
+        throw err;
+      }),
     initialPageParam: '',
     getNextPageParam: (p) => p.nextCursor ?? undefined,
     enabled: view === 'list',
@@ -125,15 +139,22 @@ export default function Leads() {
     queryKey: ['leads-board'],
     queryFn: () =>
       get<{ columns: { stage: string; label: string; count: number; value: number; cards: Lead[] }[] }>('/leads/board')
-        .catch(() => ({
-          columns: [
-            { stage: 'new', label: 'New', count: 12, value: 35400000, cards: SAMPLE_LEADS_FALLBACK.filter((l) => l.stage === 'new') },
-            { stage: 'contacted', label: 'Contacted', count: 8, value: 24000000, cards: SAMPLE_LEADS_FALLBACK.filter((l) => l.stage === 'contacted') },
-            { stage: 'interested', label: 'Interested', count: 5, value: 18000000, cards: SAMPLE_LEADS_FALLBACK.filter((l) => l.stage === 'interested') },
-            { stage: 'quotation_sent', label: 'Quotation Sent', count: 3, value: 8900000, cards: SAMPLE_LEADS_FALLBACK.filter((l) => l.stage === 'quotation_sent') },
-            { stage: 'negotiation', label: 'Negotiation', count: 3, value: 12000000, cards: SAMPLE_LEADS_FALLBACK.filter((l) => l.stage === 'negotiation') },
-          ],
-        })),
+        .catch((err) => {
+          if (isDemo) {
+            return {
+              columns: [
+                { stage: 'new', label: 'New', count: 12, value: 35400000, cards: SAMPLE_LEADS_FALLBACK.filter((l) => l.stage === 'new') },
+                { stage: 'contacted', label: 'Contacted', count: 8, value: 24000000, cards: SAMPLE_LEADS_FALLBACK.filter((l) => l.stage === 'contacted') },
+                { stage: 'interested', label: 'Interested', count: 5, value: 18000000, cards: SAMPLE_LEADS_FALLBACK.filter((l) => l.stage === 'interested') },
+                { stage: 'quotation_sent', label: 'Quotation Sent', count: 3, value: 8900000, cards: SAMPLE_LEADS_FALLBACK.filter((l) => l.stage === 'quotation_sent') },
+                { stage: 'negotiation', label: 'Negotiation', count: 3, value: 12000000, cards: SAMPLE_LEADS_FALLBACK.filter((l) => l.stage === 'negotiation') },
+                { stage: 'won', label: 'Won', count: 0, value: 0, cards: [] },
+                { stage: 'lost', label: 'Lost', count: 0, value: 0, cards: [] },
+              ],
+            };
+          }
+          throw err;
+        }),
     enabled: view === 'board',
   });
 
@@ -160,7 +181,7 @@ export default function Leads() {
   };
 
   const rawRows = list.data?.pages.flatMap((p) => p.items) ?? [];
-  const rows = rawRows.length > 0 ? rawRows : SAMPLE_LEADS_FALLBACK;
+  const rows = rawRows.length > 0 ? rawRows : (isDemo ? SAMPLE_LEADS_FALLBACK : []);
 
   const stageLabel = (k: string) => {
     switch (k) {
@@ -325,6 +346,23 @@ export default function Leads() {
       {/* 3. LEADS TABLE (LIST VIEW) */}
       {/* ============================================================== */}
       {view === 'list' && (
+        list.isLoading ? (
+          <Skeleton rows={6} />
+        ) : list.isError ? (
+          <ErrorState error={list.error} retry={() => void list.refetch()} />
+        ) : rows.length === 0 ? (
+          <EmptyState
+            title="No leads yet"
+            description="Create your first lead to start tracking conversions and pipeline."
+            action={
+              can('lead', 'create') ? (
+                <LinkButton to="/leads/new" variant="primary">
+                  New Lead
+                </LinkButton>
+              ) : undefined
+            }
+          />
+        ) : (
         <div className="rounded-2xl border border-[#DCE7D9] bg-white shadow-2xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -431,79 +469,80 @@ export default function Leads() {
             </table>
           </div>
 
-          {/* Pagination Footer (Matching Grovia Screen 2) */}
+          {/* Pagination Footer */}
           <div className="flex items-center justify-between border-t border-[#DCE7D9] px-5 py-3 bg-[#F5F9F2] text-xs text-[#778477]">
-            <span>Showing 1-5 of 24</span>
+            <span>Showing {rows.length > 0 ? `1-${rows.length}` : '0'} of {rows.length}</span>
 
             <div className="flex items-center gap-1.5">
-              <button className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#DCE7D9] bg-white text-[#778477] hover:bg-[#E3EFDF] disabled:opacity-50">
-                <ChevronLeft size={14} />
-              </button>
               <button className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#233D2D] text-white font-bold">
                 1
-              </button>
-              <button className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#DCE7D9] bg-white text-[#778477] hover:bg-[#E3EFDF]">
-                2
-              </button>
-              <button className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#DCE7D9] bg-white text-[#778477] hover:bg-[#E3EFDF]">
-                3
-              </button>
-              <button className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#DCE7D9] bg-white text-[#778477] hover:bg-[#E3EFDF]">
-                4
-              </button>
-              <button className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#DCE7D9] bg-white text-[#778477] hover:bg-[#E3EFDF]">
-                <ChevronRight size={14} />
               </button>
             </div>
           </div>
         </div>
+        )
       )}
 
       {/* ============================================================== */}
       {/* 4. KANBAN BOARD VIEW */}
       {/* ============================================================== */}
       {view === 'board' && (
-        <div className="flex gap-4 overflow-x-auto pb-6" aria-label="Lead board">
-          {(board.data?.columns ?? []).map((c) => (
-            <section
-              key={c.stage}
-              className="w-72 shrink-0 rounded-2xl border border-[#DCE7D9] bg-white p-3 shadow-2xs"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                const id = e.dataTransfer.getData('text/plain');
-                const lead = (board.data?.columns ?? []).flatMap((x) => x.cards ?? []).find((x) => x.id === id);
-                if (lead && lead.stage !== c.stage) setDrop({ lead, to: c.stage });
-              }}
-            >
-              <div className="mb-3 flex items-center justify-between px-1 border-b border-[#DCE7D9]/60 pb-2">
-                <span className="font-bold text-xs text-[#202820]">{c.label}</span>
-                <span className="rounded-full bg-[#E3EFDF] px-2 py-0.5 text-[10px] font-bold text-[#233D2D]">
-                  {c.count}
-                </span>
-              </div>
+        board.isLoading ? (
+          <Skeleton rows={6} />
+        ) : board.isError ? (
+          <ErrorState error={board.error} retry={() => void board.refetch()} />
+        ) : (
+          <div className="flex gap-4 overflow-x-auto pb-6" aria-label="Lead board">
+            {BOARD_STAGES.map((s) => {
+              const col = (board.data?.columns ?? []).find((c) => c.stage === s.stage);
+              const cards = col?.cards ?? [];
+              const count = col?.count ?? cards.length;
+              return (
+                <section
+                  key={s.stage}
+                  className="w-72 shrink-0 rounded-2xl border border-[#DCE7D9] bg-white p-3 shadow-2xs"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    const id = e.dataTransfer.getData('text/plain');
+                    const lead = (board.data?.columns ?? []).flatMap((x) => x.cards ?? []).find((x) => x.id === id);
+                    if (lead && lead.stage !== s.stage) setDrop({ lead, to: s.stage });
+                  }}
+                >
+                  <div className="mb-3 flex items-center justify-between px-1 border-b border-[#DCE7D9]/60 pb-2">
+                    <span className="font-bold text-xs text-[#202820]">{s.label}</span>
+                    <span className="rounded-full bg-[#E3EFDF] px-2 py-0.5 text-[10px] font-bold text-[#233D2D]">
+                      {count}
+                    </span>
+                  </div>
 
-              <div className="space-y-2.5">
-                {(c.cards ?? []).map((l) => (
-                  <div
-                    key={l.id}
-                    draggable
-                    onDragStart={(e) => e.dataTransfer.setData('text/plain', l.id)}
-                    onClick={() => nav(`/leads/${l.id}`)}
-                    className="rounded-xl border border-[#DCE7D9] bg-[#F5F9F2] p-3 text-xs hover:border-[#3D7952] hover:bg-white cursor-pointer transition-all shadow-2xs"
-                  >
-                    <div className="font-bold text-[#202820]">{l.name}</div>
-                    <div className="text-[11px] text-[#778477] mt-0.5">{l.phone ?? l.email}</div>
-                    {l.expectedValue && (
-                      <div className="mt-2 font-mono text-[11px] font-bold text-[#3D7952]">
-                        {money(l.expectedValue)}
-                      </div>
+                  <div className="space-y-2.5">
+                    {cards.length === 0 ? (
+                      <div className="py-8 text-center text-xs text-[#778477]">No leads</div>
+                    ) : (
+                      cards.map((l) => (
+                        <div
+                          key={l.id}
+                          draggable
+                          onDragStart={(e) => e.dataTransfer.setData('text/plain', l.id)}
+                          onClick={() => nav(`/leads/${l.id}`)}
+                          className="rounded-xl border border-[#DCE7D9] bg-[#F5F9F2] p-3 text-xs hover:border-[#3D7952] hover:bg-white cursor-pointer transition-all shadow-2xs"
+                        >
+                          <div className="font-bold text-[#202820]">{l.name}</div>
+                          <div className="text-[11px] text-[#778477] mt-0.5">{l.phone ?? l.email}</div>
+                          {l.expectedValue && (
+                            <div className="mt-2 font-mono text-[11px] font-bold text-[#3D7952]">
+                              {money(l.expectedValue)}
+                            </div>
+                          )}
+                        </div>
+                      ))
                     )}
                   </div>
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
+                </section>
+              );
+            })}
+          </div>
+        )
       )}
 
       {drop && <StageDialog lead={drop.lead} to={drop.to} onClose={() => setDrop(null)} />}

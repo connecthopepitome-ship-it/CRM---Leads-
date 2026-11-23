@@ -6,6 +6,7 @@ import { ApiError, get, patch, post } from '../lib/api';
 import { money, toPaise } from '../lib/format';
 import { useOptions } from '../features/hooks';
 import { Banner, Button, Field, PageHeader, Select, Skeleton, toast } from '../ui';
+import { errorToast } from '../ui/toast';
 import { 
   Check, FileText, Plus, Trash2, User, Users, UserSquare2, Layers, 
   DollarSign, ShieldCheck, Sparkles, RefreshCw, Calculator, FileCheck 
@@ -281,11 +282,13 @@ export default function QuoteBuilder() {
     };
     try {
       const q = id ? await patch<{ id: string }>(`/quotes/${id}`, body, Number(existing.data?.version)) : await post<{ id: string }>('/quotes', body);
+      if (!q?.id) throw new Error('Server returned invalid quotation record without an ID');
       toast('Draft quotation saved successfully');
       nav(`/sales/quotes/${q.id}`);
-    } catch {
-      toast('Draft quotation saved (Demo Mode)');
-      nav('/sales?tab=quotes');
+    } catch (err: any) {
+      const msg = err?.title || err?.message || 'Failed to save quotation';
+      setError(msg);
+      errorToast(err);
     } finally {
       setBusy(false);
     }

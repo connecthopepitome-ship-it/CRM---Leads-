@@ -110,19 +110,23 @@ export default function Customers() {
   const [selectedId, setSelectedId] = useState<string>('cust-1');
   const [profileTab, setProfileTab] = useState<'overview' | 'activity' | 'quotations' | 'invoices' | 'followups'>('overview');
 
+  const isDemo = import.meta.env.VITE_DEMO_MODE === 'true';
   const q = params.get('q') ?? '';
   const list = useInfiniteQuery({
     queryKey: ['customers', q],
     queryFn: ({ pageParam }) =>
       get<{ items: CustomerItem[]; nextCursor: string | null }>(
         `/customers?limit=50${q ? `&q=${encodeURIComponent(q)}` : ''}${pageParam ? `&cursor=${pageParam}` : ''}`
-      ).catch(() => ({ items: SAMPLE_CUSTOMERS_FALLBACK, nextCursor: null })),
+      ).catch((err) => {
+        if (isDemo) return { items: SAMPLE_CUSTOMERS_FALLBACK, nextCursor: null };
+        throw err;
+      }),
     initialPageParam: '',
     getNextPageParam: (p) => p.nextCursor ?? undefined,
   });
 
   const rawRows = list.data?.pages?.flatMap((p) => p.items ?? []) ?? [];
-  const customers = rawRows.length > 0 ? rawRows : SAMPLE_CUSTOMERS_FALLBACK;
+  const customers = rawRows.length > 0 ? rawRows : (isDemo ? SAMPLE_CUSTOMERS_FALLBACK : []);
 
   const filteredCustomers = customers.filter((c) =>
     (c.displayName || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -132,7 +136,7 @@ export default function Customers() {
   const selectedCustomer =
     customers.find((c) => c.id === selectedId) ||
     customers[0] ||
-    SAMPLE_CUSTOMERS_FALLBACK[0]!;
+    null;
 
   return (
     <div className="space-y-5 pb-8">
@@ -158,7 +162,24 @@ export default function Customers() {
       {/* ============================================================== */}
       {/* GROVIA SCREEN 4: TWO-COLUMN SPLIT CUSTOMER WORKSPACE */}
       {/* ============================================================== */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 items-start">
+      {list.isLoading ? (
+        <Skeleton rows={8} />
+      ) : list.isError ? (
+        <ErrorState error={list.error} retry={() => void list.refetch()} />
+      ) : customers.length === 0 ? (
+        <EmptyState
+          title="No customers yet"
+          description="Add your first customer to track their orders, invoices, and sales history."
+          action={
+            can('customer', 'create') ? (
+              <LinkButton to="/customers/new" variant="primary">
+                New Customer
+              </LinkButton>
+            ) : undefined
+          }
+        />
+      ) : selectedCustomer && (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 items-start">
         {/* LEFT PANE: Customers Directory List (4 cols) */}
         <div className="rounded-2xl border border-[#DCE7D9] bg-white p-4 shadow-2xs space-y-3 lg:col-span-4">
           <div className="flex items-center justify-between border-b border-[#DCE7D9]/60 pb-2.5">
@@ -349,6 +370,7 @@ export default function Customers() {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

@@ -8,7 +8,7 @@ import { useAppConfig } from '../lib/appConfig';
 import { useAuth } from '../lib/auth';
 import { date, money } from '../lib/format';
 import { useAction } from '../features/hooks';
-import { Badge, Banner, Button, Card, Dialog, ErrorState, Field, KeyValue, PageHeader, SelectField, Skeleton, Table, Textarea, toast } from '../ui';
+import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, Field, KeyValue, LinkButton, PageHeader, SelectField, Skeleton, Table, Textarea, toast } from '../ui';
 
 interface OrderLine { id: string; kind?: string; description: string; qty: number; invoicedQty?: number; pendingQty: number; unit?: string }
 interface Order {
@@ -32,7 +32,7 @@ export default function OrderDetail() {
   const nav = useNavigate();
   const { perm } = useAuth();
   const cfg = useAppConfig().data;
-  const q = useQuery({ queryKey: ['order', id], queryFn: () => get<Order>(`/orders/${id}`) });
+  const q = useQuery({ queryKey: ['order', id], queryFn: () => get<Order>(`/orders/${id}`), enabled: Boolean(id && id !== 'undefined') });
   const [next, setNext] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const setStatus = useAction(() => post(`/orders/${id}/status`, { status: next, reason: reason || null }), [['order', id], ['sales']], () => {
@@ -43,7 +43,16 @@ export default function OrderDetail() {
   const invoice = useAction(() => post<{ id: string }>('/invoices', { type: cfg?.gstRegistered === false ? 'bill_of_supply' : 'tax_invoice', orderId: id }), [['order', id], ['sales']], (r) => nav(`/sales/invoices/${r.id}`));
 
   if (q.isLoading) return <Skeleton rows={6} />;
-  if (q.isError || !q.data) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
+  if (q.isError) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
+  if (!q.data) {
+    return (
+      <EmptyState
+        title="Order not found"
+        description="The requested order does not exist."
+        action={<LinkButton to="/sales?tab=orders">Back to orders</LinkButton>}
+      />
+    );
+  }
   const o = q.data;
   const lines = Array.isArray(o.lines) ? o.lines : [];
   const invoices = Array.isArray(o.invoices) ? o.invoices : [];
@@ -51,7 +60,7 @@ export default function OrderDetail() {
   const moves = ORDER_TRANSITIONS[o.status] ?? [];
   return (
     <>
-      <PageHeader back="/sales?tab=orders" title={`Order ${o.number}`} subtitle={<><Link className="underline" to={`/customers/${o.customerId}`}>{o.customerName ?? 'Customer'}</Link> · <Badge status={o.status}>{LABEL[o.status] ?? o.status}</Badge></>} actions={<>
+      <PageHeader back="/sales?tab=orders" title={o.number ? `Order ${o.number}` : 'Order'} subtitle={<><Link className="underline" to={`/customers/${o.customerId}`}>{o.customerName ?? 'Customer'}</Link> · <Badge status={o.status}>{LABEL[o.status] ?? o.status}</Badge></>} actions={<>
         {pending && perm('invoice:create') && !['cancelled', 'closed', 'on_hold'].includes(o.status) && <Button busy={invoice.isPending} onClick={() => invoice.mutate(undefined)}>Create invoice for pending items</Button>}
         {perm('order:status') && moves.length > 0 && <Button variant="secondary" onClick={() => setNext(moves[0]!)}>Change status</Button>}
       </>} />

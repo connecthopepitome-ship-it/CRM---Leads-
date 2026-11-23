@@ -271,7 +271,7 @@ const TYPE_LABEL: Record<string, string> = { call: 'Call', whatsapp: 'WhatsApp',
 
 export function Timeline({ recordType, recordId }: { recordType: 'lead' | 'customer'; recordId: string }) {
   const [type, setType] = useState('');
-  const q = useQuery({ queryKey: ['timeline', recordId, type], queryFn: () => get<{ items: Activity[] }>(`/timeline/${recordType}/${recordId}?limit=100${type ? `&types=${type}` : ''}`) });
+  const q = useQuery({ queryKey: ['timeline', recordId, type], queryFn: () => get<{ items: Activity[] }>(`/timeline/${recordType}/${recordId}?limit=100${type ? `&types=${type}` : ''}`), enabled: Boolean(recordId && recordId !== 'undefined') });
   const [queued, setQueued] = useState<OutboxItem[]>([]);
   useEffect(() => {
     const load = () => void pending().then((p) => setQueued(p.filter((i) => i.payload.recordId === recordId)));

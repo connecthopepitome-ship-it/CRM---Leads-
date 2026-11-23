@@ -6,30 +6,50 @@ import { Button, Card, SelectField, Skeleton, TextField, toast } from '../../ui'
 import { useEffect, useState } from 'react';
 
 export function Preferences() {
-  const mode = useQuery({ queryKey: ['settings', 'mode'], queryFn: () => get<{ data: { mode: string } }>('/admin/settings/mode') });
-  const modules = useQuery({ queryKey: ['settings', 'modules'], queryFn: () => get<{ data: { orders: boolean } }>('/admin/settings/modules') });
-  const sla = useQuery({ queryKey: ['settings', 'sla'], queryFn: () => get<{ data: { minutes: number; calendar: { start: string; end: string } } }>('/admin/settings/sla') });
-  const sales = useQuery({ queryKey: ['settings', 'sales'], queryFn: () => get<{ data: { validDays: number; discountLimits: Record<string, number> } }>('/admin/settings/sales') });
-  const perms = useQuery({ queryKey: ['settings', 'permissions'], queryFn: () => get<{ data: { execPaymentsEnabled: boolean } }>('/admin/settings/permissions') });
-  const terms = useQuery({ queryKey: ['settings', 'terminology'], queryFn: () => get<{ data: Record<string, string> }>('/admin/settings/terminology') });
+  const mode = useQuery({ queryKey: ['settings', 'mode'], queryFn: () => get<any>('/admin/settings/mode') });
+  const modules = useQuery({ queryKey: ['settings', 'modules'], queryFn: () => get<any>('/admin/settings/modules') });
+  const sla = useQuery({ queryKey: ['settings', 'sla'], queryFn: () => get<any>('/admin/settings/sla') });
+  const sales = useQuery({ queryKey: ['settings', 'sales'], queryFn: () => get<any>('/admin/settings/sales') });
+  const perms = useQuery({ queryKey: ['settings', 'permissions'], queryFn: () => get<any>('/admin/settings/permissions') });
+  const terms = useQuery({ queryKey: ['settings', 'terminology'], queryFn: () => get<any>('/admin/settings/terminology') });
   const [t, setT] = useState<Record<string, string>>({});
-  useEffect(() => { if (terms.data) setT(terms.data.data); }, [terms.data]);
-  const fin = useQuery({ queryKey: ['settings', 'finance'], queryFn: () => get<{ data: { lockDate: string | null } }>('/admin/settings/finance') });
+  useEffect(() => {
+    const raw = (terms.data as any)?.data ?? terms.data;
+    if (raw && typeof raw === 'object') setT(raw);
+  }, [terms.data]);
+  const fin = useQuery({ queryKey: ['settings', 'finance'], queryFn: () => get<any>('/admin/settings/finance') });
   const [s, setS] = useState({ minutes: '15', start: '09:00', end: '19:00', validDays: '15', execLimit: '10', mgrLimit: '20', lockDate: '' });
   useEffect(() => {
-    if (sla.data && sales.data) setS((x) => ({ ...x, minutes: String(sla.data.data.minutes), start: sla.data.data.calendar.start, end: sla.data.data.calendar.end, validDays: String(sales.data.data.validDays), execLimit: String(sales.data.data.discountLimits.sales_exec ?? 10), mgrLimit: String(sales.data.data.discountLimits.sales_manager ?? 20), lockDate: fin.data?.data.lockDate ?? '' }));
+    const slaRaw = (sla.data as any)?.data ?? sla.data;
+    const salesRaw = (sales.data as any)?.data ?? sales.data;
+    const finRaw = (fin.data as any)?.data ?? fin.data;
+    if (slaRaw || salesRaw || finRaw) {
+      setS((x) => ({
+        ...x,
+        minutes: String(slaRaw?.minutes ?? x.minutes ?? '15'),
+        start: slaRaw?.calendar?.start ?? x.start ?? '09:00',
+        end: slaRaw?.calendar?.end ?? x.end ?? '19:00',
+        validDays: String(salesRaw?.validDays ?? x.validDays ?? '15'),
+        execLimit: String(salesRaw?.discountLimits?.sales_exec ?? x.execLimit ?? '10'),
+        mgrLimit: String(salesRaw?.discountLimits?.sales_manager ?? x.mgrLimit ?? '20'),
+        lockDate: finRaw?.lockDate ?? x.lockDate ?? '',
+      }));
+    }
   }, [sla.data, sales.data, fin.data]);
   const saveMode = useAction((m: string) => put('/admin/mode', { mode: m }), [['settings']], () => toast('Mode changed — reload to update menus'));
   const saveSection = useAction((a: { section: string; data: object }) => put(`/admin/settings/${a.section}`, { data: a.data }), [['settings'], ['app-config']], () => toast('Saved'));
   if (mode.isLoading || sla.isLoading) return <Skeleton rows={5} />;
+  const currentMode = (mode.data as any)?.data?.mode ?? (mode.data as any)?.mode ?? 'solo';
+  const showOrders = !!((modules.data as any)?.data?.orders ?? (modules.data as any)?.orders ?? true);
+  const execPayments = !!((perms.data as any)?.data?.execPaymentsEnabled ?? (perms.data as any)?.execPaymentsEnabled ?? true);
   return (
     <div className="flex flex-col gap-4">
       <Card title="Mode">
-        <SelectField label="How do you work?" value={mode.data?.data.mode ?? 'solo'} onChange={(e) => saveMode.mutate(e.target.value)} options={[{ value: 'solo', label: 'Solo — just me' }, { value: 'team', label: 'Team — users, assignment, approvals' }]} />
+        <SelectField label="How do you work?" value={currentMode} onChange={(e) => saveMode.mutate(e.target.value)} options={[{ value: 'solo', label: 'Solo — just me' }, { value: 'team', label: 'Team — users, assignment, approvals' }]} />
       </Card>
       <Card title="Modules">
-        <label className="flex min-h-touch items-center gap-2 text-sm"><input type="checkbox" checked={!!modules.data?.data.orders} onChange={(e) => saveSection.mutate({ section: 'modules', data: { orders: e.target.checked } })} /> Show Sales Orders (otherwise orders are created silently when invoicing)</label>
-        <label className="flex min-h-touch items-center gap-2 text-sm"><input type="checkbox" checked={!!perms.data?.data.execPaymentsEnabled} onChange={(e) => saveSection.mutate({ section: 'permissions', data: { execPaymentsEnabled: e.target.checked } })} /> Sales executives can record payments</label>
+        <label className="flex min-h-touch items-center gap-2 text-sm"><input type="checkbox" checked={showOrders} onChange={(e) => saveSection.mutate({ section: 'modules', data: { orders: e.target.checked } })} /> Show Sales Orders (otherwise orders are created silently when invoicing)</label>
+        <label className="flex min-h-touch items-center gap-2 text-sm"><input type="checkbox" checked={execPayments} onChange={(e) => saveSection.mutate({ section: 'permissions', data: { execPaymentsEnabled: e.target.checked } })} /> Sales executives can record payments</label>
       </Card>
       <Card title="Your words (FR-003)" actions={<Button size="sm" busy={saveSection.isPending} onClick={() => saveSection.mutate({ section: 'terminology', data: t })}>Save words</Button>}>
         <p className="mb-3 text-sm text-muted">Rename things to match how you work, for example “Enquiries” instead of “Leads”. Leave blank to keep the default.</p>

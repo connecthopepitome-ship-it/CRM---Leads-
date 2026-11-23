@@ -8,7 +8,7 @@ import { useAuth } from '../lib/auth';
 import { date, money } from '../lib/format';
 import { DocPreview } from '../features/DocPreview';
 import { useAction, useOptions } from '../features/hooks';
-import { Badge, Banner, Button, Card, Dialog, ErrorState, Field, KeyValue, LinkButton, PageHeader, SelectField, Skeleton, Textarea, TextField, toast } from '../ui';
+import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, Field, KeyValue, LinkButton, PageHeader, SelectField, Skeleton, Textarea, TextField, toast } from '../ui';
 import { errorToast } from '../ui/toast';
 
 interface Invoice {
@@ -37,7 +37,7 @@ export default function InvoiceDetail() {
   const { id = '' } = useParams();
   const nav = useNavigate();
   const { perm, can } = useAuth();
-  const q = useQuery({ queryKey: ['invoice', id], queryFn: () => get<Invoice>(`/invoices/${id}`) });
+  const q = useQuery({ queryKey: ['invoice', id], queryFn: () => get<Invoice>(`/invoices/${id}`), enabled: Boolean(id && id !== 'undefined') });
   const upi = useQuery({ queryKey: ['upi', id, q.data?.balanceDue], queryFn: () => get<{ uri: string | null; amount: number; qrSvg: string | null; paid: boolean }>(`/invoices/${id}/upi`), enabled: !!q.data && q.data.status !== 'draft' });
   const templates = useOptions('messageTemplates');
   const [cn, setCn] = useState(false);
@@ -74,7 +74,16 @@ export default function InvoiceDetail() {
 
   if (q.isLoading) return <Skeleton rows={6} />;
   if (q.error) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
-  const i = q.data!;
+  if (!q.data) {
+    return (
+      <EmptyState
+        title="Invoice not found"
+        description="The requested invoice does not exist."
+        action={<LinkButton to="/sales?tab=invoices">Back to invoices</LinkButton>}
+      />
+    );
+  }
+  const i = q.data;
   const draft = i.status === 'draft';
   const live = ['issued', 'partly_paid'].includes(i.status);
   return (
@@ -90,7 +99,7 @@ export default function InvoiceDetail() {
       </>} />
       {i.cancelledByNumber && <div className="mb-3"><Banner tone="danger">Cancelled by {i.cancelledByNumber}.</Banner></div>}
       {i.convertedToId && <div className="mb-3"><Banner tone="info">Converted — <Link className="underline" to={`/sales/invoices/${i.convertedToId}`}>open the invoice</Link>.</Banner></div>}
-      {i.pdf.status === 'failed' && <div className="mb-3"><Banner tone="warning" action={<Button size="sm" onClick={() => void post(`/invoices/${id}/pdf`).then(() => toast('Regenerating PDF', 'info'))}>Regenerate PDF</Button>}>PDF generation failed.</Banner></div>}
+      {i.pdf?.status === 'failed' && <div className="mb-3"><Banner tone="warning" action={<Button size="sm" onClick={() => void post(`/invoices/${id}/pdf`).then(() => toast('Regenerating PDF', 'info'))}>Regenerate PDF</Button>}>PDF generation failed.</Banner></div>}
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
         <DocPreview type="invoice" id={id} version={i.version} />
         <div className="flex flex-col gap-4">

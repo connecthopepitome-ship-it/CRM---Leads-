@@ -7,7 +7,7 @@ import { useAuth } from '../lib/auth';
 import { date, money, relative } from '../lib/format';
 import { useAction } from '../features/hooks';
 import { DocPreview } from '../features/DocPreview';
-import { Badge, Banner, Button, Card, Dialog, ErrorState, Field, KeyValue, LinkButton, PageHeader, Skeleton, Textarea, toast } from '../ui';
+import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, Field, KeyValue, LinkButton, PageHeader, Skeleton, Textarea, toast } from '../ui';
 import { errorToast } from '../ui/toast';
 
 interface Quote {
@@ -39,7 +39,7 @@ export default function QuoteDetail() {
   const { id = '' } = useParams();
   const nav = useNavigate();
   const { user, perm } = useAuth();
-  const q = useQuery({ queryKey: ['quote', id], queryFn: () => get<Quote>(`/quotes/${id}`) });
+  const q = useQuery({ queryKey: ['quote', id], queryFn: () => get<Quote>(`/quotes/${id}`), enabled: Boolean(id && id !== 'undefined') });
   const [approval, setApproval] = useState<null | 'approve' | 'reject'>(null);
   const [comment, setComment] = useState('');
   const [onBehalf, setOnBehalf] = useState(false);
@@ -80,7 +80,16 @@ export default function QuoteDetail() {
 
   if (q.isLoading) return <Skeleton rows={6} />;
   if (q.error) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
-  const d = q.data!;
+  if (!q.data) {
+    return (
+      <EmptyState
+        title="Quotation not found"
+        description="The requested quotation does not exist."
+        action={<LinkButton to="/sales?tab=quotes">Back to quotations</LinkButton>}
+      />
+    );
+  }
+  const d = q.data;
   const editable = ['draft', 'approved'].includes(d.status);
   const sent = ['sent', 'viewed', 'changes_requested', 'rejected', 'expired'].includes(d.status);
   return (
@@ -103,7 +112,7 @@ export default function QuoteDetail() {
         <DocPreview type="quote" id={id} version={d.version} />
         <div className="flex flex-col gap-4">
           <Card title="Summary">
-            <KeyValue items={[['Total', money(d.totals?.grandTotal ?? 0)], ['Date', date(d.date)], ['Valid until', date(d.validUntil)], ['Viewed', d.viewCount ? `${d.viewCount} times, last ${relative(d.lastViewedAt)}` : 'Not yet'], ['PDF', d.pdf.status === 'failed' ? 'Failed — regenerate' : d.pdf.status]]} />
+            <KeyValue items={[['Total', money(d.totals?.grandTotal ?? 0)], ['Date', date(d.date)], ['Valid until', date(d.validUntil)], ['Viewed', d.viewCount ? `${d.viewCount} times, last ${relative(d.lastViewedAt)}` : 'Not yet'], ['PDF', d.pdf?.status === 'failed' ? 'Failed — regenerate' : (d.pdf?.status ?? 'ready')]]} />
             {d.customerId && <Link to={`/customers/${d.customerId}`} className="mt-3 block text-sm text-primary hover:underline">Open customer</Link>}
             {d.partyType === 'lead' && !d.customerId && <Link to={`/leads/${d.partyId}`} className="mt-3 block text-sm text-primary hover:underline">Open lead</Link>}
           </Card>

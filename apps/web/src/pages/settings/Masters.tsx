@@ -5,7 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import { get, patch, post } from '../../lib/api';
 import { money } from '../../lib/format';
 import { useAction } from '../../features/hooks';
-import { Badge, Button, Card, Dialog, Select, Table, TextField, toast } from '../../ui';
+import { Badge, Button, Card, Dialog, ErrorState, Select, Skeleton, Table, TextField, toast } from '../../ui';
 
 const TYPES: [string, string, [string, string, 'text' | 'number' | 'money' | 'bool'][]][] = [
   ['products', 'Products & services', [['type', 'Type (goods/service)', 'text'], ['hsnSac', 'HSN/SAC', 'text'], ['unit', 'Unit', 'text'], ['ratePaise', 'Rate (₹)', 'money'], ['taxRatePct', 'GST %', 'number']]],
@@ -26,7 +26,7 @@ type Item = { id: string; name: string; key: string | null; status: string; isDe
 export function Masters() {
   const [params, setParams] = useSearchParams();
   const type = params.get('type') ?? 'products';
-  const def = TYPES.find((t) => t[0] === type)!;
+  const def = TYPES.find((t) => t[0] === type) ?? TYPES[0]!;
   const q = useQuery({ queryKey: ['masters', type], queryFn: () => get<{ items: Item[] }>(`/admin/masters/${type}`) });
   const [edit, setEdit] = useState<Partial<Item> | null>(null);
   const toggle = useAction((i: Item) => post(`/admin/masters/${type}/${i.id}/${i.status === 'active' ? 'deactivate' : 'activate'}`), [['masters', type], ['options', type]]);
@@ -35,16 +35,22 @@ export function Masters() {
       <label className="mb-3 flex max-w-xs flex-col gap-1 text-sm font-medium">Type
         <Select value={type} onChange={(e) => setParams({ type: e.target.value })}>{TYPES.map(([t, l]) => <option key={t} value={t}>{l}</option>)}</Select>
       </label>
-      <Table<Item>
-        rows={q.data?.items ?? []}
-        onRow={(i) => setEdit(i)}
-        columns={[
-          { key: 'name', label: 'Name' },
-          ...def[2].slice(0, 3).map(([k, l, kind]) => ({ key: k, label: l, render: (i: Item) => (kind === 'money' ? money(Number(i.data[k] ?? 0)) : kind === 'bool' ? (i.data[k] !== false ? 'Yes' : 'No') : String(i.data[k] ?? '—')) })),
-          { key: 'status', label: 'Status', render: (i) => <span className="flex gap-1"><Badge status={i.status} />{i.isDefault && <Badge tone="info">Default</Badge>}</span> },
-          { key: 'act', label: '', render: (i) => <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); toggle.mutate(i); }}>{i.status === 'active' ? 'Deactivate' : 'Activate'}</Button> },
-        ]}
-      />
+      {q.isLoading ? (
+        <Skeleton rows={6} />
+      ) : q.isError ? (
+        <ErrorState error={q.error} retry={() => void q.refetch()} />
+      ) : (
+        <Table<Item>
+          rows={q.data?.items ?? []}
+          onRow={(i) => setEdit(i)}
+          columns={[
+            { key: 'name', label: 'Name' },
+            ...def[2].slice(0, 3).map(([k, l, kind]) => ({ key: k, label: l, render: (i: Item) => (kind === 'money' ? money(Number(i.data?.[k] ?? 0)) : kind === 'bool' ? (i.data?.[k] !== false ? 'Yes' : 'No') : String(i.data?.[k] ?? '—')) })),
+            { key: 'status', label: 'Status', render: (i) => <span className="flex gap-1"><Badge status={i.status} />{i.isDefault && <Badge tone="info">Default</Badge>}</span> },
+            { key: 'act', label: '', render: (i) => <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); toggle.mutate(i); }}>{i.status === 'active' ? 'Deactivate' : 'Activate'}</Button> },
+          ]}
+        />
+      )}
       {edit && <EditDialog type={type} fields={def[2]} item={edit} onClose={() => setEdit(null)} />}
     </Card>
   );

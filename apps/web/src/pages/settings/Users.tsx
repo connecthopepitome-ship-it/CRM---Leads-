@@ -5,15 +5,32 @@ import { get, patch, post, put } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { dateTime } from '../../lib/format';
 import { useAction } from '../../features/hooks';
-import { Badge, Banner, Button, Card, Dialog, SelectField, Table, TextField, toast } from '../../ui';
+import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, SelectField, Skeleton, Table, TextField, toast } from '../../ui';
 
 type U = { id: string; username: string; fullName: string; role: string; roleLabel: string; status: string; lastLoginAt: string | null; isSupport: boolean };
 const ROLES = [['admin', 'Admin'], ['sales_manager', 'Sales Manager'], ['sales_exec', 'Sales Executive'], ['accounts', 'Accounts'], ['project_manager', 'Project Manager'], ['viewer', 'Viewer / Auditor']];
 
 export function Users() {
   const { perm, mode } = useAuth();
-  const users = useQuery({ queryKey: ['users'], queryFn: () => get<{ items: U[] }>('/admin/users').then((r) => r.items) });
-  const teams = useQuery({ queryKey: ['teams'], queryFn: () => get<{ items: { id: string; name: string; managerId: string; memberIds: string[] }[] }>('/admin/teams').then((r) => r.items), enabled: mode === 'team' });
+  const users = useQuery({
+    queryKey: ['users'],
+    queryFn: () =>
+      get<any>('/admin/users').then((r) => {
+        if (Array.isArray(r)) return r as U[];
+        if (Array.isArray(r?.items)) return r.items as U[];
+        return [] as U[];
+      }),
+  });
+  const teams = useQuery({
+    queryKey: ['teams'],
+    queryFn: () =>
+      get<any>('/admin/teams').then((r) => {
+        if (Array.isArray(r)) return r;
+        if (Array.isArray(r?.items)) return r.items;
+        return [];
+      }),
+    enabled: mode === 'team',
+  });
   const [create, setCreate] = useState(false);
   const [temp, setTemp] = useState<{ username: string; password: string } | null>(null);
   const [nu, setNu] = useState({ username: '', fullName: '', role: 'sales_exec' });
@@ -28,7 +45,11 @@ export function Users() {
   const role = useAction((a: { id: string; role: string }) => patch(`/admin/users/${a.id}`, { role: a.role }), [['users']], () => toast('Role updated'));
   const sup = useAction((days: number) => put<{ oneTimePassword: string | null; expiresAt: string | null }>('/admin/support-access', { enabled: days > 0, days }), [['users']], (r) => (r.oneTimePassword ? setSupport({ password: r.oneTimePassword, expiresAt: r.expiresAt ?? '' }) : toast('Support access disabled')));
   const addTeam = useAction(() => post('/admin/teams', team), [['teams']], () => toast('Team created'));
-  const all = users.data ?? [];
+
+  if (users.isLoading) return <Skeleton rows={5} />;
+  if (users.isError) return <ErrorState error={users.error} retry={() => void users.refetch()} />;
+
+  const all = Array.isArray(users.data) ? users.data : [];
   return (
     <div className="flex flex-col gap-4">
       {temp && <Banner tone="success" action={<Button size="sm" variant="secondary" onClick={() => setTemp(null)}>Done</Button>}>Temporary password{temp.username ? ` for ${temp.username}` : ''}: <code className="font-semibold">{temp.password}</code> — share it securely; they must change it at first sign-in.</Banner>}

@@ -7,7 +7,7 @@ import { useAuth } from '../lib/auth';
 import { date, label, money, today } from '../lib/format';
 import { ActionBar, Timeline } from '../features/engagement';
 import { Files } from '../features/Files';
-import { Badge, Button, Card, ErrorState, LinkButton, PageHeader, Skeleton, StatTile, Table, Tabs, TextField, toast } from '../ui';
+import { Badge, Button, Card, EmptyState, ErrorState, LinkButton, PageHeader, Skeleton, StatTile, Table, Tabs, TextField, toast } from '../ui';
 import { errorToast } from '../ui/toast';
 
 interface C360 {
@@ -32,11 +32,20 @@ export default function Customer360() {
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') ?? 'overview';
   const { can } = useAuth();
-  const q = useQuery({ queryKey: ['c360', id], queryFn: () => get<C360>(`/customers/${id}/360`) });
-  const detail = useQuery({ queryKey: ['customer', id], queryFn: () => get<C360['customer'] & { contacts: Contact[]; addresses: { line1: string; city: string }[] }>(`/customers/${id}`) });
+  const q = useQuery({ queryKey: ['c360', id], queryFn: () => get<C360>(`/customers/${id}/360`), enabled: Boolean(id && id !== 'undefined') });
+  const detail = useQuery({ queryKey: ['customer', id], queryFn: () => get<C360['customer'] & { contacts: Contact[]; addresses: { line1: string; city: string }[] }>(`/customers/${id}`), enabled: Boolean(id && id !== 'undefined') });
   if (q.isLoading) return <Skeleton rows={6} />;
   if (q.error) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
-  const { customer, kpis, ageing, tabs = [] } = q.data!;
+  if (!q.data || !q.data.customer) {
+    return (
+      <EmptyState
+        title="Customer not found"
+        description="The requested customer does not exist."
+        action={<LinkButton to="/customers">Back to customers</LinkButton>}
+      />
+    );
+  }
+  const { customer, kpis = {}, ageing, tabs = [] } = q.data;
   const contacts = detail.data?.contacts ?? [];
   const primary = contacts.find((c) => c.isPrimary) ?? contacts[0];
   return (
@@ -94,7 +103,7 @@ function DocList({ customerId, tab }: { customerId: string; tab: string }) {
     quotes: [{ key: 'displayNumber', label: 'Number', render: (r) => String(r.displayNumber ?? 'Draft') }, { key: 'date', label: 'Date', render: (r) => date(String(r.date)) }, { key: 'status', label: 'Status', render: (r) => <Badge status={String(r.status)} /> }, { key: 'total', label: 'Total', align: 'right', render: (r) => money(((r.totals as any)?.grandTotal ?? Number(r.grandTotal ?? 0))) }],
     orders: [{ key: 'number', label: 'Number' }, { key: 'date', label: 'Date', render: (r) => date(String(r.date)) }, { key: 'status', label: 'Status', render: (r) => <Badge status={String(r.status)} /> }, { key: 'total', label: 'Total', align: 'right', render: (r) => money(((r.totals as any)?.grandTotal ?? Number(r.grandTotal ?? 0))) }],
     invoices: [{ key: 'number', label: 'Number', render: (r) => String(r.number ?? 'Draft') }, { key: 'dueDate', label: 'Due', render: (r) => date(String(r.dueDate)) }, { key: 'status', label: 'Status', render: (r) => <Badge status={String(r.status)} /> }, { key: 'ageing', label: 'Ageing', render: (r) => (r.status === 'paid' || !r.ageing ? '—' : label(String(r.ageing).replace('d', '').replace('_plus', '+').replace('_', '–'))) }, { key: 'bal', label: 'Balance', align: 'right', render: (r) => money(Number(r.balanceDue ?? 0)) }],
-    payments: [{ key: 'receiptNo', label: 'Receipt' }, { key: 'date', label: 'Date', render: (r) => date(String(r.date)) }, { key: 'mode', label: 'Mode', render: (r) => String(r.mode).toUpperCase() }, { key: 'status', label: 'Status', render: (r) => <Badge status={String(r.status)} /> }, { key: 'amount', label: 'Amount', align: 'right', render: (r) => money(Number(r.amount ?? 0)) }],
+    payments: [{ key: 'receiptNo', label: 'Receipt' }, { key: 'date', label: 'Date', render: (r) => date(String(r.date)) }, { key: 'mode', label: 'Mode', render: (r) => String(r.mode ?? 'NEFT').toUpperCase() }, { key: 'status', label: 'Status', render: (r) => <Badge status={String(r.status)} /> }, { key: 'amount', label: 'Amount', align: 'right', render: (r) => money(Number(r.amount ?? 0)) }],
   };
   const path = { quotes: 'quotes', orders: 'orders', invoices: 'invoices', payments: 'payments' }[tab]!;
   return <Table rows={items} columns={cols[tab] ?? []} onRow={(r) => (path === 'orders' ? undefined : nav(`/sales/${path}/${r.id}`))} />;

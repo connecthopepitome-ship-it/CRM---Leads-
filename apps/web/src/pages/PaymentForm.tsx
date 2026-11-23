@@ -9,6 +9,7 @@ import { useAuth } from '../lib/auth';
 import { date, money, toPaise, today, uid } from '../lib/format';
 import { useOptions } from '../features/hooks';
 import { Banner, Button, Field, PageHeader, SelectField, Table, Textarea, TextField, toast } from '../ui';
+import { errorToast } from '../ui/toast';
 import { 
   Building2, CheckCircle2, CreditCard, DollarSign, FileCheck, IndianRupee, 
   Receipt, RotateCcw, ShieldCheck, Sparkles, User, Wallet 
@@ -195,18 +196,19 @@ export default function PaymentForm() {
           : { mode: 'auto', preferInvoiceId: params.get('invoiceId') ?? undefined },
       };
       const p = await post<{ id: string; receiptNo: string }>('/payments', body, { 'Idempotency-Key': idemKey });
+      if (!p?.id) throw new Error('Server returned invalid payment record without an ID');
       void qc.invalidateQueries();
       toast(`Payment saved — receipt ${p.receiptNo}`);
       nav(`/sales/payments/${p.id}`);
-    } catch (e) {
+    } catch (e: any) {
       const err = e as ApiError;
       if (err.code === 'UTR_DUPLICATE') {
         setUtrUsed(String(err.body?.usedBy ?? 'another receipt'));
         setError(err.title);
       } else {
-        // Fallback demo mode
-        toast(`Payment recorded — receipt RCP/26-27/0084 (Demo Mode)`);
-        nav('/sales?tab=payments');
+        const msg = err?.title || err?.message || 'Failed to record payment';
+        setError(msg);
+        errorToast(e);
       }
     } finally {
       setBusy(false);

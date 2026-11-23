@@ -23,7 +23,8 @@ import {
   Clock,
   Sparkles,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { get } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -86,15 +87,43 @@ export default function Home() {
     }, 400);
   };
 
-  // Pipeline Stage Distribution
-  const pipelineStages = [
-    { label: 'New', count: 12, color: '#3D7952' },
-    { label: 'Contacted', count: 8, color: '#5A9B68' },
-    { label: 'Interested', count: 5, color: '#88B894' },
-    { label: 'Quotation Sent', count: 3, color: '#D99A45' },
-    { label: 'Negotiation', count: 3, color: '#D66B68' },
-  ];
-  const totalPipelineLeads = pipelineStages.reduce((sum, s) => sum + s.count, 0); // 31
+  const isDemo = import.meta.env.VITE_DEMO_MODE === 'true';
+  const board = useQuery({
+    queryKey: ['leads-board'],
+    queryFn: () => get<{ columns: { stage: string; label: string; count: number; value: number }[] }>('/leads/board'),
+  });
+
+  // Pipeline Stage Distribution derived strictly from live API
+  const pipelineStages = useMemo(() => {
+    if (board.data?.columns) {
+      const colors: Record<string, string> = {
+        new: '#3D7952',
+        contacted: '#5A9B68',
+        interested: '#88B894',
+        quotation_sent: '#D99A45',
+        negotiation: '#D66B68',
+        won: '#233D2D',
+        lost: '#778477',
+      };
+      return board.data.columns.map((c) => ({
+        label: c.label,
+        count: c.count,
+        color: colors[c.stage] || '#3D7952',
+      }));
+    }
+    if (isDemo) {
+      return [
+        { label: 'New', count: 12, color: '#3D7952' },
+        { label: 'Contacted', count: 8, color: '#5A9B68' },
+        { label: 'Interested', count: 5, color: '#88B894' },
+        { label: 'Quotation Sent', count: 3, color: '#D99A45' },
+        { label: 'Negotiation', count: 3, color: '#D66B68' },
+      ];
+    }
+    return [];
+  }, [board.data, isDemo]);
+
+  const totalPipelineLeads = pipelineStages.reduce((sum, s) => sum + s.count, 0);
 
   return (
     <div className="space-y-6 pb-8">

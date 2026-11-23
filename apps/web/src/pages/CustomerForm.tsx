@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { GST_STATES } from '@ss/domain';
 import { ApiError, post } from '../lib/api';
 import { Banner, Button, Field, PageHeader, SelectField, TextField, toast } from '../ui';
+import { errorToast } from '../ui/toast';
 import { 
   Building2, CheckCircle2, CreditCard, FileBadge, Mail, MapPin, 
   Phone, RotateCcw, ShieldCheck, Sparkles, User, UserCheck 
@@ -159,15 +160,16 @@ export default function CustomerForm() {
         contact: f.contactName ? { name: f.contactName, phone: f.phone || null, email: f.email || null } : undefined,
         billing: f.line1 ? { line1: f.line1, city: f.city, stateCode: f.stateCode, pincode: f.pincode || null } : undefined,
       });
+      if (!r?.id) throw new Error('Server returned invalid customer record without an ID');
       toast('Customer created successfully');
       nav(`/customers/${r.id}`);
-    } catch (err) {
+    } catch (err: any) {
       if (err instanceof ApiError && err.code === 'POSSIBLE_DUPLICATE') {
         setDup(true);
       } else {
-        // Graceful fallback for mock/demo mode
-        toast('Customer created successfully (Demo Mode)');
-        nav('/customers');
+        const msg = err?.title || err?.message || 'Failed to create customer';
+        setError(msg);
+        errorToast(err);
       }
     } finally {
       setBusy(false);

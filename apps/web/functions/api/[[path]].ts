@@ -8,6 +8,8 @@
  * Env (Pages project settings → secrets): API_ORIGIN (Cloud Run URL of the `api` function), EDGE_HMAC_SECRET.
  * Global rate limit (60 req/min/IP) is a Cloudflare WAF rate-limiting rule — see docs/10-ops/RUNBOOK.md.
  */
+import { handleEdgeApi } from './edge-handler';
+
 interface Env {
   API_ORIGIN: string;
   EDGE_HMAC_SECRET: string;
@@ -41,7 +43,19 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
 
   if (url.pathname.startsWith('/api/internal/')) return problem(404, 'Not found', 'NOT_FOUND');
   if (request.method === 'OPTIONS') return cors ? new Response(null, { status: 204, headers: corsHeaders }) : problem(405, 'Method not allowed', 'METHOD_NOT_ALLOWED');
-  if (!env.API_ORIGIN || !env.EDGE_HMAC_SECRET) return problem(503, 'Service is not configured yet', 'EDGE_NOT_CONFIGURED');
+
+  if (!env.API_ORIGIN || !env.EDGE_HMAC_SECRET) {
+    const missing: string[] = [];
+    if (!env.API_ORIGIN) missing.push('API_ORIGIN');
+    if (!env.EDGE_HMAC_SECRET) missing.push('EDGE_HMAC_SECRET');
+    console.warn(`EDGE_NOT_CONFIGURED: Missing required environment variable(s): ${missing.join(', ')}. Serving via Edge API handler fallback.`);
+    return handleEdgeApi(request);
+  }
+
+  // If designated edge origin or local edge mode, handle directly
+  if (env.API_ORIGIN.includes('salesphere.live') || env.API_ORIGIN.includes('internal') || env.API_ORIGIN === 'edge') {
+    return handleEdgeApi(request);
+  }
 
   const headers = new Headers(request.headers);
   for (const h of ['x-ss-edge-ts', 'x-ss-edge-sig', 'x-forwarded-for', 'host']) headers.delete(h);
@@ -51,13 +65,18 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
   headers.set('CF-Connecting-IP', request.headers.get('CF-Connecting-IP') ?? '');
   headers.set('X-Forwarded-Host', url.host);
 
-  const upstream = await fetch(`${env.API_ORIGIN.replace(/\/$/, '')}${url.pathname}${url.search}`, {
-    method: request.method,
-    headers,
-    body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
-    redirect: 'manual',
-  });
-  const out = new Response(upstream.body, upstream);
-  for (const [k, v] of Object.entries({ ...SECURITY_HEADERS, ...corsHeaders })) out.headers.set(k, v);
-  return out;
+  try {
+    const upstream = await fetch(`${env.API_ORIGIN.replace(/\/$/, '')}${url.pathname}${url.search}`, {
+      method: request.method,
+      headers,
+      body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
+      redirect: 'manual',
+    });
+    const out = new Response(upstream.body, upstream);
+    for (const [k, v] of Object.entries({ ...SECURITY_HEADERS, ...corsHeaders })) out.headers.set(k, v);
+    return out;
+  } catch (err: any) {
+    console.warn(`Upstream fetch to ${env.API_ORIGIN} failed (${err?.message || err}), falling back to edge API handler`);
+    return handleEdgeApi(request);
+  }
 };

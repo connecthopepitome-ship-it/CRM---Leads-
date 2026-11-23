@@ -7,7 +7,7 @@ import { useAuth } from '../lib/auth';
 import { date, money } from '../lib/format';
 import { DocPreview } from '../features/DocPreview';
 import { useAction } from '../features/hooks';
-import { Badge, Banner, Button, Card, Dialog, ErrorState, Field, KeyValue, PageHeader, Skeleton, Textarea, toast } from '../ui';
+import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, Field, KeyValue, LinkButton, PageHeader, Skeleton, Textarea, toast } from '../ui';
 import { errorToast } from '../ui/toast';
 
 interface Payment {
@@ -30,7 +30,7 @@ interface Payment {
 export default function PaymentDetail() {
   const { id = '' } = useParams();
   const { perm } = useAuth();
-  const q = useQuery({ queryKey: ['payment', id], queryFn: () => get<Payment>(`/payments/${id}`) });
+  const q = useQuery({ queryKey: ['payment', id], queryFn: () => get<Payment>(`/payments/${id}`), enabled: Boolean(id && id !== 'undefined') });
   const [rev, setRev] = useState(false);
   const [reason, setReason] = useState('');
   const reverse = useAction(() => post(`/payments/${id}/reverse`, { reason }), [['payment', id], ['invoice'], ['upi'], ['sales'], ['customer'], ['customers']], () => {
@@ -47,11 +47,20 @@ export default function PaymentDetail() {
     }
   };
   if (q.isLoading) return <Skeleton rows={5} />;
-  if (q.error) return <ErrorState error={q.error} />;
-  const p = q.data!;
+  if (q.error) return <ErrorState error={q.error} retry={() => void q.refetch()} />;
+  if (!q.data) {
+    return (
+      <EmptyState
+        title="Payment not found"
+        description="The requested receipt does not exist."
+        action={<LinkButton to="/sales?tab=payments">Back to payments</LinkButton>}
+      />
+    );
+  }
+  const p = q.data;
   return (
     <>
-      <PageHeader back="/sales?tab=payments" title={`Receipt ${p.receiptNo}`} subtitle={<><Link to={`/customers/${p.customerId}`} className="text-primary hover:underline">{p.customerName}</Link> · <Badge status={p.status} /></>} actions={<>
+      <PageHeader back="/sales?tab=payments" title={`Receipt ${p.receiptNo ?? '—'}`} subtitle={<><Link to={`/customers/${p.customerId}`} className="text-primary hover:underline">{p.customerName ?? 'Customer'}</Link> · <Badge status={p.status ?? 'active'} /></>} actions={<>
         <Button variant="secondary" onClick={() => void share()}>Share receipt</Button>
         {p.status === 'active' && perm('payment:reverse') && <Button variant="danger" onClick={() => setRev(true)}>Reverse payment</Button>}
       </>} />
@@ -59,7 +68,7 @@ export default function PaymentDetail() {
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
         <DocPreview type="receipt" id={id} version={p.version} />
         <Card title="Details">
-          <KeyValue items={[['Amount', money(p.amount)], ['TDS', p.tdsAmount ? money(p.tdsAmount) : '—'], ['Date', date(p.date)], ['Mode', p.mode.toUpperCase()], ['Reference', p.reference], ['Advance kept', p.advance ? money(p.advance) : '—']]} />
+          <KeyValue items={[['Amount', money(p.amount ?? 0)], ['TDS', p.tdsAmount ? money(p.tdsAmount) : '—'], ['Date', date(p.date)], ['Mode', (p.mode ?? 'NEFT').toUpperCase()], ['Reference', p.reference], ['Advance kept', p.advance ? money(p.advance) : '—']]} />
           <h3 className="mt-3 text-sm font-semibold">Applied to</h3>
           <ul className="text-sm">{(p.allocations ?? []).map((a) => <li key={a.invoiceId} className="flex justify-between py-1"><Link to={`/sales/invoices/${a.invoiceId}`} className="text-primary hover:underline">{a.number}</Link><span>{money(a.amount)}</span></li>)}</ul>
         </Card>

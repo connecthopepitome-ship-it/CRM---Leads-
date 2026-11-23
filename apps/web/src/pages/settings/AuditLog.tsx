@@ -41,7 +41,7 @@ export function AuditLog() {
         </div>
       )}
       {q.isLoading ? <Skeleton /> : q.error ? <ErrorState error={q.error} /> : (
-        <Table<Entry> rows={q.data!.items} onRow={setOpen} columns={[
+        <Table<Entry> rows={q.data?.items ?? []} onRow={setOpen} columns={[
           { key: 'at', label: 'When', render: (e) => dateTime(e.at) },
           { key: 'userName', label: 'Who' },
           { key: 'action', label: 'Action' },

@@ -81,17 +81,21 @@ export default function Reports() {
         value: Number(row.value || 0),
       }));
     }
-    return [
-      { label: 'New', count: 12, value: 350000 },
-      { label: 'Contacted', count: 8, value: 240000 },
-      { label: 'Interested', count: 5, value: 180000 },
-      { label: 'Quotation Sent', count: 3, value: 120000 },
-      { label: 'Negotiation', count: 3, value: 95000 },
-    ];
+    const isDemo = import.meta.env.VITE_DEMO_MODE === 'true';
+    if (isDemo) {
+      return [
+        { label: 'New', count: 12, value: 350000 },
+        { label: 'Contacted', count: 8, value: 240000 },
+        { label: 'Interested', count: 5, value: 180000 },
+        { label: 'Quotation Sent', count: 3, value: 120000 },
+        { label: 'Negotiation', count: 3, value: 95000 },
+      ];
+    }
+    return [];
   }, [id, r.data]);
 
   const totalLeadsCount = useMemo(() => {
-    return stageStats.reduce((sum, item) => sum + item.count, 0) || 31;
+    return stageStats.reduce((sum, item) => sum + item.count, 0);
   }, [stageStats]);
 
   const STAGE_COLORS = ['#427AA1', '#7A6F9B', '#3D7952', '#D99A45', '#C46D65', '#5A9B68'];
