@@ -311,7 +311,7 @@ export default function QuoteBuilder() {
   const selectedParty = availableParties.find((p) => p.id === partyId);
 
   return (
-    <div className="space-y-6 pb-16 select-none font-sans">
+    <div className="space-y-6 pb-28 sm:pb-16 font-sans">
       {/* Page Header */}
       <PageHeader
         back={id ? `/sales/quotes/${id}` : '/sales'}
@@ -319,32 +319,32 @@ export default function QuoteBuilder() {
         subtitle="Commercial proposal builder with automatic GST tax calculations and live totals."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {/* Quick Sample Data Preset Selector */}
-            <div className="flex items-center rounded-xl bg-[#E3EFDF] p-1 text-xs border border-[#CFE5CB] shadow-2xs">
-              <span className="flex items-center gap-1 px-2 font-semibold text-[#233D2D]">
+            {/* Responsive Sample Data Preset Selector */}
+            <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-[#E3EFDF] p-1 text-xs border border-[#CFE5CB] shadow-2xs">
+              <span className="flex items-center gap-1 px-1.5 font-semibold text-[#233D2D]">
                 <Sparkles size={13} className="text-[#3D7952]" />
-                <span>Test Presets:</span>
+                <span className="hidden sm:inline">Presets:</span>
               </span>
               <button
                 type="button"
                 onClick={() => loadPreset('enterprise')}
-                className="px-2.5 py-1 rounded-lg font-semibold bg-[#233D2D] text-white shadow-2xs hover:bg-[#1a2e22] transition-colors"
+                className="px-2 py-0.5 rounded-lg font-semibold bg-[#233D2D] text-white shadow-2xs hover:bg-[#1a2e22] transition-colors text-[11px]"
               >
-                Enterprise (₹1.01L)
+                Enterprise
               </button>
               <button
                 type="button"
                 onClick={() => loadPreset('starter')}
-                className="px-2.5 py-1 rounded-lg font-medium text-[#202820] hover:bg-white/80 transition-colors"
+                className="px-2 py-0.5 rounded-lg font-medium text-[#202820] bg-white/70 hover:bg-white transition-colors text-[11px]"
               >
-                Starter (₹34K)
+                Starter
               </button>
               <button
                 type="button"
                 onClick={() => loadPreset('blank')}
-                className="px-2.5 py-1 rounded-lg font-medium text-[#778477] hover:text-[#202820] transition-colors"
+                className="px-1.5 py-0.5 rounded-lg font-medium text-[#778477] hover:text-[#202820] transition-colors text-[11px]"
               >
-                Reset Blank
+                Reset
               </button>
             </div>
 

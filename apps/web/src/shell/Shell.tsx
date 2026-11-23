@@ -151,7 +151,7 @@ export function Shell() {
   };
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#EDF5EA] font-sans antialiased text-[#202820]">
+    <div className="flex h-[100dvh] w-full max-w-full flex-col overflow-hidden bg-[#EDF5EA] font-sans antialiased text-[#202820]">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:p-3 focus:shadow-lg focus:text-[#3D7952] font-semibold"

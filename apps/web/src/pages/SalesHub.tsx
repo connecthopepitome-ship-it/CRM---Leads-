@@ -136,11 +136,12 @@ export default function SalesHub() {
   return (
     <div className="space-y-5 pb-8">
       {/* ============================================================== */}
-      {/* 1. HEADER & SUB-TABS */}
+      {/* 1. HEADER (Structured by logical rows) */}
       {/* ============================================================== */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="space-y-3.5">
+        {/* Row 1: Title and Description */}
         <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#202820]">
+          <h1 className="text-2xl font-extrabold tracking-tight text-[#202820]">
             Sales
           </h1>
           <p className="text-xs sm:text-sm text-[#778477] mt-0.5">
@@ -148,15 +149,15 @@ export default function SalesHub() {
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
-          {/* Submodule Tab Pills with horizontal scroll on mobile */}
+        {/* Row 2: Dedicated Segmented Navigation Strip */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="overflow-x-auto -mx-1 sm:mx-0 px-1 sm:px-0 pb-1 sm:pb-0">
-            <div className="inline-flex rounded-full bg-[#E3EFDF]/70 p-1 border border-[#DCE7D9] shrink-0">
+            <div className="inline-flex rounded-full bg-[#E3EFDF]/80 p-1 border border-[#DCE7D9] shrink-0 shadow-2xs">
               {tabs.map((t) => (
                 <button
                   key={t.id}
                   onClick={() => setParams({ tab: t.id })}
-                  className={`flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-semibold whitespace-nowrap transition-all ${
+                  className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold whitespace-nowrap transition-all ${
                     tab === t.id
                       ? 'bg-[#233D2D] text-white shadow-xs'
                       : 'text-[#778477] hover:text-[#202820]'
@@ -169,33 +170,52 @@ export default function SalesHub() {
             </div>
           </div>
 
-          {/* New Action Button */}
+          {/* Desktop-only New Action Button on the right of tabs */}
+          <div className="hidden sm:block">
+            {tab === 'quotes' && can('quote', 'create') && (
+              <LinkButton to="/sales/quotes/new" variant="primary" className="gap-1.5 shadow-xs">
+                <Plus size={15} strokeWidth={2.5} />
+                <span>New Quotation</span>
+              </LinkButton>
+            )}
+
+            {tab === 'payments' && can('payment', 'create') && (
+              <LinkButton to="/sales/payments/new" variant="primary" className="gap-1.5 shadow-xs">
+                <Plus size={15} strokeWidth={2.5} />
+                <span>Record Payment</span>
+              </LinkButton>
+            )}
+          </div>
+        </div>
+
+        {/* Row 3: Full-width Primary Action on Mobile */}
+        <div className="w-full sm:hidden">
           {tab === 'quotes' && can('quote', 'create') && (
-            <LinkButton to="/sales/quotes/new" variant="primary" className="gap-1.5 shadow-xs w-full sm:w-auto justify-center">
+            <LinkButton to="/sales/quotes/new" variant="primary" className="w-full justify-center py-2.5 font-bold shadow-xs text-xs">
               <Plus size={15} strokeWidth={2.5} />
-              <span>New Quotation</span>
+              <span>+ New Quotation</span>
             </LinkButton>
           )}
 
           {tab === 'payments' && can('payment', 'create') && (
-            <LinkButton to="/sales/payments/new" variant="primary" className="gap-1.5 shadow-xs w-full sm:w-auto justify-center">
+            <LinkButton to="/sales/payments/new" variant="primary" className="w-full justify-center py-2.5 font-bold shadow-xs text-xs">
               <Plus size={15} strokeWidth={2.5} />
-              <span>Record Payment</span>
+              <span>+ Record Payment</span>
             </LinkButton>
           )}
         </div>
       </div>
 
       {/* ============================================================== */}
-      {/* 2. FILTER & SEARCH TOOLBAR */}
+      {/* 2. FILTER & SEARCH TOOLBAR (Full width on mobile 320-430px) */}
       {/* ============================================================== */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-[#DCE7D9] bg-white p-3 shadow-2xs">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="rounded-2xl border border-[#DCE7D9] bg-white p-3.5 shadow-2xs space-y-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           {/* Status Filter */}
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-full border border-[#DCE7D9] bg-[#F5F9F2] px-3.5 py-1.5 text-xs font-medium text-[#202820] hover:border-[#CFE5CB] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/20 cursor-pointer"
+            className="w-full rounded-xl border border-[#DCE7D9] bg-[#F5F9F2] px-3.5 py-2 text-xs font-medium text-[#202820] hover:border-[#CFE5CB] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/20 cursor-pointer"
           >
             <option value="">All Status</option>
             <option value="draft">Draft</option>
@@ -210,7 +230,7 @@ export default function SalesHub() {
           <select
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
-            className="rounded-full border border-[#DCE7D9] bg-[#F5F9F2] px-3.5 py-1.5 text-xs font-medium text-[#202820] hover:border-[#CFE5CB] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/20 cursor-pointer"
+            className="w-full rounded-xl border border-[#DCE7D9] bg-[#F5F9F2] px-3.5 py-2 text-xs font-medium text-[#202820] hover:border-[#CFE5CB] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/20 cursor-pointer"
           >
             <option value="This Month">This Month</option>
             <option value="Last Month">Last Month</option>
@@ -218,15 +238,15 @@ export default function SalesHub() {
           </select>
         </div>
 
-        {/* Search */}
-        <div className="relative w-full sm:w-auto sm:min-w-[260px]">
+        {/* Search Input: 100% full width, never overflows */}
+        <div className="relative w-full">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#778477]" />
           <input
             type="text"
-            placeholder="Search by number, customer..."
+            placeholder="Search by number or customer..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-full border border-[#DCE7D9] bg-[#F5F9F2] pl-9 pr-3.5 py-1.5 text-xs text-[#202820] placeholder-[#778477] focus:bg-white focus:border-[#3D7952] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/10"
+            className="w-full rounded-xl border border-[#DCE7D9] bg-[#F5F9F2] pl-9 pr-3.5 py-2 text-xs text-[#202820] placeholder-[#778477] focus:bg-white focus:border-[#3D7952] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/10"
           />
         </div>
       </div>
