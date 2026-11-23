@@ -103,14 +103,14 @@ export default function QuoteDetail() {
         <DocPreview type="quote" id={id} version={d.version} />
         <div className="flex flex-col gap-4">
           <Card title="Summary">
-            <KeyValue items={[['Total', money(d.totals.grandTotal)], ['Date', date(d.date)], ['Valid until', date(d.validUntil)], ['Viewed', d.viewCount ? `${d.viewCount} times, last ${relative(d.lastViewedAt)}` : 'Not yet'], ['PDF', d.pdf.status === 'failed' ? 'Failed — regenerate' : d.pdf.status]]} />
+            <KeyValue items={[['Total', money(d.totals?.grandTotal ?? 0)], ['Date', date(d.date)], ['Valid until', date(d.validUntil)], ['Viewed', d.viewCount ? `${d.viewCount} times, last ${relative(d.lastViewedAt)}` : 'Not yet'], ['PDF', d.pdf.status === 'failed' ? 'Failed — regenerate' : d.pdf.status]]} />
             {d.customerId && <Link to={`/customers/${d.customerId}`} className="mt-3 block text-sm text-primary hover:underline">Open customer</Link>}
             {d.partyType === 'lead' && !d.customerId && <Link to={`/leads/${d.partyId}`} className="mt-3 block text-sm text-primary hover:underline">Open lead</Link>}
           </Card>
           {!!d.revisions?.length && d.revisions.length > 1 && (
             <Card title="Revisions">
               <ul className="text-sm">
-                {(d.revisions ?? []).map((r) => <li key={r.id} className="flex justify-between py-1"><Link className="text-primary hover:underline" to={`/sales/quotes/${r.id}`}>R{r.revision} {r.displayNumber ?? '(draft)'}</Link><span><Badge status={r.status} /> {money(r.grandTotal)}</span></li>)}
+                {(d.revisions ?? []).map((r) => <li key={r.id} className="flex justify-between py-1"><Link className="text-primary hover:underline" to={`/sales/quotes/${r.id}`}>R{r.revision} {r.displayNumber ?? '(draft)'}</Link><span><Badge status={r.status} /> {money(r.grandTotal ?? 0)}</span></li>)}
               </ul>
             </Card>
           )}

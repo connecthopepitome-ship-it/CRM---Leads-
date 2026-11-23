@@ -49,6 +49,38 @@ const SAMPLE_QUOTES_FALLBACK: Row[] = [
   },
 ];
 
+const SAMPLE_INVOICES_FALLBACK: Row[] = [
+  {
+    id: 'inv-1',
+    number: 'INV/26-27/0001',
+    customerName: 'Sharma Textiles',
+    totals: { grandTotal: 2950000 },
+    balanceDue: 0,
+    status: 'paid',
+    dueDate: '2026-11-29',
+  },
+  {
+    id: 'inv-2',
+    number: 'INV/26-27/0002',
+    customerName: 'Nair Foods',
+    totals: { grandTotal: 5900000 },
+    balanceDue: 1500000,
+    status: 'overdue',
+    dueDate: '2026-11-15',
+  },
+];
+
+const SAMPLE_PAYMENTS_FALLBACK: Row[] = [
+  {
+    id: 'pay-1',
+    receiptNo: 'RCT/26-27/0001',
+    customerName: 'Sharma Textiles',
+    amount: 2950000,
+    status: 'active',
+    date: '2026-11-14',
+  },
+];
+
 export default function SalesHub() {
   const [params, setParams] = useSearchParams();
   const nav = useNavigate();
@@ -78,14 +110,29 @@ export default function SalesHub() {
     queryKey: ['sales', tab, extra.toString()],
     queryFn: () =>
       get<{ items: Row[] }>(`/${tab}?limit=100&${extra.toString()}`).catch(() => ({
-        items: tab === 'quotes' ? SAMPLE_QUOTES_FALLBACK : [],
+        items: [],
       })),
   });
 
-  const rawRows = q.data?.items ?? [];
-  const rows = rawRows.length > 0 ? rawRows : (tab === 'quotes' ? SAMPLE_QUOTES_FALLBACK : []);
+  const fallback =
+    tab === 'invoices'
+      ? SAMPLE_INVOICES_FALLBACK
+      : tab === 'payments'
+      ? SAMPLE_PAYMENTS_FALLBACK
+      : SAMPLE_QUOTES_FALLBACK;
 
-  const g = (r: Row) => (r.totals as { grandTotal: number } | undefined)?.grandTotal ?? 0;
+  const rawRows = q.data?.items ?? [];
+  const rows = rawRows.length > 0 ? rawRows : fallback;
+
+  const g = (r: Row) => {
+    if (!r) return 0;
+    const t = (r.totals as { grandTotal?: number } | undefined)?.grandTotal;
+    if (typeof t === 'number' && !isNaN(t)) return t;
+    if (typeof r.grandTotal === 'number' && !isNaN(r.grandTotal)) return r.grandTotal;
+    if (typeof r.amount === 'number' && !isNaN(r.amount)) return r.amount;
+    if (typeof r.balanceDue === 'number' && !isNaN(r.balanceDue)) return r.balanceDue;
+    return 0;
+  };
 
   return (
     <div className="space-y-5 pb-8">

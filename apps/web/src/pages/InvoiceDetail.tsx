@@ -95,7 +95,7 @@ export default function InvoiceDetail() {
         <DocPreview type="invoice" id={id} version={i.version} />
         <div className="flex flex-col gap-4">
           <Card title="Balance">
-            <KeyValue items={[['Total', money(i.totals.grandTotal)], ['Received', money(i.paid)], ['Credited', money(i.credited)], ['Balance due', <b key="b">{money(i.balanceDue)}</b>], ['Invoice date', date(i.date)], ['Due date', date(i.dueDate)]]} />
+            <KeyValue items={[['Total', money(i.totals?.grandTotal ?? 0)], ['Received', money(i.paid ?? 0)], ['Credited', money(i.credited ?? 0)], ['Balance due', <b key="b">{money(i.balanceDue ?? 0)}</b>], ['Invoice date', date(i.date)], ['Due date', date(i.dueDate)]]} />
           </Card>
           {upi.data && (
             <Card title="UPI">
@@ -130,7 +130,7 @@ function CreditNoteDialog({ invoice, onClose }: { invoice: Invoice; onClose(): v
   return (
     <Dialog open onClose={onClose} title="Issue a credit note" footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button disabled={reason.trim().length < 3 || (mode === 'amount' && !Number(amount))} busy={m.isPending} onClick={() => m.mutate(undefined)}>Issue credit note</Button></>}>
       <div className="flex flex-col gap-3">
-        <SelectField label="Credit" value={mode} onChange={(e) => setMode(e.target.value as 'full')} options={[{ value: 'full', label: `Full invoice (cancels it) — ${money(invoice.totals.grandTotal - invoice.credited)}` }, { value: 'amount', label: 'An amount' }]} />
+        <SelectField label="Credit" value={mode} onChange={(e) => setMode(e.target.value as 'full')} options={[{ value: 'full', label: `Full invoice (cancels it) — ${money((invoice.totals?.grandTotal ?? 0) - (invoice.credited ?? 0))}` }, { value: 'amount', label: 'An amount' }]} />
         {mode === 'amount' && <TextField label="Amount (₹)" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />}
         <Field label="Reason" required>{(fid) => <Textarea id={fid} value={reason} onChange={(e) => setReason(e.target.value)} />}</Field>
         <p className="text-xs text-muted">Any credit beyond the balance due becomes the customer’s on-account credit.</p>

@@ -78,7 +78,7 @@ export function ImportData() {
       {preview && (
         <div className="flex flex-col gap-3">
           <Banner tone={preview.failed ? 'warning' : 'success'}>{preview.valid} ready to import, {preview.failed} need fixing{preview.duplicatesExisting ? `, ${preview.duplicatesExisting} already exist` : ''}.</Banner>
-          {!!preview.failures?.length && <ul className="text-sm">{preview.failures.slice(0, 50).map((f) => <li key={`${f.row}-${f.field}`}>Row {f.row} · {f.field}: {f.message}</li>)}</ul>}
+          {!!preview.failures?.length && <ul className="text-sm">{(preview.failures ?? []).slice(0, 50).map((f) => <li key={`${f.row}-${f.field}`}>Row {f.row} · {f.field}: {f.message}</li>)}</ul>}
           {kind === 'products' && preview.duplicatesExisting > 0 && (
             <label className="flex min-h-touch items-center gap-2 text-sm"><input type="checkbox" checked={updateExisting} onChange={(e) => setUpdateExisting(e.target.checked)} /> Update existing items with the same code (otherwise they are skipped)</label>
           )}

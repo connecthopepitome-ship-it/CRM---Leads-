@@ -145,7 +145,9 @@ export default function Leads() {
     (body: object) => post<{ ok: string[]; skipped: { id: string; reason: string }[] }>('/leads/bulk', body),
     [['leads'], ['leads-board']],
     (r) => {
-      toast(`${r.ok.length} updated${r.skipped.length ? `, ${r.skipped.length} skipped` : ''}`);
+      const okCount = r?.ok?.length ?? 0;
+      const skipCount = r?.skipped?.length ?? 0;
+      toast(`${okCount} updated${skipCount ? `, ${skipCount} skipped` : ''}`);
       setSelected([]);
     }
   );

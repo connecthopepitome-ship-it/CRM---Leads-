@@ -68,7 +68,7 @@ export default function OrderDetail() {
           <KeyValue items={[
             ['Order date', date(o.date)],
             ['Expected delivery', o.expectedDelivery ? date(o.expectedDelivery) : '—'],
-            ['Order value', money(o.totals.grandTotal)],
+            ['Order value', money(o.totals?.grandTotal ?? 0)],
             ['Invoiced', `${Math.round(o.invoicedPct ?? 0)} %`],
           ]} />
           {!pending && <div className="mt-3"><Banner tone="success">Everything on this order has been invoiced.</Banner></div>}
@@ -78,8 +78,8 @@ export default function OrderDetail() {
             { key: 'number', label: 'Number', render: (i) => i.number ?? 'Draft' },
             { key: 'type', label: 'Type', render: (i) => i.type.replace('_', ' ') },
             { key: 'status', label: 'Status', render: (i) => <Badge status={i.status} /> },
-            { key: 'grandTotal', label: 'Total', align: 'right', render: (i) => money(i.grandTotal) },
-            { key: 'balanceDue', label: 'Balance', align: 'right', render: (i) => money(i.balanceDue) },
+            { key: 'grandTotal', label: 'Total', align: 'right', render: (i) => money(i?.grandTotal ?? 0) },
+            { key: 'balanceDue', label: 'Balance', align: 'right', render: (i) => money(i?.balanceDue ?? 0) },
           ]} />
         </Card>
       </div>

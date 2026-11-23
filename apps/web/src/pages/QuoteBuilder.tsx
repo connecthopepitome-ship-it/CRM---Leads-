@@ -292,7 +292,19 @@ export default function QuoteBuilder() {
   };
 
   if (id && existing.isLoading) return <Skeleton rows={6} />;
-  const t = calc?.totals;
+  const DEFAULT_TOTALS = {
+    grandTotal: 0,
+    subTotal: 0,
+    taxable: 0,
+    discountTotal: 0,
+    cgst: 0,
+    sgst: 0,
+    igst: 0,
+    roundOff: 0,
+    inWords: 'Zero rupees only',
+    maxDiscountPct: 0,
+  };
+  const t = calc?.totals ?? DEFAULT_TOTALS;
   const selectedParty = availableParties.find((p) => p.id === partyId);
 
   return (

@@ -1,7 +1,7 @@
 /** SCR-020 Customers Split-View Workspace (Grovia-inspired Minimalist SaaS Design System) */
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { get } from '../lib/api';
 import { useTerm } from '../lib/appConfig';
 import { useAuth } from '../lib/auth';
@@ -242,7 +242,7 @@ export default function Customers() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#DCE7D9]/60 pb-4">
               <div className="flex items-center gap-3.5">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#EAF5E8] border border-[#CFE5CB] text-[#3D7952] text-base font-extrabold">
-                  {selectedCustomer.displayName.slice(0, 2).toUpperCase()}
+                  {(selectedCustomer.displayName || 'CU').slice(0, 2).toUpperCase()}
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-[#202820]">

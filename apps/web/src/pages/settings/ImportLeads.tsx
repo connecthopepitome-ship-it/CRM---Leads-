@@ -82,7 +82,7 @@ export function ImportLeads() {
       {report && (
         <div className="mt-3">
           <Banner tone={report.failed?.length ? 'warning' : 'success'}>{report.created} created, {report.merged} merged, {report.failed?.length ?? 0} failed.</Banner>
-          {!!report.failed?.length && <ul className="mt-2 text-sm">{report.failed.slice(0, 50).map((f) => <li key={f.row}>Row {f.row}: {f.reason.replace(/_/g, ' ').toLowerCase()}</li>)}</ul>}
+          {!!report.failed?.length && <ul className="mt-2 text-sm">{(report.failed ?? []).slice(0, 50).map((f) => <li key={f.row}>Row {f.row}: {f.reason.replace(/_/g, ' ').toLowerCase()}</li>)}</ul>}
         </div>
       )}
     </Card>
