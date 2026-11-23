@@ -3,7 +3,7 @@ import { forwardRef, useEffect, useId, useRef, type ButtonHTMLAttributes, type I
 import { Link } from 'react-router-dom';
 import { create } from './toast';
 
-const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
+export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
 // CMP-001 Button
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -165,11 +165,11 @@ export function SelectField({
 // CMP-012 Card, CMP-013 StatTile
 export function Card({ children, className, title, actions }: { children: ReactNode; className?: string; title?: ReactNode; actions?: ReactNode }) {
   return (
-    <section className={cx('rounded-2xl border border-white/80 bg-white/80 backdrop-blur-md p-5 shadow-[0_4px_20px_-2px_rgba(35,61,45,0.04)] interactive-card', className)}>
+    <section className={cx('w-full min-w-0 max-w-full rounded-2xl border border-white/80 bg-white/80 backdrop-blur-md p-4 sm:p-5 shadow-[0_4px_20px_-2px_rgba(35,61,45,0.04)] interactive-card', className)}>
       {(title || actions) && (
-        <div className="mb-4 flex items-center justify-between gap-2 border-b border-[#DCE7D9]/70 pb-3">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-[#DCE7D9]/70 pb-3">
           {title && <h2 className="text-sm font-bold text-[#202820] tracking-tight hover-text-lift">{title}</h2>}
-          {actions}
+          {actions && <div className="flex flex-wrap items-center gap-1.5">{actions}</div>}
         </div>
       )}
       {children}
@@ -344,11 +344,11 @@ export function Table<T extends { id?: string }>({ columns, rows = [], onRow, em
 
 export function KeyValue({ items }: { items: [string, ReactNode][] }) {
   return (
-    <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm md:grid-cols-2">
+    <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm md:grid-cols-2 w-full min-w-0 max-w-full">
       {items.map(([k, v]) => (
-        <div key={k} className="flex justify-between gap-3 border-b border-[#DCE7D9]/60 py-1.5">
-          <dt className="text-[#778477] font-medium">{k}</dt>
-          <dd className="text-right font-semibold text-[#202820]">{v ?? '—'}</dd>
+        <div key={k} className="flex items-center justify-between gap-3 border-b border-[#DCE7D9]/60 py-1.5 min-w-0">
+          <dt className="text-[#778477] font-medium shrink-0 text-xs sm:text-sm">{k}</dt>
+          <dd className="text-right font-semibold text-[#202820] text-xs sm:text-sm break-words min-w-0">{v ?? '—'}</dd>
         </div>
       ))}
     </dl>

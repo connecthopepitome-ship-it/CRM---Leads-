@@ -7,7 +7,7 @@ import { useAuth } from '../lib/auth';
 import { date, label, money, today } from '../lib/format';
 import { ActionBar, Timeline } from '../features/engagement';
 import { Files } from '../features/Files';
-import { Badge, Button, Card, Dialog, EmptyState, ErrorState, LinkButton, PageHeader, Skeleton, StatTile, Table, Tabs, TextField, toast } from '../ui';
+import { Badge, Button, Card, Dialog, EmptyState, ErrorState, LinkButton, PageHeader, Skeleton, StatTile, Table, Tabs, TextField, cx, toast } from '../ui';
 import { errorToast } from '../ui/toast';
 
 interface C360 {
@@ -91,7 +91,30 @@ export default function Customer360() {
       {['orders', 'quotes', 'invoices', 'payments'].includes(tab) && <DocList customerId={customer.id} tab={tab} />}
       {tab === 'ledger' && <Statement customerId={customer.id} />}
       {tab === 'contacts' && (
-        <Table<Contact> rows={contacts} columns={[{ key: 'name', label: 'Name' }, { key: 'role', label: 'Role', render: (c) => label(c.role) }, { key: 'phone', label: 'Phone', render: (c) => c.phone ?? '—' }, { key: 'email', label: 'Email', render: (c) => c.email ?? '—' }, { key: 'p', label: '', render: (c) => (c.isPrimary ? <Badge tone="info">Primary</Badge> : null) }]} />
+        <>
+          <div className="flex flex-col gap-2.5 md:hidden">
+            {contacts.length === 0 ? (
+              <EmptyState title="No contacts yet" />
+            ) : (
+              contacts.map((c, i) => (
+                <div key={c.id ?? i} className="rounded-xl border border-[#DCE7D9]/80 bg-white/90 p-3.5 shadow-2xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-sm text-[#202820]">{c.name}</span>
+                    {c.isPrimary && <Badge tone="info">Primary</Badge>}
+                  </div>
+                  <div className="text-xs text-[#778477] mt-1">{label(c.role)}</div>
+                  <div className="mt-2 flex flex-col gap-1 text-xs text-[#202820]">
+                    {c.phone && <span>📞 {c.phone}</span>}
+                    {c.email && <span>✉️ {c.email}</span>}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="hidden md:block">
+            <Table<Contact> rows={contacts} columns={[{ key: 'name', label: 'Name' }, { key: 'role', label: 'Role', render: (c) => label(c.role) }, { key: 'phone', label: 'Phone', render: (c) => c.phone ?? '—' }, { key: 'email', label: 'Email', render: (c) => c.email ?? '—' }, { key: 'p', label: '', render: (c) => (c.isPrimary ? <Badge tone="info">Primary</Badge> : null) }]} />
+          </div>
+        </>
       )}
       {tab === 'documents' && <Files recordType="customer" recordId={customer.id} />}
       {confirmDelete && (
@@ -142,7 +165,39 @@ function DocList({ customerId, tab }: { customerId: string; tab: string }) {
     payments: [{ key: 'receiptNo', label: 'Receipt' }, { key: 'date', label: 'Date', render: (r) => date(String(r.date)) }, { key: 'mode', label: 'Mode', render: (r) => String(r.mode ?? 'NEFT').toUpperCase() }, { key: 'status', label: 'Status', render: (r) => <Badge status={String(r.status)} /> }, { key: 'amount', label: 'Amount', align: 'right', render: (r) => money(Number(r.amount ?? 0)) }],
   };
   const path = { quotes: 'quotes', orders: 'orders', invoices: 'invoices', payments: 'payments' }[tab]!;
-  return <Table rows={items} columns={cols[tab] ?? []} onRow={(r) => (path === 'orders' ? undefined : nav(`/sales/${path}/${r.id}`))} />;
+  return (
+    <>
+      <div className="flex flex-col gap-2.5 md:hidden">
+        {items.length === 0 ? (
+          <EmptyState title={`No ${TAB_LABEL[tab] ?? tab} yet`} />
+        ) : (
+          items.map((r) => (
+            <div
+              key={r.id}
+              onClick={() => (path === 'orders' ? nav(`/sales/orders/${r.id}`) : nav(`/sales/${path}/${r.id}`))}
+              className="cursor-pointer rounded-xl border border-[#DCE7D9]/80 bg-white/90 p-3.5 shadow-2xs hover:border-[#3D7952]/40 transition-all active:scale-[0.99]"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-sm text-[#3D7952]">
+                  {String(r.displayNumber ?? r.number ?? r.receiptNo ?? 'Draft')}
+                </span>
+                <Badge status={String(r.status)} />
+              </div>
+              <div className="mt-2 flex items-center justify-between text-xs text-[#778477]">
+                <span>{r.date ? date(String(r.date)) : (r.dueDate ? `Due ${date(String(r.dueDate))}` : '—')}</span>
+                <span className="font-bold text-[#202820]">
+                  {money(((r.totals as any)?.grandTotal ?? Number(r.grandTotal ?? r.amount ?? r.balanceDue ?? 0)))}
+                </span>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+      <div className="hidden md:block">
+        <Table rows={items} columns={cols[tab] ?? []} onRow={(r) => (path === 'orders' ? nav(`/sales/orders/${r.id}`) : nav(`/sales/${path}/${r.id}`))} />
+      </div>
+    </>
+  );
 }
 
 function Statement({ customerId }: { customerId: string }) {

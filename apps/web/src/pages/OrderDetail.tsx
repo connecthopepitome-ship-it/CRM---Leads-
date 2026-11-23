@@ -8,7 +8,7 @@ import { useAppConfig } from '../lib/appConfig';
 import { useAuth } from '../lib/auth';
 import { date, money } from '../lib/format';
 import { useAction } from '../features/hooks';
-import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, Field, KeyValue, LinkButton, PageHeader, SelectField, Skeleton, Table, Textarea, toast } from '../ui';
+import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, Field, KeyValue, LinkButton, PageHeader, SelectField, Skeleton, Table, Textarea, cx, toast } from '../ui';
 
 interface OrderLine { id: string; kind?: string; description: string; qty: number; invoicedQty?: number; pendingQty: number; unit?: string }
 interface Order {
@@ -65,16 +65,43 @@ export default function OrderDetail() {
         {pending && perm('invoice:create') && !['cancelled', 'closed', 'on_hold'].includes(o.status) && <Button busy={invoice.isPending} onClick={() => invoice.mutate(undefined)}>Create invoice for pending items</Button>}
         {perm('order:status') && moves.length > 0 && <Button variant="secondary" onClick={() => setNext(moves[0]!)}>Change status</Button>}
       </>} />
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card title="Items" className="lg:col-span-2">
-          <Table rows={lines.filter((l) => l.kind !== 'heading')} columns={[
-            { key: 'description', label: 'Item' },
-            { key: 'qty', label: 'Ordered', align: 'right', render: (l) => `${l.qty} ${l.unit ?? ''}` },
-            { key: 'invoicedQty', label: 'Invoiced', align: 'right', render: (l) => String(l.invoicedQty ?? 0) },
-            { key: 'pendingQty', label: 'Pending', align: 'right', render: (l) => (l.pendingQty > 0 ? <b>{l.pendingQty}</b> : '0') },
-          ]} />
+      <div className="grid gap-4 lg:grid-cols-3 w-full min-w-0 max-w-full">
+        <Card title="Items" className="lg:col-span-2 w-full min-w-0 max-w-full">
+          {/* Mobile responsive item cards */}
+          <div className="flex flex-col gap-2.5 md:hidden">
+            {lines.filter((l) => l.kind !== 'heading').map((l, i) => (
+              <div key={l.id ?? i} className="rounded-xl border border-[#DCE7D9]/80 bg-white/90 p-3.5 shadow-2xs">
+                <div className="text-sm font-semibold text-[#202820] break-words">{l.description}</div>
+                <div className="mt-2.5 grid grid-cols-3 gap-2 pt-2 border-t border-[#DCE7D9]/50 text-center">
+                  <div className="rounded-lg bg-[#F5F9F2] p-1.5 min-w-0">
+                    <span className="block text-[10px] uppercase font-bold text-[#778477]">Ordered</span>
+                    <span className="text-xs font-semibold text-[#202820] truncate block">{l.qty} {l.unit ?? ''}</span>
+                  </div>
+                  <div className="rounded-lg bg-[#F5F9F2] p-1.5 min-w-0">
+                    <span className="block text-[10px] uppercase font-bold text-[#778477]">Invoiced</span>
+                    <span className="text-xs font-semibold text-[#202820] truncate block">{l.invoicedQty ?? 0}</span>
+                  </div>
+                  <div className={cx('rounded-lg p-1.5 min-w-0', (l.pendingQty ?? 0) > 0 ? 'bg-[#FDF5E8] text-[#D99A45]' : 'bg-[#EAF5E8] text-[#3D7952]')}>
+                    <span className="block text-[10px] uppercase font-bold opacity-80">Pending</span>
+                    <span className="text-xs font-bold truncate block">{l.pendingQty ?? 0}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop full data table */}
+          <div className="hidden md:block">
+            <Table rows={lines.filter((l) => l.kind !== 'heading')} columns={[
+              { key: 'description', label: 'Item' },
+              { key: 'qty', label: 'Ordered', align: 'right', render: (l) => `${l.qty} ${l.unit ?? ''}` },
+              { key: 'invoicedQty', label: 'Invoiced', align: 'right', render: (l) => String(l.invoicedQty ?? 0) },
+              { key: 'pendingQty', label: 'Pending', align: 'right', render: (l) => (l.pendingQty > 0 ? <b>{l.pendingQty}</b> : '0') },
+            ]} />
+          </div>
         </Card>
-        <Card title="Summary">
+
+        <Card title="Summary" className="w-full min-w-0 max-w-full">
           <KeyValue items={[
             ['Order date', date(o.date)],
             ['Expected delivery', o.expectedDelivery ? date(o.expectedDelivery) : '—'],
@@ -83,14 +110,51 @@ export default function OrderDetail() {
           ]} />
           {!pending && <div className="mt-3"><Banner tone="success">Everything on this order has been invoiced.</Banner></div>}
         </Card>
-        <Card title="Invoices" className="lg:col-span-3">
-          <Table rows={invoices} empty={<p className="text-sm text-muted">No invoices yet.</p>} onRow={(i) => nav(`/sales/invoices/${i.id}`)} columns={[
-            { key: 'number', label: 'Number', render: (i) => i.number ?? 'Draft' },
-            { key: 'type', label: 'Type', render: (i) => i.type.replace('_', ' ') },
-            { key: 'status', label: 'Status', render: (i) => <Badge status={i.status} /> },
-            { key: 'grandTotal', label: 'Total', align: 'right', render: (i) => money(i?.grandTotal ?? 0) },
-            { key: 'balanceDue', label: 'Balance', align: 'right', render: (i) => money(i?.balanceDue ?? 0) },
-          ]} />
+
+        <Card title="Invoices" className="lg:col-span-3 w-full min-w-0 max-w-full">
+          {/* Mobile responsive invoice cards */}
+          <div className="flex flex-col gap-2.5 md:hidden">
+            {invoices.length === 0 ? (
+              <p className="text-sm text-[#778477] py-2">No invoices yet.</p>
+            ) : (
+              invoices.map((inv) => (
+                <div
+                  key={inv.id}
+                  onClick={() => nav(`/sales/invoices/${inv.id}`)}
+                  className="cursor-pointer rounded-xl border border-[#DCE7D9]/80 bg-white/90 p-3.5 shadow-2xs transition-all active:scale-[0.99] hover:border-[#3D7952]/40"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-semibold text-sm text-[#3D7952] truncate">{inv.number ?? 'Draft'}</span>
+                      <span className="text-[10px] text-[#778477] uppercase tracking-wider bg-[#F5F9F2] px-2 py-0.5 rounded-full font-medium shrink-0">
+                        {inv.type.replace('_', ' ')}
+                      </span>
+                    </div>
+                    <Badge status={inv.status} />
+                  </div>
+                  <div className="mt-2.5 flex items-center justify-between pt-2 border-t border-[#DCE7D9]/50 text-xs">
+                    <div className="text-[#778477]">
+                      Total: <span className="font-bold text-[#202820]">{money(inv.grandTotal ?? 0)}</span>
+                    </div>
+                    <div className="text-[#778477]">
+                      Balance: <span className={cx('font-bold', (inv.balanceDue ?? 0) > 0 ? 'text-[#D99A45]' : 'text-[#3D7952]')}>{money(inv.balanceDue ?? 0)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop full data table */}
+          <div className="hidden md:block">
+            <Table rows={invoices} empty={<p className="text-sm text-muted">No invoices yet.</p>} onRow={(i) => nav(`/sales/invoices/${i.id}`)} columns={[
+              { key: 'number', label: 'Number', render: (i) => i.number ?? 'Draft' },
+              { key: 'type', label: 'Type', render: (i) => i.type.replace('_', ' ') },
+              { key: 'status', label: 'Status', render: (i) => <Badge status={i.status} /> },
+              { key: 'grandTotal', label: 'Total', align: 'right', render: (i) => money(i?.grandTotal ?? 0) },
+              { key: 'balanceDue', label: 'Balance', align: 'right', render: (i) => money(i?.balanceDue ?? 0) },
+            ]} />
+          </div>
         </Card>
       </div>
       <Dialog open={!!next} onClose={() => setNext(null)} title="Change order status" footer={<><Button variant="secondary" onClick={() => setNext(null)}>Cancel</Button><Button busy={setStatus.isPending} disabled={next === 'cancelled' && !reason.trim()} onClick={() => setStatus.mutate(undefined)}>Save status</Button></>}>
