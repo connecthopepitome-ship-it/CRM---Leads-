@@ -362,31 +362,31 @@ export default function QuoteBuilder() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
+      <div className="grid gap-6 lg:grid-cols-[1fr_22rem] w-full max-w-full min-w-0">
         {/* Left Column: Color-Coded Form Cards */}
-        <div className="space-y-6">
+        <div className="space-y-6 w-full max-w-full min-w-0">
           {/* ============================================================== */}
           {/* CARD 1: RECIPIENT & CLIENT IDENTITY (ROYAL BLUE ACCENT) */}
           {/* ============================================================== */}
-          <section className="rounded-2xl border border-blue-200/70 border-l-[5px] border-l-blue-600 bg-white p-5 shadow-sm space-y-4 transition-all">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-100/60 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
+          <section className="w-full max-w-full min-w-0 rounded-2xl border border-blue-200/70 border-l-[5px] border-l-blue-600 bg-white p-4 sm:p-5 shadow-sm space-y-4 transition-all">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-100/60 pb-3 w-full max-w-full">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100 shrink-0">
                   <User size={16} strokeWidth={2.2} />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-sm font-bold text-slate-900 tracking-tight">Recipient & Client Information</h2>
-                    <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-wider">
+                    <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-wider shrink-0">
                       Client Scope
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-500">Commercial entity and billing contact details</p>
+                  <p className="text-[11px] text-slate-500 truncate">Commercial entity and billing contact details</p>
                 </div>
               </div>
 
               {/* Segmented Radio Pill for Party Type */}
-              <div className="flex items-center rounded-xl bg-slate-100 p-0.5 text-xs font-semibold">
+              <div className="flex items-center rounded-xl bg-slate-100 p-0.5 text-xs font-semibold self-start sm:self-auto shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -420,15 +420,15 @@ export default function QuoteBuilder() {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
+            <div className="grid gap-4 md:grid-cols-2 w-full max-w-full min-w-0">
+              <div className="min-w-0">
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Select {partyType === 'lead' ? 'Lead' : 'Customer'} <span className="text-rose-500">*</span>
                 </label>
                 <select
                   value={partyId}
                   onChange={(e) => setPartyId(e.target.value)}
-                  className="w-full min-h-[42px] rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 shadow-2xs cursor-pointer font-medium"
+                  className="w-full max-w-full min-h-[42px] rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 shadow-2xs cursor-pointer font-medium truncate"
                 >
                   <option value="">Choose party...</option>
                   {availableParties.map((p) => (
@@ -439,34 +439,36 @@ export default function QuoteBuilder() {
                 </select>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">Search Contacts</label>
                 <input
                   type="text"
                   placeholder="Filter name or phone..."
                   value={partySearch}
                   onChange={(e) => setPartySearch(e.target.value)}
-                  className="w-full min-h-[42px] rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 shadow-2xs"
+                  className="w-full max-w-full min-h-[42px] rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 shadow-2xs"
                 />
               </div>
             </div>
 
             {selectedParty && (
-              <div className="flex items-center gap-3 p-3.5 rounded-xl bg-blue-50/50 border border-blue-100 text-xs">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white font-bold shrink-0 shadow-xs">
-                  {selectedParty.name.charAt(0)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="font-bold text-slate-900 text-sm truncate">{selectedParty.name}</div>
-                  <div className="text-[11px] text-slate-500 truncate flex items-center gap-2 mt-0.5">
-                    <span>{selectedParty.company || 'Direct Client'}</span>
-                    <span>·</span>
-                    <span className="font-mono text-slate-600">GSTIN: {selectedParty.gstin || '29ABCDE1234F1Z5'}</span>
-                    <span>·</span>
-                    <span>State: {selectedParty.stateCode || '29'}</span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-blue-50/50 border border-blue-100 text-xs w-full max-w-full min-w-0">
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white font-bold shrink-0 shadow-xs">
+                    {selectedParty.name.charAt(0)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-slate-900 text-sm truncate">{selectedParty.name}</div>
+                    <div className="text-[11px] text-slate-500 truncate flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <span>{selectedParty.company || 'Direct Client'}</span>
+                      <span>·</span>
+                      <span className="font-mono text-slate-600">GSTIN: {selectedParty.gstin || '29ABCDE1234F1Z5'}</span>
+                      <span>·</span>
+                      <span>State: {selectedParty.stateCode || '29'}</span>
+                    </div>
                   </div>
                 </div>
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                <span className="self-start sm:self-center px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 shrink-0">
                   Verified Taxpayer
                 </span>
               </div>
@@ -476,24 +478,24 @@ export default function QuoteBuilder() {
           {/* ============================================================== */}
           {/* CARD 2: LINE ITEMS & COMMERCIAL SCOPE (EMERALD ACCENT) */}
           {/* ============================================================== */}
-          <section className="rounded-2xl border border-emerald-200/70 border-l-[5px] border-l-emerald-600 bg-white p-5 shadow-sm space-y-4 transition-all">
-            <div className="flex items-center justify-between border-b border-emerald-100/60 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
+          <section className="w-full max-w-full min-w-0 rounded-2xl border border-emerald-200/70 border-l-[5px] border-l-emerald-600 bg-white p-4 sm:p-5 shadow-sm space-y-4 transition-all">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-100/60 pb-3 w-full max-w-full">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 shrink-0">
                   <Layers size={16} strokeWidth={2.2} />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-sm font-bold text-slate-900 tracking-tight">Scope & Line Items</h2>
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded uppercase tracking-wider">
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded uppercase tracking-wider shrink-0">
                       Commercial Items ({lines.length})
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-500">Products, quantities, rate schedules, and line discounts</p>
+                  <p className="text-[11px] text-slate-500 truncate">Products, quantities, rate schedules, and line discounts</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() =>
@@ -512,7 +514,7 @@ export default function QuoteBuilder() {
                       },
                     ])
                   }
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors shadow-2xs"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors shadow-2xs"
                 >
                   <Plus size={14} />
                   <span>Add Line Item</span>
@@ -521,15 +523,15 @@ export default function QuoteBuilder() {
             </div>
 
             {/* Line Cards List */}
-            <div className="space-y-3.5">
+            <div className="space-y-3.5 w-full max-w-full min-w-0">
               {lines.map((l, i) => (
                 <div
                   key={i}
-                  className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs hover:border-emerald-300 hover:shadow-xs transition-all space-y-3"
+                  className="w-full max-w-full min-w-0 rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-2xs hover:border-emerald-300 hover:shadow-xs transition-all space-y-3"
                 >
                   {/* Line Item Header */}
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-                    <div className="flex items-center justify-between sm:justify-start gap-2.5 w-full sm:w-auto">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 w-full max-w-full">
+                    <div className="flex items-center justify-between gap-2.5 w-full sm:w-auto">
                       <span className="flex h-6 px-2.5 items-center justify-center rounded-md bg-emerald-50 border border-emerald-200/70 text-[11px] font-bold text-emerald-800 shrink-0">
                         {l.kind === 'heading' ? 'Section Header' : `Line Item #${i + 1}`}
                       </span>
@@ -551,11 +553,11 @@ export default function QuoteBuilder() {
                     </div>
 
                     {l.kind !== 'heading' && (
-                      <div className="w-full sm:w-72">
+                      <div className="w-full sm:w-72 min-w-0">
                         <select
                           value={l.productId ?? ''}
                           onChange={(e) => pickProduct(i, e.target.value)}
-                          className="w-full text-xs font-semibold text-emerald-800 bg-emerald-50/50 border border-emerald-200/80 rounded-lg px-2.5 py-1.5 focus:outline-none cursor-pointer"
+                          className="w-full max-w-full text-xs font-semibold text-emerald-800 bg-emerald-50/50 border border-emerald-200/80 rounded-lg px-2.5 py-1.5 focus:outline-none cursor-pointer truncate"
                         >
                           <option value="">Custom Free Text</option>
                           {availableProducts.map((p) => (
@@ -567,7 +569,7 @@ export default function QuoteBuilder() {
                       </div>
                     )}
 
-                    <div className="hidden sm:flex items-center gap-2">
+                    <div className="hidden sm:flex items-center gap-2 shrink-0">
                       <span className="text-[11px] font-semibold text-slate-400">Total:</span>
                       <span className="text-xs font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md tabular-nums">
                         {calc ? money(calc.lines[i]?.total ?? 0) : '—'}
@@ -585,7 +587,7 @@ export default function QuoteBuilder() {
                   </div>
 
                   {/* Description Input */}
-                  <div>
+                  <div className="w-full min-w-0">
                     <label className="block text-[11px] font-semibold text-slate-500 mb-1">
                       Deliverable & Scope Description
                     </label>
@@ -594,13 +596,13 @@ export default function QuoteBuilder() {
                       placeholder="e.g. Enterprise License Tier or Consultation Deliverables"
                       value={l.description}
                       onChange={(e) => upd(i, 'description', e.target.value)}
-                      className="w-full min-h-[38px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 shadow-2xs font-medium"
+                      className="w-full max-w-full min-h-[38px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 shadow-2xs font-medium"
                     />
                   </div>
 
-                  {/* Pricing & Tax 5-Col Grid */}
+                  {/* Pricing & Tax Grid */}
                   {l.kind !== 'heading' && (
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1 text-xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 pt-1 text-xs w-full max-w-full min-w-0">
                       <div>
                         <label className="block text-[10px] font-semibold text-slate-500 mb-1">Quantity</label>
                         <input
@@ -667,7 +669,7 @@ export default function QuoteBuilder() {
             </div>
 
             {/* Bottom Add Buttons */}
-            <div className="flex items-center gap-3 pt-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-2 w-full max-w-full">
               <button
                 type="button"
                 onClick={() =>
@@ -686,7 +688,7 @@ export default function QuoteBuilder() {
                     },
                   ])
                 }
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-2xs"
+                className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-2xs"
               >
                 <Plus size={14} />
                 <span>Add Item</span>
@@ -699,7 +701,7 @@ export default function QuoteBuilder() {
                     { ...blank(), kind: 'heading', description: 'Phase 2 Deliverables', qty: '0', taxRatePct: '0' },
                   ])
                 }
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-emerald-700 hover:bg-emerald-50/50 transition-colors"
+                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-emerald-700 hover:bg-emerald-50/50 transition-colors"
               >
                 <FileText size={14} />
                 <span>Add Section Heading</span>
@@ -710,30 +712,30 @@ export default function QuoteBuilder() {
           {/* ============================================================== */}
           {/* CARD 3: COMMERCIAL TERMS & DELIVERY (PURPLE ACCENT) */}
           {/* ============================================================== */}
-          <section className="rounded-2xl border border-purple-200/70 border-l-[5px] border-l-purple-600 bg-white p-5 shadow-sm space-y-4 transition-all">
-            <div className="flex items-center gap-2.5 border-b border-purple-100/60 pb-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-50 text-purple-600 border border-purple-100">
+          <section className="w-full max-w-full min-w-0 rounded-2xl border border-purple-200/70 border-l-[5px] border-l-purple-600 bg-white p-4 sm:p-5 shadow-sm space-y-4 transition-all">
+            <div className="flex items-center gap-2.5 border-b border-purple-100/60 pb-3 w-full max-w-full">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-50 text-purple-600 border border-purple-100 shrink-0">
                 <ShieldCheck size={16} strokeWidth={2.2} />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-sm font-bold text-slate-900 tracking-tight">Terms & Delivery Governance</h2>
-                  <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded uppercase tracking-wider">
+                  <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded uppercase tracking-wider shrink-0">
                     Governance & Terms
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-500">Validity period, tax jurisdiction, and client notes</p>
+                <p className="text-[11px] text-slate-500 truncate">Validity period, tax jurisdiction, and client notes</p>
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3 text-xs">
+            <div className="grid gap-3 grid-cols-1 sm:grid-cols-3 text-xs w-full max-w-full">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">Validity Period (Days)</label>
                 <input
                   type="number"
                   value={validDays}
                   onChange={(e) => setValidDays(e.target.value)}
-                  className="w-full min-h-[42px] rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-800 font-semibold focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 shadow-2xs"
+                  className="w-full max-w-full min-h-[42px] rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-800 font-semibold focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 shadow-2xs"
                 />
               </div>
 
@@ -742,7 +744,7 @@ export default function QuoteBuilder() {
                 <select
                   value={placeOfSupply}
                   onChange={(e) => setPos(e.target.value)}
-                  className="w-full min-h-[42px] rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 shadow-2xs cursor-pointer font-medium"
+                  className="w-full max-w-full min-h-[42px] rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 shadow-2xs cursor-pointer font-medium"
                 >
                   {Object.entries(GST_STATES).map(([v, l]) => (
                     <option key={v} value={v}>
@@ -759,19 +761,19 @@ export default function QuoteBuilder() {
                   placeholder="0"
                   value={overall}
                   onChange={(e) => setOverall(e.target.value)}
-                  className="w-full min-h-[42px] rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 shadow-2xs"
+                  className="w-full max-w-full min-h-[42px] rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 shadow-2xs"
                 />
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 text-xs pt-1">
+            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 text-xs pt-1 w-full max-w-full">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">Terms & Conditions</label>
                 <textarea
                   rows={3}
                   value={terms}
                   onChange={(e) => setTerms(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 shadow-2xs leading-relaxed"
+                  className="w-full max-w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 shadow-2xs leading-relaxed font-mono"
                 />
               </div>
 
@@ -781,7 +783,7 @@ export default function QuoteBuilder() {
                   rows={3}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 shadow-2xs leading-relaxed"
+                  className="w-full max-w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 shadow-2xs leading-relaxed font-mono"
                 />
               </div>
             </div>
@@ -791,8 +793,8 @@ export default function QuoteBuilder() {
         {/* ============================================================== */}
         {/* RIGHT STICKY TOTALS SUMMARY CARD */}
         {/* ============================================================== */}
-        <aside className="lg:sticky lg:top-20 lg:self-start space-y-4">
-          <div className="rounded-2xl border border-[#DCE7D9] bg-white p-5 shadow-xs space-y-4">
+        <aside className="lg:sticky lg:top-20 lg:self-start space-y-4 w-full max-w-full min-w-0">
+          <div className="w-full max-w-full min-w-0 rounded-2xl border border-[#DCE7D9] bg-white p-4 sm:p-5 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-[#DCE7D9] pb-3">
               <div className="flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#E3EFDF] text-[#3D7952]">
