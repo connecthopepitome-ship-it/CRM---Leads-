@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Calendar,
@@ -23,8 +24,6 @@ import {
   Clock,
   Sparkles,
 } from 'lucide-react';
-import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { get } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -95,7 +94,7 @@ export default function Home() {
 
   // Pipeline Stage Distribution derived strictly from live API
   const pipelineStages = useMemo(() => {
-    if (board.data?.columns) {
+    if (board.data?.columns && Array.isArray(board.data.columns)) {
       const colors: Record<string, string> = {
         new: '#3D7952',
         contacted: '#5A9B68',

@@ -180,7 +180,7 @@ export default function Leads() {
     setParams(n, { replace: true });
   };
 
-  const rawRows = list.data?.pages.flatMap((p) => p.items) ?? [];
+  const rawRows = list.data?.pages?.flatMap((p) => p?.items ?? []) ?? [];
   const rows = rawRows.length > 0 ? rawRows : (isDemo ? SAMPLE_LEADS_FALLBACK : []);
 
   const stageLabel = (k: string) => {

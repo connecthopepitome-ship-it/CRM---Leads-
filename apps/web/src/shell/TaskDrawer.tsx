@@ -144,6 +144,17 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
     }
   }, [tasks]);
 
+  // Lock body scroll on mobile when drawer is open
+  useEffect(() => {
+    if (open && typeof window !== 'undefined' && window.innerWidth < 768) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+  }, [open]);
+
   const todayCount = tasks.filter((t) => !t.completed && t.dueCategory === 'today').length;
   const upcomingCount = tasks.filter((t) => !t.completed && t.dueCategory === 'upcoming').length;
   const completedCount = tasks.filter((t) => t.completed).length;
@@ -206,29 +217,41 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
   };
 
   return (
-    <aside
-      className={`relative z-20 flex flex-col glass-dark-drawer text-white transition-all duration-300 ease-in-out shrink-0 select-none ${
-        open ? 'w-80 xl:w-[320px]' : 'w-0 border-l-0 overflow-hidden'
-      }`}
-      aria-label="Tasks panel"
-    >
-      {/* Floating edge toggle handle when closed */}
-      {!open && (
-        <button
-          onClick={onToggle}
-          className="fixed right-0 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-1.5 px-2 py-3 bg-[#203923]/90 backdrop-blur-xl border-l border-y border-white/20 rounded-l-2xl shadow-2xl text-emerald-200 hover:text-white hover:bg-[#28492C] transition-all focus:outline-none group interactive-tile"
-          title="Open My Tasks"
-          aria-label="Open tasks drawer"
-        >
-          <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#3D7952] text-[10px] text-white font-bold shadow-xs group-hover:scale-110 transition-transform">
-            {todayCount}
-          </span>
-        </button>
+    <>
+      {/* Mobile Semi-transparent Backdrop */}
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-[#202820]/50 backdrop-blur-xs md:hidden"
+          onClick={onClose}
+          aria-hidden="true"
+        />
       )}
 
-      {/* Drawer Container (fixed width inside) */}
-      <div className="w-80 xl:w-[320px] flex flex-col h-full overflow-hidden">
+      <aside
+        className={`fixed inset-y-0 right-0 z-50 flex flex-col glass-dark-drawer text-white transition-all duration-300 ease-in-out shrink-0 select-none md:static md:z-20 ${
+          open
+            ? 'translate-x-0 w-[88vw] max-w-[340px] md:w-80 xl:md:w-[320px] shadow-2xl md:shadow-none'
+            : 'translate-x-full md:translate-x-0 md:w-0 border-l-0 overflow-hidden'
+        }`}
+        aria-label="Tasks panel"
+      >
+        {/* Floating edge toggle handle when closed (desktop only) */}
+        {!open && (
+          <button
+            onClick={onToggle}
+            className="hidden md:flex fixed right-0 top-1/2 -translate-y-1/2 z-30 flex-col items-center gap-1.5 px-2 py-3 bg-[#203923]/90 backdrop-blur-xl border-l border-y border-white/20 rounded-l-2xl shadow-2xl text-emerald-200 hover:text-white hover:bg-[#28492C] transition-all focus:outline-none group interactive-tile"
+            title="Open My Tasks"
+            aria-label="Open tasks drawer"
+          >
+            <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#3D7952] text-[10px] text-white font-bold shadow-xs group-hover:scale-110 transition-transform">
+              {todayCount}
+            </span>
+          </button>
+        )}
+
+        {/* Drawer Container (fixed width inside) */}
+        <div className="w-full md:w-80 xl:md:w-[320px] flex flex-col h-full overflow-hidden">
         {/* Header (Grovia dark forest green) */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
           <div className="flex items-center gap-2">
@@ -449,5 +472,6 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
         </div>
       </div>
     </aside>
+    </>
   );
 }

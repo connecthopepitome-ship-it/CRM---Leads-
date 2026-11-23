@@ -57,13 +57,16 @@ export function Shell() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Right-side Tasks drawer state (persisted)
+  // Right-side Tasks drawer state (persisted, defaults to closed on mobile)
   const [taskDrawerOpen, setTaskDrawerOpen] = useState<boolean>(() => {
     try {
+      if (typeof window !== 'undefined' && window.innerWidth < 768) {
+        return false;
+      }
       const saved = localStorage.getItem('ss_task_drawer_open');
       return saved !== null ? saved === 'true' : true;
     } catch {
-      return true;
+      return false;
     }
   });
 

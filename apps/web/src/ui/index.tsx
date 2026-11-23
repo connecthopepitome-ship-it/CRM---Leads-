@@ -13,7 +13,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
       ref={ref}
       className={cx(
         'inline-flex items-center justify-center gap-2 rounded-xl font-semibold btn-spring transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3D7952] disabled:opacity-50 disabled:cursor-not-allowed select-none',
-        size === 'md' ? 'min-h-[40px] px-4 text-xs sm:text-sm' : 'min-h-[34px] px-3 text-xs',
+        size === 'md' ? 'min-h-[44px] px-4 text-xs sm:text-sm' : 'min-h-[36px] px-3 text-xs',
         variant === 'primary' && 'bg-[#3D7952] text-white hover:bg-[#233D2D] active:bg-[#1C3224] shadow-xs btn-shimmer',
         variant === 'secondary' && 'border border-white/80 bg-white/80 text-[#202820] hover:bg-white hover:border-[#CFE5CB] backdrop-blur-md shadow-2xs hover:shadow-xs',
         variant === 'ghost' && 'text-[#3D7952] hover:bg-[#E3EFDF]/70',
@@ -36,7 +36,7 @@ export function LinkButton({ to, children, variant = 'secondary', className }: {
     <Link
       to={to}
       className={cx(
-        'inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl px-4 text-xs sm:text-sm font-semibold btn-spring transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3D7952] select-none',
+        'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 text-xs sm:text-sm font-semibold btn-spring transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3D7952] select-none',
         variant === 'primary' ? 'bg-[#3D7952] text-white hover:bg-[#233D2D] shadow-xs btn-shimmer' : variant === 'ghost' ? 'text-[#3D7952] hover:bg-[#E3EFDF]/70' : 'border border-white/80 bg-white/80 text-[#202820] hover:bg-white hover:border-[#CFE5CB] backdrop-blur-md shadow-2xs hover:shadow-xs',
         className,
       )}
@@ -70,7 +70,7 @@ export function Field({ label, error, hint, required, children }: FieldProps) {
   );
 }
 
-const inputCls = 'min-h-[42px] w-full rounded-xl border border-[#DCE7D9] bg-white px-3.5 py-2 text-sm text-[#202820] placeholder:text-[#778477]/60 transition-all shadow-2xs hover:border-[#CFE5CB] focus:border-[#3D7952] focus:outline-none focus:ring-4 focus:ring-[#3D7952]/10 aria-[invalid=true]:border-[#D66B68] aria-[invalid=true]:focus:ring-[#D66B68]/10';
+const inputCls = 'min-h-[44px] w-full rounded-xl border border-[#DCE7D9] bg-white px-3.5 py-2 text-sm text-[#202820] placeholder:text-[#778477]/60 transition-all shadow-2xs hover:border-[#CFE5CB] focus:border-[#3D7952] focus:outline-none focus:ring-4 focus:ring-[#3D7952]/10 aria-[invalid=true]:border-[#D66B68] aria-[invalid=true]:focus:ring-[#D66B68]/10';
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(({ className, ...p }, ref) => <input ref={ref} className={cx(inputCls, className)} {...p} />);
 Input.displayName = 'Input';
 export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(({ className, ...p }, ref) => <select ref={ref} className={cx(inputCls, 'cursor-pointer', className)} {...p} />);
@@ -78,17 +78,85 @@ Select.displayName = 'Select';
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(({ className, ...p }, ref) => <textarea ref={ref} className={cx(inputCls, 'min-h-[88px] py-2.5', className)} {...p} />);
 Textarea.displayName = 'Textarea';
 
-export function TextField({ label, error, hint, required, ...p }: InputHTMLAttributes<HTMLInputElement> & { label: string; error?: string | null; hint?: string }) {
-  return <Field label={label} error={error} hint={hint} required={required}>{(id, d) => <Input id={id} aria-describedby={d} aria-invalid={!!error} required={required} {...p} />}</Field>;
+export function TextField({
+  label,
+  error,
+  hint,
+  required,
+  leadingIcon,
+  trailingAction,
+  className,
+  ...p
+}: InputHTMLAttributes<HTMLInputElement> & {
+  label: string;
+  error?: string | null;
+  hint?: string;
+  leadingIcon?: ReactNode;
+  trailingAction?: ReactNode;
+}) {
+  return (
+    <Field label={label} error={error} hint={hint} required={required}>
+      {(id, d) => (
+        <div className="relative flex items-center w-full">
+          {leadingIcon && (
+            <div className="pointer-events-none absolute left-3.5 flex items-center text-[#778477]">
+              {leadingIcon}
+            </div>
+          )}
+          <Input
+            id={id}
+            aria-describedby={d}
+            aria-invalid={!!error}
+            required={required}
+            className={cx(leadingIcon && 'pl-10', trailingAction && 'pr-11', className)}
+            {...p}
+          />
+          {trailingAction && (
+            <div className="absolute right-2.5 flex items-center">
+              {trailingAction}
+            </div>
+          )}
+        </div>
+      )}
+    </Field>
+  );
 }
-export function SelectField({ label, error, options, required, placeholder, ...p }: SelectHTMLAttributes<HTMLSelectElement> & { label: string; error?: string | null; options: { value: string; label: string }[]; placeholder?: string }) {
+
+export function SelectField({
+  label,
+  error,
+  options,
+  required,
+  placeholder,
+  className,
+  ...p
+}: SelectHTMLAttributes<HTMLSelectElement> & {
+  label: string;
+  error?: string | null;
+  options: { value: string; label: string }[];
+  placeholder?: string;
+}) {
   return (
     <Field label={label} error={error} required={required}>
       {(id, d) => (
-        <Select id={id} aria-describedby={d} aria-invalid={!!error} required={required} {...p}>
-          {placeholder !== undefined && <option value="">{placeholder}</option>}
-          {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </Select>
+        <div className="relative flex items-center w-full">
+          <Select
+            id={id}
+            aria-describedby={d}
+            aria-invalid={!!error}
+            required={required}
+            className={cx('appearance-none pr-9', className)}
+            {...p}
+          >
+            {placeholder !== undefined && <option value="">{placeholder}</option>}
+            {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </Select>
+          <div className="pointer-events-none absolute right-3 flex items-center text-[#778477]">
+            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </div>
+        </div>
       )}
     </Field>
   );
@@ -251,8 +319,8 @@ export function Table<T extends { id?: string }>({ columns, rows = [], onRow, em
   const safeRows = Array.isArray(rows) ? rows : [];
   if (!safeRows.length) return <>{empty ?? <EmptyState title="Nothing here yet" />}</>;
   return (
-    <div className="overflow-x-auto rounded-2xl border border-white/80 bg-white/75 backdrop-blur-md shadow-xs">
-      <table className="w-full text-sm">
+    <div className="overflow-x-auto -mx-1 sm:mx-0 rounded-2xl border border-white/80 bg-white/75 backdrop-blur-md shadow-xs">
+      <table className="w-full text-sm min-w-[500px]">
         <thead className="bg-[#F5F9F2]/75 backdrop-blur-xs text-left text-xs font-semibold uppercase tracking-wider text-[#778477] border-b border-[#DCE7D9]/70">
           <tr>{columns.map((c) => <th key={c.key} scope="col" className={cx('px-4 py-3 font-semibold', c.align === 'right' && 'text-right')}>{c.label}</th>)}</tr>
         </thead>
