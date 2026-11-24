@@ -382,9 +382,9 @@ export function Shell() {
         {/* Dynamic Resizable Content Area */}
         <main
           id="main-content"
-          className="flex-1 overflow-y-auto overflow-x-hidden px-3.5 py-4 pb-28 sm:px-6 sm:py-6 lg:px-8 lg:pb-8 transition-all duration-300"
+          className="flex-1 w-full max-w-full min-w-0 overflow-y-auto overflow-x-hidden px-3.5 py-4 pb-28 sm:px-6 sm:py-6 lg:px-8 lg:pb-8 transition-all duration-300"
         >
-          <div className="mx-auto max-w-7xl">
+          <div className="mx-auto w-full max-w-7xl min-w-0">
             <ErrorBoundary key={loc.pathname}>
               <Outlet />
             </ErrorBoundary>

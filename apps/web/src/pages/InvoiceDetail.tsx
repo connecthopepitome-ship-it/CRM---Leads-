@@ -54,6 +54,10 @@ interface Invoice {
   allocations: { paymentId: string | null; amount: number }[];
   cancelledByNumber?: string;
   convertedToId?: string;
+  quoteId?: string | null;
+  quoteNumber?: string | null;
+  orderId?: string | null;
+  orderNumber?: string | null;
   pdf: { status: string };
   version: number;
 }
@@ -162,6 +166,18 @@ export default function InvoiceDetail() {
           <p className="text-xs sm:text-sm text-[#778477] mt-1 font-medium">
             Recipient: <Link className="font-bold text-[#3D7952] hover:underline" to={`/customers/${i.customerId}`}>{i.customerName}</Link>
           </p>
+
+          {i.quoteId && (
+            <p className="text-xs sm:text-sm text-[#778477] mt-0.5 font-medium">
+              From quotation <Link className="font-bold text-[#3D7952] hover:underline" to={`/sales/quotes/${i.quoteId}`}>{i.quoteNumber || 'Quotation'}</Link>
+            </p>
+          )}
+
+          {i.orderId && (
+            <p className="text-xs sm:text-sm text-[#778477] mt-0.5 font-medium">
+              From order <Link className="font-bold text-[#3D7952] hover:underline" to={`/sales/orders/${i.orderId}`}>{i.orderNumber || 'Sales Order'}</Link>
+            </p>
+          )}
         </div>
 
         {/* Desktop Action Buttons (Visible only on >= md screens) */}

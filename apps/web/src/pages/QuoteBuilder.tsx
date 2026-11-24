@@ -359,7 +359,7 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
   const selectedParty = availableParties.find((p) => p.id === partyId);
 
   return (
-    <div className="space-y-6 pb-28 sm:pb-16 font-sans">
+    <div className="space-y-6 pb-28 sm:pb-16 font-sans w-full max-w-full min-w-0">
       {/* Page Header */}
       <PageHeader
         back={isOrder ? '/sales?tab=orders' : isInvoice ? '/sales?tab=invoices' : id ? `/sales/quotes/${id}` : '/sales'}

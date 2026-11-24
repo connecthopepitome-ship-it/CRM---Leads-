@@ -12,6 +12,25 @@ import { StageDialog } from '../features/StageDialog';
 import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, KeyValue, LinkButton, PageHeader, Select, Skeleton, toast } from '../ui';
 import { errorToast } from '../ui/toast';
 
+const SOURCE_LABELS: Record<string, string> = {
+  'src-1': 'Website Inbound',
+  'src-2': 'Referral',
+  'src-3': 'Google Ads',
+  'src-4': 'Direct Call',
+  'src-5': 'LinkedIn',
+  website: 'Website Inbound',
+  referral: 'Referral',
+  google_ads: 'Google Ads',
+  direct: 'Direct Call',
+};
+
+const PRODUCT_LABELS: Record<string, string> = {
+  'prod-1': 'CRM Enterprise License (Annual)',
+  'prod-2': 'Implementation & Data Migration',
+  'prod-3': 'Custom Integration Pack',
+  'prod-4': 'Dedicated Support Retainer (Monthly)',
+};
+
 export default function LeadDetail() {
   const { id = '' } = useParams();
   const nav = useNavigate();
@@ -102,8 +121,8 @@ export default function LeadDetail() {
               ['Phone', l.phone ?? (l.phoneRaw ? <span>{l.phoneRaw} <Badge tone="warning">Check number</Badge></span> : null)],
               ['Email', l.email],
               ['Location', [l.city, l.pincode].filter(Boolean).join(' - ') || null],
-              ['Lead Source', (l as any).sourceLabel || (l as any).sourceId || null],
-              ['Product Interest', (l as any).productLabel || (l as any).interestProductId || null],
+              ['Lead Source', (l as any).sourceLabel || SOURCE_LABELS[(l as any).sourceId] || (l as any).sourceId || null],
+              ['Product Interest', (l as any).productLabel || PRODUCT_LABELS[(l as any).interestProductId] || (l as any).interestProductId || null],
               ['First-contact SLA', <Badge key="s" status={l.slaStatus}>{sla.text}</Badge>],
               ['Next follow-up', l.nextFollowUpAt ? dateTime(l.nextFollowUpAt) : null],
               ['Expected value', l.expectedValue ? money(l.expectedValue) : null],

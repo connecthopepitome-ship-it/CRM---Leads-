@@ -220,11 +220,16 @@ function roundHalfUp(n: number): number {
 }
 
 const SOURCE_LABELS: Record<string, string> = {
+  'src-1': 'Website Inbound',
+  'src-2': 'Referral',
+  'src-3': 'Google Ads',
+  'src-4': 'Direct Call',
+  'src-5': 'LinkedIn',
   website: 'Website Inbound',
   referral: 'Referral',
-  direct: 'Direct Call',
-  meta_ads: 'Meta / Facebook Ads',
   google_ads: 'Google Ads',
+  direct: 'Direct Call',
+  cold_call: 'Cold Outreach',
   linkedin: 'LinkedIn',
   field: 'Field Sales',
   exhibition: 'Trade Show / Expo',
@@ -1217,7 +1222,44 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       // Resolve real party name
       let resolvedPartyName = (body.partyName || '').trim();
       const pType = body.partyType || 'customer';
-      const pId = body.partyId;
+      const pId = (body.partyId || '').trim();
+
+      if (!pId) {
+        return jsonRes({ title: 'Party is required', status: 422, code: 'PARTY_REQUIRED' }, 422);
+      }
+
+      // Check customer or lead exists and is active (Requirement 1)
+      if (pType === 'customer') {
+        let cust: any = null;
+        if (db) {
+          try {
+            const { results } = await db.prepare('SELECT id, display_name, legal_name FROM customers WHERE id = ? AND deleted_at IS NULL').bind(pId).all();
+            cust = results?.[0];
+          } catch (e) {}
+        }
+        if (!cust) cust = memoryStore.customers.find((c) => c.id === pId);
+        if (!cust) {
+          return jsonRes({ type: 'https://salesphere.live/errors/not-found', title: 'Customer not found', status: 422, code: 'CUSTOMER_NOT_FOUND', message: 'Customer not found' }, 422);
+        }
+        if (!resolvedPartyName || resolvedPartyName === 'Customer') {
+          resolvedPartyName = cust.display_name || cust.legal_name || cust.displayName || cust.legalName || 'Customer';
+        }
+      } else if (pType === 'lead') {
+        let ld: any = null;
+        if (db) {
+          try {
+            const { results } = await db.prepare('SELECT id, name, company FROM leads WHERE id = ? AND deleted_at IS NULL').bind(pId).all();
+            ld = results?.[0];
+          } catch (e) {}
+        }
+        if (!ld) ld = memoryStore.leads.find((l) => l.id === pId);
+        if (!ld) {
+          return jsonRes({ type: 'https://salesphere.live/errors/not-found', title: 'Lead not found', status: 422, code: 'LEAD_NOT_FOUND', message: 'Lead not found' }, 422);
+        }
+        if (!resolvedPartyName || resolvedPartyName === 'Customer') {
+          resolvedPartyName = ld.name || 'Lead';
+        }
+      }
 
       if (!resolvedPartyName || resolvedPartyName === 'Customer') {
         if (pType === 'customer' && pId) {
@@ -1438,6 +1480,11 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (!qt) qt = memoryStore.quotes.find((q) => q.id === qid);
     if (!qt) return jsonRes({ title: 'Quotation not found', status: 404, code: 'NOT_FOUND' }, 404);
 
+    // Check if quote is already ordered
+    if (qt.status === 'ordered') {
+      return jsonRes({ title: 'Quotation already ordered', status: 422, code: 'QUOTE_ALREADY_ORDERED', message: 'Sales order already created for this quotation.' }, 422);
+    }
+
     const reqBody = (await request.json().catch(() => ({}))) as any;
     let customerId = reqBody.customerId;
     if (!customerId) {
@@ -1560,6 +1607,19 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (!qt) qt = memoryStore.quotes.find((q) => q.id === qid);
     if (!qt) return jsonRes({ title: 'Quotation not found', status: 404, code: 'NOT_FOUND' }, 404);
 
+    // Duplicate invoicing check on quote (Requirement 2)
+    if (qt.status === 'invoiced') {
+      return jsonRes({ title: 'Quotation already fully invoiced', status: 422, code: 'QUOTE_ALREADY_INVOICED', message: 'Quotation already fully invoiced' }, 422);
+    }
+    if (db) {
+      try {
+        const { results: existingInv } = await db.prepare("SELECT id FROM invoices WHERE quote_id = ? AND status != 'cancelled' AND deleted_at IS NULL").bind(qid).all();
+        if (existingInv && existingInv.length > 0) {
+          return jsonRes({ title: 'Quotation already fully invoiced', status: 422, code: 'QUOTE_ALREADY_INVOICED', message: 'Quotation already fully invoiced' }, 422);
+        }
+      } catch (e) {}
+    }
+
     const reqBody = (await request.json().catch(() => ({}))) as any;
     let customerId = reqBody.customerId;
     if (!customerId) {
@@ -1627,14 +1687,15 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (db) {
       try {
         await db.prepare(`
-          INSERT INTO invoices (id, number, customer_id, customer_name, order_id, type, status, date, due_date, grand_total, paid_amount, credited_amount, balance_due, data_json, created_at, updated_at, version)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO invoices (id, number, customer_id, customer_name, order_id, quote_id, type, status, date, due_date, grand_total, paid_amount, credited_amount, balance_due, data_json, created_at, updated_at, version)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           newInv.id,
           newInv.number,
           newInv.customerId,
           newInv.customerName,
           null,
+          qid,
           newInv.type,
           newInv.status,
           newInv.date,
@@ -1643,7 +1704,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           0,
           0,
           grandTotal,
-          JSON.stringify({ lines: newInv.lines, totals: newInv.totals, quoteId: qid }),
+          JSON.stringify({ lines: newInv.lines, totals: newInv.totals, quoteId: qid, quoteNumber: qt.displayNumber }),
           new Date().toISOString(),
           new Date().toISOString(),
           1
@@ -1660,6 +1721,13 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       } catch (e) {
         console.error('D1 create-invoice from quote error:', e);
       }
+    }
+
+    if (qt) qt.status = 'invoiced';
+    const memQ = memoryStore.quotes.find((q) => q.id === qid);
+    if (memQ) {
+      memQ.status = 'invoiced';
+      (memQ as any).invoiceId = newInvId;
     }
 
     memoryStore.invoices.unshift(newInv);
@@ -1810,21 +1878,22 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         pendingQty: l.qty,
       }));
 
-      // Customer name lookup
+      // Check customer exists and is active (Requirement 1)
       let customerName = (body.customerName || '').trim();
-      if (!customerName || customerName === 'Customer') {
-        if (db) {
-          try {
-            const { results } = await db.prepare('SELECT display_name, legal_name FROM customers WHERE id = ?').bind(customerId).all();
-            if (results?.[0]) customerName = (results[0] as any).display_name || (results[0] as any).legal_name;
-          } catch (e) {}
-        }
-        if (!customerName) {
-          const c = memoryStore.customers.find((cust) => cust.id === customerId);
-          if (c) customerName = c.displayName || c.legalName;
-        }
+      let validCust: any = null;
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT display_name, legal_name FROM customers WHERE id = ? AND deleted_at IS NULL').bind(customerId).all();
+          validCust = results?.[0];
+        } catch (e) {}
       }
-      if (!customerName) customerName = 'Customer';
+      if (!validCust) validCust = memoryStore.customers.find((cust) => cust.id === customerId);
+      if (!validCust) {
+        return jsonRes({ type: 'https://salesphere.live/errors/not-found', title: 'Customer not found', status: 422, code: 'CUSTOMER_NOT_FOUND', message: 'Customer not found' }, 422);
+      }
+      if (!customerName || customerName === 'Customer') {
+        customerName = validCust.display_name || validCust.legal_name || validCust.displayName || validCust.legalName || 'Customer';
+      }
 
       const nextOrdNum = await getNextDocNumber(db, 'orders', 'number', 'SO/26-27/');
       const newOrdId = 'ord-' + Date.now();
@@ -1899,11 +1968,21 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (!ord) ord = memoryStore.orders.find((o) => o.id === oid);
     if (!ord) return jsonRes({ title: 'Order not found', status: 404, code: 'NOT_FOUND' }, 404);
 
-    // Check if order has already been invoiced
+    // Check if order is already fully invoiced
+    if (ord.status === 'invoiced') {
+      return jsonRes({ title: 'Order already fully invoiced', status: 422, code: 'ORDER_ALREADY_INVOICED', message: 'Order already fully invoiced' }, 422);
+    }
+    let activeInvoicesCount = 0;
+    if (db) {
+      try {
+        const { results: invRows } = await db.prepare("SELECT count(*) as count FROM invoices WHERE order_id = ? AND status != 'cancelled' AND deleted_at IS NULL").bind(oid).all();
+        activeInvoicesCount = Number((invRows?.[0] as any)?.count || 0);
+      } catch (e) {}
+    }
     const nonHeadingLines = (ord.lines || []).filter((l: any) => l.kind !== 'heading');
-    const hasPending = nonHeadingLines.length === 0 || nonHeadingLines.some((l: any) => (l.pendingQty === undefined ? l.qty > 0 : l.pendingQty > 0));
-    if (!hasPending) {
-      return jsonRes({ title: 'All items on this order have already been invoiced.', status: 422, code: 'ALREADY_INVOICED' }, 422);
+    const hasPending = nonHeadingLines.length > 0 && nonHeadingLines.some((l: any) => (l.pendingQty !== undefined ? l.pendingQty > 0 : (activeInvoicesCount === 0 && l.qty > 0)));
+    if (!hasPending || (activeInvoicesCount > 0 && ord.lines?.every((l: any) => l.kind === 'heading' || (l.pendingQty ?? 0) <= 0))) {
+      return jsonRes({ title: 'Order already fully invoiced', status: 422, code: 'ORDER_ALREADY_INVOICED', message: 'Order already fully invoiced' }, 422);
     }
 
     // Mark lines as invoiced
@@ -1921,12 +2000,25 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     const newInvId = 'inv-' + Date.now();
     const grandTotal = ord.totals?.grandTotal || 0;
 
+    // Look up quoteId and quoteNumber from order
+    let linkedQuoteId = ord.quoteId || null;
+    let linkedQuoteNumber = null;
+    if (linkedQuoteId && db) {
+      try {
+        const { results: qRows } = await db.prepare('SELECT display_number FROM quotes WHERE id = ?').bind(linkedQuoteId).all();
+        if (qRows?.[0]) linkedQuoteNumber = (qRows[0] as any).display_number;
+      } catch (e) {}
+    }
+
     const newInv = {
       id: newInvId,
       number: nextInvNum,
       customerId: ord.customerId,
       customerName: ord.customerName,
       orderId: oid,
+      orderNumber: ord.number,
+      quoteId: linkedQuoteId,
+      quoteNumber: linkedQuoteNumber,
       type: 'tax_invoice',
       status: 'issued',
       date: new Date().toISOString().slice(0, 10),
@@ -1944,14 +2036,15 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (db) {
       try {
         await db.prepare(`
-          INSERT INTO invoices (id, number, customer_id, customer_name, order_id, type, status, date, due_date, grand_total, paid_amount, credited_amount, balance_due, data_json, created_at, updated_at, version)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO invoices (id, number, customer_id, customer_name, order_id, quote_id, type, status, date, due_date, grand_total, paid_amount, credited_amount, balance_due, data_json, created_at, updated_at, version)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           newInv.id,
           newInv.number,
           newInv.customerId,
           newInv.customerName,
           oid,
+          linkedQuoteId,
           newInv.type,
           newInv.status,
           newInv.date,
@@ -1960,7 +2053,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           0,
           0,
           grandTotal,
-          JSON.stringify({ lines: newInv.lines, totals: newInv.totals, orderId: oid }),
+          JSON.stringify({ lines: newInv.lines, totals: newInv.totals, orderId: oid, orderNumber: ord.number, quoteId: linkedQuoteId, quoteNumber: linkedQuoteNumber }),
           new Date().toISOString(),
           new Date().toISOString(),
           1
@@ -1993,12 +2086,75 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     return jsonRes({ id: newInv.id, number: newInv.number }, 201);
   }
 
+  // /orders/:id/status
+  const orderStatusMatch = path.match(/^\/orders\/([^/?]+)\/status/);
+  if (orderStatusMatch) {
+    const oid = orderStatusMatch[1];
+    if (method === 'POST') {
+      const body = (await request.json().catch(() => ({}))) as any;
+      const nextStatus = body.status;
+      const reason = body.reason || null;
+
+      if (!nextStatus) {
+        return jsonRes({ title: 'Status is required', status: 422, code: 'STATUS_REQUIRED' }, 422);
+      }
+
+      // If cancelling, ensure no active issued invoices exist (Requirement 3)
+      if (nextStatus === 'cancelled') {
+        let activeInvoices: any[] = [];
+        if (db) {
+          try {
+            const { results: activeInvRows } = await db.prepare("SELECT id, number, status FROM invoices WHERE order_id = ? AND status != 'cancelled' AND deleted_at IS NULL").bind(oid).all();
+            activeInvoices = activeInvRows || [];
+          } catch (e) {}
+        }
+        if (activeInvoices.length > 0) {
+          return jsonRes({
+            title: 'Cannot cancel order with issued invoices',
+            status: 422,
+            code: 'ORDER_HAS_ACTIVE_INVOICES',
+            message: 'Cannot cancel order with issued invoices. Cancel or void linked invoices first.',
+            activeInvoices: activeInvoices.map((i: any) => i.number || i.id),
+          }, 422);
+        }
+      }
+
+      if (db) {
+        try {
+          await db.prepare('UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(nextStatus, oid).run();
+        } catch (e) {}
+      }
+      const memOrd = memoryStore.orders.find((o) => o.id === oid);
+      if (memOrd) memOrd.status = nextStatus;
+
+      return jsonRes({ id: oid, status: nextStatus, reason });
+    }
+  }
+
   // /orders/:id
   const orderItemMatch = path.match(/^\/orders\/([^/?]+)/);
   if (orderItemMatch) {
     const oid = orderItemMatch[1];
 
     if (method === 'DELETE') {
+      // Check if order has active (non-cancelled) issued invoices
+      let activeInvoices: any[] = [];
+      if (db) {
+        try {
+          const { results: activeInvRows } = await db.prepare("SELECT id, number, status FROM invoices WHERE order_id = ? AND status != 'cancelled' AND deleted_at IS NULL").bind(oid).all();
+          activeInvoices = activeInvRows || [];
+        } catch (e) {}
+      }
+      if (activeInvoices.length > 0) {
+        return jsonRes({
+          title: 'Cannot cancel order with issued invoices',
+          status: 422,
+          code: 'ORDER_HAS_ACTIVE_INVOICES',
+          message: 'Cannot cancel order with issued invoices. Cancel or void linked invoices first.',
+          activeInvoices: activeInvoices.map((i: any) => i.number || i.id),
+        }, 422);
+      }
+
       let ordStatus = 'draft';
       if (db) {
         try {
@@ -2010,7 +2166,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         if (memOrd) ordStatus = memOrd.status;
       }
 
-      if (ordStatus !== 'draft') {
+      if (ordStatus !== 'draft' && ordStatus !== 'cancelled') {
         // Confirmed orders cannot be deleted - cancel them instead
         if (db) {
           try {
@@ -2022,7 +2178,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         return jsonRes({ success: true, id: oid, status: 'cancelled' });
       }
 
-      // Allow deleting only draft orders
+      // Allow deleting draft or already cancelled orders
       if (db) {
         try {
           await db.prepare('UPDATE orders SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?').bind(oid).run();
@@ -2107,7 +2263,10 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
                 number: r.number,
                 customerId: r.customer_id,
                 customerName: r.customer_name,
-                orderId: r.order_id,
+                orderId: r.order_id || d.orderId || null,
+                orderNumber: d.orderNumber || null,
+                quoteId: r.quote_id || d.quoteId || null,
+                quoteNumber: d.quoteNumber || null,
                 type: r.type,
                 status: r.status,
                 date: r.date,
@@ -2197,19 +2356,21 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         totals = computed.totals;
       }
 
-      if (!customerName || customerName === 'Customer') {
-        if (db) {
-          try {
-            const { results } = await db.prepare('SELECT display_name, legal_name FROM customers WHERE id = ?').bind(customerId).all();
-            if (results?.[0]) customerName = (results[0] as any).display_name || (results[0] as any).legal_name;
-          } catch (e) {}
-        }
-        if (!customerName) {
-          const c = memoryStore.customers.find((cust) => cust.id === customerId);
-          if (c) customerName = c.displayName || c.legalName;
-        }
+      // Check customer exists and is active (Requirement 1)
+      let validInvCust: any = null;
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT display_name, legal_name FROM customers WHERE id = ? AND deleted_at IS NULL').bind(customerId).all();
+          validInvCust = results?.[0];
+        } catch (e) {}
       }
-      if (!customerName) customerName = 'Customer';
+      if (!validInvCust) validInvCust = memoryStore.customers.find((cust) => cust.id === customerId);
+      if (!validInvCust) {
+        return jsonRes({ type: 'https://salesphere.live/errors/not-found', title: 'Customer not found', status: 422, code: 'CUSTOMER_NOT_FOUND', message: 'Customer not found' }, 422);
+      }
+      if (!customerName || customerName === 'Customer') {
+        customerName = validInvCust.display_name || validInvCust.legal_name || validInvCust.displayName || validInvCust.legalName || 'Customer';
+      }
 
       const nextInvNum = await getNextDocNumber(db, 'invoices', 'number', 'INV/26-27/');
       const newInvId = 'inv-' + Date.now();
@@ -2317,7 +2478,10 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               number: r.number,
               customerId: r.customer_id,
               customerName: r.customer_name,
-              orderId: r.order_id,
+              orderId: r.order_id || d.orderId || null,
+              orderNumber: d.orderNumber || null,
+              quoteId: r.quote_id || d.quoteId || null,
+              quoteNumber: d.quoteNumber || null,
               type: r.type,
               status: r.status,
               date: r.date,
@@ -2437,14 +2601,17 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         { id: 'stg-7', key: 'lost', label: 'Lost', probabilityPct: 0 },
       ],
       leadSources: [
-        { id: 'src-1', key: 'website', label: 'Website', value: 'website' },
-        { id: 'src-2', key: 'referral', label: 'Referral', value: 'referral' },
-        { id: 'src-3', key: 'google_ads', label: 'Google Ads', value: 'google_ads' },
-        { id: 'src-4', key: 'cold_call', label: 'Cold Outreach', value: 'cold_call' },
+        { id: 'src-1', key: 'src-1', label: 'Website Inbound', value: 'src-1' },
+        { id: 'src-2', key: 'src-2', label: 'Referral', value: 'src-2' },
+        { id: 'src-3', key: 'src-3', label: 'Google Ads', value: 'src-3' },
+        { id: 'src-4', key: 'src-4', label: 'Direct Call', value: 'src-4' },
+        { id: 'src-5', key: 'src-5', label: 'LinkedIn', value: 'src-5' },
       ],
       products: [
-        { id: 'prod-1', key: 'prod-1', label: 'Enterprise CRM Implementation', name: 'Enterprise CRM Implementation', value: 'prod-1', rate: 2500000, unit: 'service', taxRatePct: 18 },
-        { id: 'prod-2', key: 'prod-2', label: 'Annual Software Support', name: 'Annual Software Support', value: 'prod-2', rate: 500000, unit: 'year', taxRatePct: 18 },
+        { id: 'prod-1', key: 'prod-1', label: 'CRM Enterprise License (Annual)', name: 'CRM Enterprise License (Annual)', value: 'prod-1', ratePaise: 2950000, rate: 29500, unit: 'Year', taxRatePct: 18, hsnSac: '997331', description: 'Enterprise annual subscription including up to 25 active users with custom workflows.' },
+        { id: 'prod-2', key: 'prod-2', label: 'Implementation & Data Migration', name: 'Implementation & Data Migration', value: 'prod-2', ratePaise: 1500000, rate: 15000, unit: 'Job', taxRatePct: 18, hsnSac: '998313', description: 'Complete data onboarding, master schema setup, and user training sessions.' },
+        { id: 'prod-3', key: 'prod-3', label: 'Custom Integration Pack', name: 'Custom Integration Pack', value: 'prod-3', ratePaise: 800000, rate: 8000, unit: 'Pack', taxRatePct: 18, hsnSac: '998314', description: 'Bi-directional webhooks and REST API integration with external accounting ERP.' },
+        { id: 'prod-4', key: 'prod-4', label: 'Dedicated Support Retainer (Monthly)', name: 'Dedicated Support Retainer (Monthly)', value: 'prod-4', ratePaise: 500000, rate: 5000, unit: 'Month', taxRatePct: 18, hsnSac: '998319', description: '24/7 SLA escalation support with dedicated customer success manager.' },
       ],
       bankAccounts: [
         { id: 'bnk-1', key: 'bnk-1', label: 'HDFC Bank - 50200012345678', bankName: 'HDFC Bank', accountNo: '50200012345678', ifsc: 'HDFC0000240', branch: 'Indiranagar' },
