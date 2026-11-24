@@ -72,16 +72,126 @@ export function ActionBar({ rec }: { rec: RecordRef }) {
     setSheet('outcome');
   };
 
-  const btn = 'flex min-h-touch flex-1 flex-col items-center justify-center gap-1 rounded-md border border-border bg-surface px-2 text-xs font-medium hover:bg-surface-2 disabled:opacity-50';
   return (
     <>
-      <div className="grid grid-cols-6 gap-2" role="toolbar" aria-label="Actions">
-        <button className={btn} onClick={() => void call()} disabled={!rec.phone}><Phone size={18} aria-hidden />Call</button>
-        <button className={btn} onClick={() => setSheet('whatsapp')}><MessageCircle size={18} aria-hidden />WhatsApp</button>
-        <button className={btn} onClick={() => setSheet('email')} disabled={!rec.email}><Mail size={18} aria-hidden />Email</button>
-        <a className={btn} href={rec.address ? mapsLink(rec.address) : undefined} target="_blank" rel="noreferrer" aria-disabled={!rec.address}><MapPin size={18} aria-hidden />Directions</a>
-        <button className={btn} onClick={() => setSheet('note')}><StickyNote size={18} aria-hidden />Note</button>
-        <button className={btn} onClick={() => setSheet('followup')}><CalendarPlus size={18} aria-hidden />Follow-up</button>
+      <div
+        className="rounded-2xl border border-[#DCE7D9] bg-white p-1.5 sm:p-2.5 shadow-2xs transition-all"
+        role="toolbar"
+        aria-label="Lead Actions"
+      >
+        <div className="grid grid-cols-6 gap-1 sm:gap-2">
+          {/* CALL */}
+          <button
+            type="button"
+            onClick={() => void call()}
+            disabled={!rec.phone}
+            title={rec.phone ? `Call ${rec.phone}` : 'No phone number available'}
+            className="group flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          >
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-2xs transition-transform duration-200 group-hover:scale-110 group-hover:bg-emerald-100">
+              <Phone size={17} strokeWidth={2.2} />
+            </div>
+            <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center group-hover:text-emerald-900">
+              Call
+            </span>
+          </button>
+
+          {/* WHATSAPP */}
+          <button
+            type="button"
+            onClick={() => setSheet('whatsapp')}
+            title="Send WhatsApp message"
+            className="group flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96]"
+          >
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-[#EAF8EE] text-[#128C7E] border border-[#25D366]/30 shadow-2xs transition-transform duration-200 group-hover:scale-110 group-hover:bg-[#DCF4E3]">
+              <MessageCircle size={17} strokeWidth={2.2} />
+            </div>
+            <span className="text-[9px] sm:text-xs font-semibold text-[#202820] tracking-tight sm:tracking-normal text-center group-hover:text-[#128C7E] whitespace-nowrap">
+              WhatsApp
+            </span>
+          </button>
+
+          {/* EMAIL */}
+          <button
+            type="button"
+            onClick={() => setSheet('email')}
+            disabled={!rec.email}
+            title={rec.email ? `Email ${rec.email}` : 'No email address available'}
+            className="group flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          >
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-sky-50 text-sky-700 border border-sky-200/60 shadow-2xs transition-transform duration-200 group-hover:scale-110 group-hover:bg-sky-100">
+              <Mail size={17} strokeWidth={2.2} />
+            </div>
+            <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center group-hover:text-sky-900">
+              Email
+            </span>
+          </button>
+
+          {/* DIRECTIONS */}
+          {rec.address ? (
+            <a
+              href={mapsLink(rec.address)}
+              target="_blank"
+              rel="noreferrer"
+              title={`Directions to ${rec.address}`}
+              className="group flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96]"
+            >
+              <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-amber-50 text-amber-700 border border-amber-200/60 shadow-2xs transition-transform duration-200 group-hover:scale-110 group-hover:bg-amber-100">
+                <MapPin size={17} strokeWidth={2.2} />
+              </div>
+              <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center group-hover:text-amber-900">
+                <span className="hidden sm:inline">Directions</span>
+                <span className="sm:hidden">Map</span>
+              </span>
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              title="No address available"
+              className="group flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 sm:py-2 sm:px-2 rounded-xl opacity-40 cursor-not-allowed"
+            >
+              <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-amber-50 text-amber-700 border border-amber-200/60 shadow-2xs">
+                <MapPin size={17} strokeWidth={2.2} />
+              </div>
+              <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center">
+                <span className="hidden sm:inline">Directions</span>
+                <span className="sm:hidden">Map</span>
+              </span>
+            </button>
+          )}
+
+          {/* NOTE */}
+          <button
+            type="button"
+            onClick={() => setSheet('note')}
+            title="Add note to timeline"
+            className="group flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96]"
+          >
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-purple-50 text-purple-700 border border-purple-200/60 shadow-2xs transition-transform duration-200 group-hover:scale-110 group-hover:bg-purple-100">
+              <StickyNote size={17} strokeWidth={2.2} />
+            </div>
+            <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center group-hover:text-purple-900">
+              Note
+            </span>
+          </button>
+
+          {/* FOLLOW-UP */}
+          <button
+            type="button"
+            onClick={() => setSheet('followup')}
+            title="Schedule follow-up"
+            className="group flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96]"
+          >
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-[#E3EFDF] text-[#233D2D] border border-[#2E4E36]/30 shadow-2xs transition-transform duration-200 group-hover:scale-110 group-hover:bg-[#D4E8CE]">
+              <CalendarPlus size={17} strokeWidth={2.2} />
+            </div>
+            <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center group-hover:text-[#233D2D]">
+              <span className="hidden sm:inline">Follow-up</span>
+              <span className="sm:hidden">Task</span>
+            </span>
+          </button>
+        </div>
       </div>
       {sheet === 'outcome' && callId && (
         <CallOutcomeSheet rec={rec} activityId={callId} showNumber={showNumber} onClose={(saved) => {

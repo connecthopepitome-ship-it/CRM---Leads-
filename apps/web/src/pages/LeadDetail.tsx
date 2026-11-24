@@ -129,7 +129,7 @@ export default function LeadDetail() {
                 )}
               </div>
             </div>
-            <KeyValue items={[
+            <KeyValue columns={1} items={[
               ['Phone', l.phone ?? (l.phoneRaw ? <span>{l.phoneRaw} <Badge tone="warning">Check number</Badge></span> : null)],
               ['Email', l.email],
               ['Location', [l.city, l.pincode].filter(Boolean).join(' - ') || null],

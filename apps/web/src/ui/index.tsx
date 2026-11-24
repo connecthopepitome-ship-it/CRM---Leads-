@@ -342,9 +342,9 @@ export function Table<T extends { id?: string }>({ columns, rows = [], onRow, em
   );
 }
 
-export function KeyValue({ items }: { items: ([string, ReactNode] | { label: string; value: ReactNode })[] }) {
+export function KeyValue({ items, columns = 2 }: { items: ([string, ReactNode] | { label: string; value: ReactNode })[]; columns?: 1 | 2 }) {
   return (
-    <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm md:grid-cols-2 w-full min-w-0 max-w-full">
+    <dl className={`grid grid-cols-1 gap-x-6 gap-y-2 text-sm ${columns === 2 ? 'md:grid-cols-2' : ''} w-full min-w-0 max-w-full`}>
       {items.map((item, idx) => {
         const k = Array.isArray(item) ? item[0] : item?.label;
         const v = Array.isArray(item) ? item[1] : item?.value;
