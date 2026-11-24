@@ -321,7 +321,7 @@ export function Table<T extends { id?: string }>({ columns, rows = [], onRow, em
   const safeRows = Array.isArray(rows) ? rows : [];
   if (!safeRows.length) return <>{empty ?? <EmptyState title="Nothing here yet" />}</>;
   return (
-    <div className="overflow-x-auto -mx-1 sm:mx-0 rounded-2xl border border-white/80 bg-white/75 backdrop-blur-md shadow-xs">
+    <div className="w-full max-w-full min-w-0 overflow-x-auto rounded-2xl border border-white/80 bg-white/75 backdrop-blur-md shadow-xs">
       <table className="w-full text-sm min-w-[500px]">
         <thead className="bg-[#F5F9F2]/75 backdrop-blur-xs text-left text-xs font-semibold uppercase tracking-wider text-[#778477] border-b border-[#DCE7D9]/70">
           <tr>{columns.map((c) => <th key={c.key} scope="col" className={cx('px-4 py-3 font-semibold', c.align === 'right' && 'text-right')}>{c.label}</th>)}</tr>
@@ -342,15 +342,19 @@ export function Table<T extends { id?: string }>({ columns, rows = [], onRow, em
   );
 }
 
-export function KeyValue({ items }: { items: [string, ReactNode][] }) {
+export function KeyValue({ items }: { items: ([string, ReactNode] | { label: string; value: ReactNode })[] }) {
   return (
     <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm md:grid-cols-2 w-full min-w-0 max-w-full">
-      {items.map(([k, v]) => (
-        <div key={k} className="flex items-center justify-between gap-3 border-b border-[#DCE7D9]/60 py-1.5 min-w-0">
-          <dt className="text-[#778477] font-medium shrink-0 text-xs sm:text-sm">{k}</dt>
-          <dd className="text-right font-semibold text-[#202820] text-xs sm:text-sm break-words min-w-0">{v ?? '—'}</dd>
-        </div>
-      ))}
+      {items.map((item, idx) => {
+        const k = Array.isArray(item) ? item[0] : item?.label;
+        const v = Array.isArray(item) ? item[1] : item?.value;
+        return (
+          <div key={k ?? idx} className="flex items-center justify-between gap-3 border-b border-[#DCE7D9]/60 py-1.5 min-w-0">
+            <dt className="text-[#778477] font-medium shrink-0 text-xs sm:text-sm">{k}</dt>
+            <dd className="text-right font-semibold text-[#202820] text-xs sm:text-sm break-words min-w-0">{v ?? '—'}</dd>
+          </div>
+        );
+      })}
     </dl>
   );
 }

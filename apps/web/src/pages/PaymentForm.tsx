@@ -22,13 +22,6 @@ interface Open {
   balance: number;
 }
 
-const PRELOADED_CUSTOMERS = [
-  { id: 'cust-1', displayName: 'Fatima Khan (Khan Enterprises)' },
-  { id: 'cust-2', displayName: 'Iyer Consultancy Services' },
-  { id: 'cust-3', displayName: 'Nair Foods Pvt Ltd' },
-  { id: 'cust-4', displayName: 'Deshmukh Manufacturing Ltd' },
-];
-
 const PRESET_PAYMENTS: Record<string, { label: string; customerId: string; amount: string; mode: string; reference: string; tds: string; tdsSection: string; note: string }> = {
   neft: {
     label: 'NEFT Settlement (₹49,500)',
@@ -216,7 +209,7 @@ export default function PaymentForm() {
   };
 
   const plan = preview.data?.plan;
-  const customerList = (customers.data?.items && customers.data.items.length > 0) ? customers.data.items : PRELOADED_CUSTOMERS;
+  const customerList = customers.data?.items ?? [];
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-12">

@@ -219,6 +219,34 @@ function roundHalfUp(n: number): number {
   return Math.floor(n + 0.5);
 }
 
+const SOURCE_LABELS: Record<string, string> = {
+  website: 'Website Inbound',
+  referral: 'Referral',
+  direct: 'Direct Call',
+  meta_ads: 'Meta / Facebook Ads',
+  google_ads: 'Google Ads',
+  linkedin: 'LinkedIn',
+  field: 'Field Sales',
+  exhibition: 'Trade Show / Expo',
+};
+
+const PRODUCT_LABELS: Record<string, string> = {
+  'prod-1': 'CRM Enterprise License (Annual)',
+  'prod-2': 'Implementation & Data Migration',
+  'prod-3': 'Custom Integration Pack',
+  'prod-4': 'Dedicated Support Retainer (Monthly)',
+};
+
+function getSourceLabel(id?: string | null): string {
+  if (!id) return 'Direct Inbound';
+  return SOURCE_LABELS[id] || id;
+}
+
+function getProductLabel(id?: string | null): string {
+  if (!id) return 'Enterprise Suite';
+  return PRODUCT_LABELS[id] || id;
+}
+
 function calculateLinesAndTotals(
   submittedLines: any[],
   placeOfSupply = '29',
@@ -493,6 +521,11 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             phone: r.phone,
             email: r.email,
             city: r.city,
+            pincode: r.pincode,
+            sourceId: r.source_id,
+            sourceLabel: getSourceLabel(r.source_id),
+            interestProductId: r.interest_product_id,
+            productLabel: getProductLabel(r.interest_product_id),
             stage: r.stage,
             slaStatus: r.sla_status,
             slaDueAt: r.sla_due_at,
@@ -549,6 +582,10 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       }
 
       const id = 'lead-' + Date.now();
+      const pincode = (body.pincode || '').trim() || null;
+      const sourceId = (body.sourceId || body.source_id || '').trim() || null;
+      const interestProductId = (body.interestProductId || body.interest_product_id || '').trim() || null;
+
       const newLead = {
         id,
         name,
@@ -556,6 +593,13 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         phone: phone || null,
         email: email || null,
         city: (body.city || '').trim() || null,
+        pincode,
+        sourceId,
+        source_id: sourceId,
+        sourceLabel: getSourceLabel(sourceId),
+        interestProductId,
+        interest_product_id: interestProductId,
+        productLabel: getProductLabel(interestProductId),
         stage: body.stage || 'new',
         slaStatus: 'pending',
         slaDueAt: new Date(Date.now() + 15 * 60000).toISOString(),
@@ -568,8 +612,8 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       if (db) {
         try {
           await db.prepare(`
-            INSERT INTO leads (id, name, company, phone, email, city, stage, sla_status, sla_due_at, expected_value, notes, created_at, updated_at, version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO leads (id, name, company, phone, email, city, pincode, source_id, interest_product_id, stage, sla_status, sla_due_at, expected_value, notes, data_json, created_at, updated_at, version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
             newLead.id,
             newLead.name,
@@ -577,11 +621,15 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             newLead.phone,
             newLead.email,
             newLead.city,
+            pincode,
+            sourceId,
+            interestProductId,
             newLead.stage,
             newLead.slaStatus,
             newLead.slaDueAt,
             newLead.expectedValue,
             newLead.notes,
+            JSON.stringify({ pincode, sourceId, interestProductId }),
             newLead.createdAt,
             newLead.createdAt,
             newLead.version
@@ -708,14 +756,15 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (!customerId || body.mode === 'create') {
       customerId = 'cust-' + Date.now();
       const code = await getNextCustomerCode(db);
-      const displayName = lead.name || 'New Customer';
-      const legalName = (lead.company || '').trim() || displayName;
+      const displayName = (lead.company || '').trim() || lead.name || 'New Customer';
+      const legalName = displayName;
       const phone = lead.phone || null;
       const email = lead.email || null;
       const city = lead.city || 'Bengaluru';
+      const pincode = lead.pincode || null;
       const state = 'Karnataka';
-      const address = city ? `${city}, India` : 'Bengaluru, India';
-      const contacts = [{ id: 'cnt-' + Date.now(), name: displayName, phone, email, isPrimary: true }];
+      const address = city ? (pincode ? `${city} - ${pincode}, India` : `${city}, India`) : 'Bengaluru, India';
+      const contacts = [{ id: 'cnt-' + Date.now(), name: lead.name || displayName, phone, email, isPrimary: true }];
       const addresses = [{ id: 'addr-' + Date.now(), line1: address, city, state, type: 'billing' }];
 
       const newCust = {
@@ -770,6 +819,14 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           UPDATE timeline SET record_type = 'customer', record_id = ? WHERE record_type = 'lead' AND record_id = ?
         `).bind(customerId, leadId).run();
 
+        // Also update any quotes issued to this lead to point to the newly converted customer
+        const custDisplayName = (lead.company || '').trim() || lead.name || 'Customer';
+        await db.prepare(`
+          UPDATE quotes
+          SET party_id = ?, party_type = 'customer', party_name = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE party_type = 'lead' AND party_id = ?
+        `).bind(customerId, custDisplayName, leadId).run();
+
         await db.prepare(`
           INSERT INTO audit_log (id, at, user_name, action, record_type, record_id, changes_json)
           VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -796,7 +853,8 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (method === 'GET') {
       if (db) {
         try {
-          const row: any = await db.prepare('SELECT * FROM leads WHERE id = ? AND deleted_at IS NULL').bind(id).first();
+          const { results: leadResults } = await db.prepare('SELECT * FROM leads WHERE id = ? AND deleted_at IS NULL').bind(id).all();
+          const row: any = leadResults?.[0];
           if (row) {
             return jsonRes({
               id: row.id,
@@ -805,6 +863,11 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               phone: row.phone,
               email: row.email,
               city: row.city,
+              pincode: row.pincode,
+              sourceId: row.source_id,
+              sourceLabel: getSourceLabel(row.source_id),
+              interestProductId: row.interest_product_id,
+              productLabel: getProductLabel(row.interest_product_id),
               stage: row.stage,
               slaStatus: row.sla_status,
               slaDueAt: row.sla_due_at,
@@ -828,12 +891,16 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       const body = (await request.json().catch(() => ({}))) as any;
       if (db) {
         try {
-          const row: any = await db.prepare('SELECT * FROM leads WHERE id = ? AND deleted_at IS NULL').bind(id).first();
+          const { results: pRows } = await db.prepare('SELECT * FROM leads WHERE id = ? AND deleted_at IS NULL').bind(id).all();
+          const row: any = pRows?.[0];
           if (!row) return jsonRes({ title: 'Lead not found', status: 404, code: 'NOT_FOUND' }, 404);
           const name = body.name !== undefined ? body.name : row.name;
           const stage = body.stage !== undefined ? body.stage : row.stage;
           const expectedValue = body.expectedValue !== undefined ? Number(body.expectedValue) : row.expected_value;
-          await db.prepare('UPDATE leads SET name = ?, stage = ?, expected_value = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(name, stage, expectedValue, id).run();
+          const pincode = body.pincode !== undefined ? body.pincode : row.pincode;
+          const sourceId = body.sourceId !== undefined ? body.sourceId : (body.source_id !== undefined ? body.source_id : row.source_id);
+          const interestProductId = body.interestProductId !== undefined ? body.interestProductId : (body.interest_product_id !== undefined ? body.interest_product_id : row.interest_product_id);
+          await db.prepare('UPDATE leads SET name = ?, stage = ?, expected_value = ?, pincode = ?, source_id = ?, interest_product_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(name, stage, expectedValue, pincode, sourceId, interestProductId, id).run();
         } catch (e) {
           console.error('D1 lead patch error:', e);
         }
@@ -1371,10 +1438,49 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (!qt) qt = memoryStore.quotes.find((q) => q.id === qid);
     if (!qt) return jsonRes({ title: 'Quotation not found', status: 404, code: 'NOT_FOUND' }, 404);
 
+    const reqBody = (await request.json().catch(() => ({}))) as any;
+    let customerId = reqBody.customerId;
+    if (!customerId) {
+      if (qt.partyType === 'customer') {
+        customerId = qt.partyId;
+      } else if (qt.partyType === 'lead') {
+        let leadRow: any = null;
+        if (db) {
+          try {
+            const { results } = await db.prepare('SELECT customer_id FROM leads WHERE id = ?').bind(qt.partyId).all();
+            leadRow = results?.[0];
+          } catch (e) {}
+        }
+        if (leadRow?.customer_id) {
+          customerId = leadRow.customer_id;
+        } else {
+          return jsonRes({ title: 'Lead must be converted to customer first', status: 422, code: 'LEAD_NOT_CONVERTED' }, 422);
+        }
+      }
+    }
+    if (!customerId) {
+      return jsonRes({ title: 'Lead must be converted to customer first', status: 422, code: 'LEAD_NOT_CONVERTED' }, 422);
+    }
+
+    let customerName = qt.partyName;
+    if (db) {
+      try {
+        const { results } = await db.prepare('SELECT display_name, legal_name FROM customers WHERE id = ?').bind(customerId).all();
+        if (results?.[0]) customerName = (results[0] as any).display_name || (results[0] as any).legal_name;
+      } catch (e) {}
+    }
+
     const nextOrdNum = await getNextDocNumber(db, 'orders', 'number', 'SO/26-27/');
     const newOrdId = 'ord-' + Date.now();
-    const customerId = qt.partyType === 'customer' ? qt.partyId : 'cust-1';
-    const customerName = qt.partyName;
+
+    // Ensure line amounts are computed and populated
+    const computed = calculateLinesAndTotals(qt.lines, '29');
+    const processedLines = computed.lines.map((l: any) => ({
+      ...l,
+      amount: l.taxable ?? l.amount ?? (l.qty * l.rate),
+      invoicedQty: 0,
+      pendingQty: l.qty,
+    }));
 
     const newOrd = {
       id: newOrdId,
@@ -1386,7 +1492,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       date: new Date().toISOString().slice(0, 10),
       expectedDelivery: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
       totals: qt.totals,
-      lines: qt.lines,
+      lines: processedLines,
       invoices: [],
       version: 1,
     };
@@ -1454,11 +1560,48 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (!qt) qt = memoryStore.quotes.find((q) => q.id === qid);
     if (!qt) return jsonRes({ title: 'Quotation not found', status: 404, code: 'NOT_FOUND' }, 404);
 
+    const reqBody = (await request.json().catch(() => ({}))) as any;
+    let customerId = reqBody.customerId;
+    if (!customerId) {
+      if (qt.partyType === 'customer') {
+        customerId = qt.partyId;
+      } else if (qt.partyType === 'lead') {
+        let leadRow: any = null;
+        if (db) {
+          try {
+            const { results } = await db.prepare('SELECT customer_id FROM leads WHERE id = ?').bind(qt.partyId).all();
+            leadRow = results?.[0];
+          } catch (e) {}
+        }
+        if (leadRow?.customer_id) {
+          customerId = leadRow.customer_id;
+        } else {
+          return jsonRes({ title: 'Lead must be converted to customer first', status: 422, code: 'LEAD_NOT_CONVERTED' }, 422);
+        }
+      }
+    }
+    if (!customerId) {
+      return jsonRes({ title: 'Lead must be converted to customer first', status: 422, code: 'LEAD_NOT_CONVERTED' }, 422);
+    }
+
+    let customerName = qt.partyName;
+    if (db) {
+      try {
+        const { results } = await db.prepare('SELECT display_name, legal_name FROM customers WHERE id = ?').bind(customerId).all();
+        if (results?.[0]) customerName = (results[0] as any).display_name || (results[0] as any).legal_name;
+      } catch (e) {}
+    }
+
     const nextInvNum = await getNextDocNumber(db, 'invoices', 'number', 'INV/26-27/');
     const newInvId = 'inv-' + Date.now();
-    const customerId = qt.partyType === 'customer' ? qt.partyId : 'cust-1';
-    const customerName = qt.partyName;
     const grandTotal = qt.totals?.grandTotal || 0;
+
+    // Ensure line amounts are computed
+    const computed = calculateLinesAndTotals(qt.lines, '29');
+    const processedLines = computed.lines.map((l: any) => ({
+      ...l,
+      amount: l.taxable ?? l.amount ?? (l.qty * l.rate),
+    }));
 
     const newInv = {
       id: newInvId,
@@ -1475,7 +1618,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       credited: 0,
       balanceDue: grandTotal,
       totals: qt.totals,
-      lines: qt.lines,
+      lines: processedLines,
       pdf: { status: 'ready' },
       creditNotes: [],
       version: 1,
@@ -1505,6 +1648,15 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           new Date().toISOString(),
           1
         ).run();
+
+        // Update quote status to invoiced and save invoiceId/invoiceNumber in data_json
+        await db.prepare(`
+          UPDATE quotes 
+          SET status = 'invoiced', 
+              data_json = json_set(COALESCE(data_json, '{}'), '$.invoiceId', ?, '$.invoiceNumber', ?),
+              updated_at = CURRENT_TIMESTAMP 
+          WHERE id = ?
+        `).bind(newInvId, nextInvNum, qid).run();
       } catch (e) {
         console.error('D1 create-invoice from quote error:', e);
       }
@@ -1537,6 +1689,29 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           if (results?.[0]) {
             const r: any = results[0];
             const d = r.data_json ? JSON.parse(r.data_json) : {};
+
+            let orderId = d.orderId || null;
+            let orderNumber = d.orderNumber || null;
+            let invoiceId = d.invoiceId || null;
+            let invoiceNumber = d.invoiceNumber || null;
+
+            try {
+              if (!orderId) {
+                const { results: ordRows } = await db.prepare('SELECT id, number FROM orders WHERE quote_id = ? AND deleted_at IS NULL').bind(qid).all();
+                if (ordRows?.[0]) {
+                  orderId = (ordRows[0] as any).id;
+                  orderNumber = (ordRows[0] as any).number;
+                }
+              }
+              if (!invoiceId) {
+                const { results: invRows } = await db.prepare("SELECT id, number FROM invoices WHERE (order_id IS NULL OR order_id = '') AND data_json LIKE ? AND deleted_at IS NULL").bind(`%"quoteId":"${qid}"%`).all();
+                if (invRows?.[0]) {
+                  invoiceId = (invRows[0] as any).id;
+                  invoiceNumber = (invRows[0] as any).number;
+                }
+              }
+            } catch (e) {}
+
             return jsonRes({
               id: r.id,
               displayNumber: r.display_number,
@@ -1546,6 +1721,10 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               status: r.status,
               date: r.date,
               validUntil: r.valid_until,
+              orderId,
+              orderNumber,
+              invoiceId,
+              invoiceNumber,
               totals: d.totals || {
                 grandTotal: r.grand_total,
                 subTotal: r.sub_total,
@@ -1558,7 +1737,6 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               pdf: { status: 'ready' },
               revisions: d.revisions || [],
               version: r.version,
-              orderId: d.orderId || null,
               isLatest: true,
             });
           }
@@ -1622,14 +1800,15 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         }, 422);
       }
 
-      // Compute totals if needed
-      let totals = body.totals;
-      let processedLines = lines;
-      if (!totals || !totals.grandTotal) {
-        const computed = calculateLinesAndTotals(lines, '29');
-        totals = computed.totals;
-        processedLines = computed.lines;
-      }
+      // Always compute lines and totals so amounts, taxable, totals are never null
+      const computed = calculateLinesAndTotals(lines, '29');
+      const totals = body.totals?.grandTotal ? body.totals : computed.totals;
+      const processedLines = computed.lines.map((l: any) => ({
+        ...l,
+        amount: l.taxable ?? l.amount ?? (l.qty * l.rate),
+        invoicedQty: 0,
+        pendingQty: l.qty,
+      }));
 
       // Customer name lookup
       let customerName = (body.customerName || '').trim();
@@ -1720,6 +1899,24 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (!ord) ord = memoryStore.orders.find((o) => o.id === oid);
     if (!ord) return jsonRes({ title: 'Order not found', status: 404, code: 'NOT_FOUND' }, 404);
 
+    // Check if order has already been invoiced
+    const nonHeadingLines = (ord.lines || []).filter((l: any) => l.kind !== 'heading');
+    const hasPending = nonHeadingLines.length === 0 || nonHeadingLines.some((l: any) => (l.pendingQty === undefined ? l.qty > 0 : l.pendingQty > 0));
+    if (!hasPending) {
+      return jsonRes({ title: 'All items on this order have already been invoiced.', status: 422, code: 'ALREADY_INVOICED' }, 422);
+    }
+
+    // Mark lines as invoiced
+    const updatedLines = (ord.lines || []).map((l: any) => {
+      if (l.kind === 'heading') return l;
+      const pending = l.pendingQty !== undefined ? l.pendingQty : l.qty;
+      return {
+        ...l,
+        invoicedQty: (l.invoicedQty || 0) + pending,
+        pendingQty: 0,
+      };
+    });
+
     const nextInvNum = await getNextDocNumber(db, 'invoices', 'number', 'INV/26-27/');
     const newInvId = 'inv-' + Date.now();
     const grandTotal = ord.totals?.grandTotal || 0;
@@ -1738,7 +1935,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       credited: 0,
       balanceDue: grandTotal,
       totals: ord.totals,
-      lines: ord.lines,
+      lines: updatedLines,
       pdf: { status: 'ready' },
       creditNotes: [],
       version: 1,
@@ -1768,6 +1965,25 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           new Date().toISOString(),
           1
         ).run();
+
+        // Update order status to invoiced and save updated lines & invoices
+        const existingInvoices = ord.invoices || [];
+        existingInvoices.push({
+          id: newInv.id,
+          number: newInv.number,
+          type: newInv.type,
+          status: newInv.status,
+          grandTotal: newInv.totals?.grandTotal || 0,
+          balanceDue: newInv.totals?.grandTotal || 0,
+        });
+
+        await db.prepare(`
+          UPDATE orders 
+          SET status = 'invoiced', 
+              data_json = ?,
+              updated_at = CURRENT_TIMESTAMP 
+          WHERE id = ?
+        `).bind(JSON.stringify({ lines: updatedLines, totals: ord.totals, invoices: existingInvoices }), oid).run();
       } catch (e) {
         console.error('D1 create-invoice from order error:', e);
       }
@@ -1783,6 +1999,30 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     const oid = orderItemMatch[1];
 
     if (method === 'DELETE') {
+      let ordStatus = 'draft';
+      if (db) {
+        try {
+          const { results: oRows } = await db.prepare('SELECT status FROM orders WHERE id = ?').bind(oid).all();
+          if (oRows?.[0]) ordStatus = (oRows[0] as any).status;
+        } catch (e) {}
+      } else {
+        const memOrd = memoryStore.orders.find((o) => o.id === oid);
+        if (memOrd) ordStatus = memOrd.status;
+      }
+
+      if (ordStatus !== 'draft') {
+        // Confirmed orders cannot be deleted - cancel them instead
+        if (db) {
+          try {
+            await db.prepare("UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(oid).run();
+          } catch (e) {}
+        }
+        const memOrd = memoryStore.orders.find((o) => o.id === oid);
+        if (memOrd) memOrd.status = 'cancelled';
+        return jsonRes({ success: true, id: oid, status: 'cancelled' });
+      }
+
+      // Allow deleting only draft orders
       if (db) {
         try {
           await db.prepare('UPDATE orders SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?').bind(oid).run();
@@ -1790,7 +2030,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       }
       const idx = memoryStore.orders.findIndex((o) => o.id === oid);
       if (idx !== -1) memoryStore.orders.splice(idx, 1);
-      return jsonRes({ success: true, id: oid });
+      return jsonRes({ success: true, id: oid, status: 'deleted' });
     }
 
     if (method === 'GET') {
@@ -1800,18 +2040,47 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           if (results?.[0]) {
             const r: any = results[0];
             const d = r.data_json ? JSON.parse(r.data_json) : {};
+
+            let liveInvoices = d.invoices || [];
+            try {
+              const invRes = await db.prepare('SELECT id, number, type, status, grand_total, balance_due FROM invoices WHERE order_id = ? AND deleted_at IS NULL').bind(oid).all();
+              if (invRes.results && invRes.results.length > 0) {
+                liveInvoices = invRes.results.map((inv: any) => ({
+                  id: inv.id,
+                  number: inv.number,
+                  type: inv.type,
+                  status: inv.status,
+                  grandTotal: inv.grand_total,
+                  balanceDue: inv.balance_due,
+                }));
+              }
+            } catch (e) {}
+
+            const ordLines = (d.lines || []).map((l: any) => {
+              if (l.kind === 'heading') return l;
+              if (liveInvoices.length > 0 && (l.pendingQty === undefined || l.pendingQty > 0)) {
+                return { ...l, invoicedQty: l.qty, pendingQty: 0 };
+              }
+              return l;
+            });
+
+            const isFullyInvoiced = liveInvoices.length > 0 || (ordLines.length > 0 && ordLines.every((l: any) => l.kind === 'heading' || (l.pendingQty ?? 0) <= 0));
+            const status = isFullyInvoiced ? 'invoiced' : r.status;
+            const invoicedPct = isFullyInvoiced ? 100 : (liveInvoices.length > 0 ? 50 : 0);
+
             return jsonRes({
               id: r.id,
               number: r.number,
               customerId: r.customer_id,
               customerName: r.customer_name,
               quoteId: r.quote_id,
-              status: r.status,
+              status,
               date: r.date,
               expectedDelivery: r.expected_delivery,
               totals: d.totals || { grandTotal: r.grand_total },
-              lines: d.lines || [],
-              invoices: d.invoices || [],
+              lines: ordLines,
+              invoices: liveInvoices,
+              invoicedPct,
               version: r.version,
             });
           }

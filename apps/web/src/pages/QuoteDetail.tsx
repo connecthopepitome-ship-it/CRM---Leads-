@@ -53,6 +53,9 @@ interface Quote {
   lastViewedAt: string | null;
   isLatest: boolean;
   orderId: string | null;
+  orderNumber?: string | null;
+  invoiceId?: string | null;
+  invoiceNumber?: string | null;
   approval: { decision: string | null; comment: string | null; byName?: string } | null;
   response: { type: string; name: string | null; comment: string | null; at: string; onBehalf?: boolean } | null;
   revisions: { id: string; revision: number; status: string; displayNumber: string | null; grandTotal: number }[];
@@ -68,6 +71,8 @@ export default function QuoteDetail() {
   const [approval, setApproval] = useState<null | 'approve' | 'reject'>(null);
   const [comment, setComment] = useState('');
   const [onBehalf, setOnBehalf] = useState(false);
+  const [pendingConvertAction, setPendingConvertAction] = useState<'order' | 'invoice' | null>(null);
+  const [isConverting, setIsConverting] = useState(false);
   const inv = ['quote', id];
 
   const send = useAction((channel: string) => post<{ status: string; number?: string; shareUrl?: string; waUrl?: string }>(`/quotes/${id}/send`, { channel }), [inv, ['sales']], (r) => {
@@ -86,18 +91,64 @@ export default function QuoteDetail() {
 
   const markAccepted = useAction(() => post(`/quotes/${id}/accept`), [inv, ['sales']], () => toast('Quote marked as accepted'));
   const markRejected = useAction(() => post(`/quotes/${id}/reject`), [inv, ['sales']], () => toast('Quote marked as rejected'));
-  const createOrder = useAction(() => post<{ id: string }>(`/quotes/${id}/create-order`), [inv, ['sales']], (r) => {
+  const createOrder = useAction((overrideCustId?: string) => post<{ id: string }>(`/quotes/${id}/create-order`, overrideCustId ? { customerId: overrideCustId } : {}), [inv, ['sales']], (r) => {
     toast('Sales order created');
     nav(`/sales/orders/${r.id}`);
   });
 
-  const createInvoice = async (note?: string) => {
+  const createInvoice = async (note?: string, overrideCustId?: string) => {
     try {
-      const r = await post<{ id: string }>(`/quotes/${id}/create-invoice`, note ? { onBehalfNote: note } : {});
+      const payload: any = {};
+      if (note) payload.onBehalfNote = note;
+      if (overrideCustId) payload.customerId = overrideCustId;
+      const r = await post<{ id: string }>(`/quotes/${id}/create-invoice`, payload);
       nav(`/sales/invoices/${r.id}`);
     } catch (e) {
       if (e instanceof ApiError && e.code === 'ACCEPT_ON_BEHALF_NOTE_REQUIRED') setOnBehalf(true);
       else errorToast(e);
+    }
+  };
+
+  const handleCreateOrder = () => {
+    const quote = q.data;
+    if (quote?.partyType === 'lead' && !quote?.customerId) {
+      setPendingConvertAction('order');
+      return;
+    }
+    createOrder.mutate(undefined);
+  };
+
+  const handleCreateInvoice = (note?: string) => {
+    const quote = q.data;
+    if (quote?.partyType === 'lead' && !quote?.customerId) {
+      setPendingConvertAction('invoice');
+      return;
+    }
+    void createInvoice(note);
+  };
+
+  const convertLeadAndProceed = async () => {
+    const quote = q.data;
+    if (!quote?.partyId) return;
+    setIsConverting(true);
+    try {
+      const res = await post<{ customerId: string }>(`/leads/${quote.partyId}/convert`, { mode: 'create' });
+      toast('Lead converted to customer successfully');
+      await q.refetch();
+      if (pendingConvertAction === 'order') {
+        const ord = await post<{ id: string }>(`/quotes/${id}/create-order`, { customerId: res.customerId });
+        toast('Sales order created');
+        nav(`/sales/orders/${ord.id}`);
+      } else if (pendingConvertAction === 'invoice') {
+        const invRes = await post<{ id: string }>(`/quotes/${id}/create-invoice`, { customerId: res.customerId });
+        toast('Invoice created');
+        nav(`/sales/invoices/${invRes.id}`);
+      }
+    } catch (err: any) {
+      errorToast(err);
+    } finally {
+      setIsConverting(false);
+      setPendingConvertAction(null);
     }
   };
 
@@ -202,14 +253,14 @@ export default function QuoteDetail() {
             </>
           )}
           {d.status === 'accepted' && !d.orderId && (
-            <Button busy={createOrder.isPending} onClick={() => createOrder.mutate(undefined)} className="bg-[#233D2D] text-white hover:bg-[#1a2e22]">
+            <Button busy={createOrder.isPending} onClick={handleCreateOrder} className="bg-[#233D2D] text-white hover:bg-[#1a2e22]">
               Create sales order
             </Button>
           )}
           {sent && d.isLatest && <Button variant="secondary" busy={revise.isPending} onClick={() => revise.mutate(undefined)}>Revise</Button>}
           {sent && <Button variant="ghost" onClick={() => void copyLink()}>Copy link</Button>}
           {(d.status === 'accepted' || (sent && d.isLatest)) && perm('invoice:create') && (
-            <Button onClick={() => void createInvoice()} className="bg-[#3D7952] text-white">
+            <Button onClick={() => handleCreateInvoice()} className="bg-[#3D7952] text-white">
               Create invoice
             </Button>
           )}
@@ -278,7 +329,7 @@ export default function QuoteDetail() {
         {d.status === 'accepted' && !d.orderId && (
           <Button
             busy={createOrder.isPending}
-            onClick={() => createOrder.mutate(undefined)}
+            onClick={handleCreateOrder}
             className="w-full justify-center bg-[#233D2D] text-white py-2.5 text-xs font-bold shadow-xs"
           >
             Create Sales Order
@@ -287,7 +338,7 @@ export default function QuoteDetail() {
 
         {(d.status === 'accepted' || (sent && d.isLatest)) && perm('invoice:create') && (
           <Button
-            onClick={() => void createInvoice()}
+            onClick={() => handleCreateInvoice()}
             className="w-full justify-center bg-[#3D7952] text-white py-2.5 text-xs font-bold shadow-xs"
           >
             Create Invoice
@@ -331,6 +382,34 @@ export default function QuoteDetail() {
       )}
       {d.status === 'superseded' && (
         <Banner tone="info">A newer revision replaced this quotation.</Banner>
+      )}
+
+      {/* Linked Documents Banners */}
+      {(d.orderId || d.invoiceId) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {d.orderId && (
+            <div className="rounded-xl border border-[#DCE7D9] bg-[#F5F9F2] p-3.5 flex items-center justify-between shadow-2xs">
+              <div className="min-w-0 pr-2">
+                <span className="block text-[10px] uppercase font-bold tracking-wider text-[#778477]">Linked Sales Order</span>
+                <span className="font-mono font-bold text-sm text-[#202820] truncate block">{d.orderNumber || d.orderId}</span>
+              </div>
+              <LinkButton to={`/sales/orders/${d.orderId}`} variant="secondary" className="text-xs py-1.5 shrink-0 font-semibold">
+                View Order
+              </LinkButton>
+            </div>
+          )}
+          {d.invoiceId && (
+            <div className="rounded-xl border border-[#DCE7D9] bg-[#EAF5E8] p-3.5 flex items-center justify-between shadow-2xs">
+              <div className="min-w-0 pr-2">
+                <span className="block text-[10px] uppercase font-bold tracking-wider text-[#3D7952]">Linked Invoice</span>
+                <span className="font-mono font-bold text-sm text-[#202820] truncate block">{d.invoiceNumber || d.invoiceId}</span>
+              </div>
+              <LinkButton to={`/sales/invoices/${d.invoiceId}`} variant="primary" className="text-xs py-1.5 shrink-0 font-semibold bg-[#3D7952]">
+                View Invoice
+              </LinkButton>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Customer / Recipient Information Card */}
@@ -536,6 +615,42 @@ export default function QuoteDetail() {
           {(fid) => <Textarea id={fid} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Optional note for audit history" />}
         </Field>
       </Dialog>
+
+      {/* Convert Lead to Customer Dialog */}
+      {pendingConvertAction && (
+        <Dialog
+          open
+          onClose={() => setPendingConvertAction(null)}
+          title="Convert lead to customer first?"
+          footer={
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={() => setPendingConvertAction(null)}>Cancel</Button>
+              <Button busy={isConverting} onClick={() => void convertLeadAndProceed()} className="bg-[#3D7952] text-white">
+                Convert & Proceed
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-3 text-sm">
+            <p className="text-[#202820]">
+              This quotation was prepared for lead <strong className="text-[#3D7952]">{d.partyName}</strong>. A quote can only be converted into a {pendingConvertAction === 'order' ? 'sales order' : 'commercial invoice'} for a registered customer account.
+            </p>
+            <div className="rounded-xl border border-[#DCE7D9] bg-[#F5F9F2] p-3 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[#778477]">Party Entity:</span>
+                <span className="font-bold text-[#202820]">{d.partyName}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#778477]">Action to Perform:</span>
+                <span className="font-semibold text-[#3D7952]">Convert to customer & issue {pendingConvertAction === 'order' ? 'sales order' : 'invoice'}</span>
+              </div>
+            </div>
+            <p className="text-xs text-[#778477]">
+              Click <strong>Convert & Proceed</strong> to register the customer record and continue automatically.
+            </p>
+          </div>
+        </Dialog>
+      )}
     </div>
   );
 }

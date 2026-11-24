@@ -101,6 +101,9 @@ export default function LeadDetail() {
             <KeyValue items={[
               ['Phone', l.phone ?? (l.phoneRaw ? <span>{l.phoneRaw} <Badge tone="warning">Check number</Badge></span> : null)],
               ['Email', l.email],
+              ['Location', [l.city, l.pincode].filter(Boolean).join(' - ') || null],
+              ['Lead Source', (l as any).sourceLabel || (l as any).sourceId || null],
+              ['Product Interest', (l as any).productLabel || (l as any).interestProductId || null],
               ['First-contact SLA', <Badge key="s" status={l.slaStatus}>{sla.text}</Badge>],
               ['Next follow-up', l.nextFollowUpAt ? dateTime(l.nextFollowUpAt) : null],
               ['Expected value', l.expectedValue ? money(l.expectedValue) : null],

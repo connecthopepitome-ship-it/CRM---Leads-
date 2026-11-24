@@ -31,19 +31,6 @@ const DEFAULT_PRODUCTS = [
   { id: 'prod-4', label: 'Dedicated Support Retainer (Monthly)', ratePaise: 500000, taxRatePct: 18, hsnSac: '998319', unit: 'Month', description: '24/7 SLA escalation support with dedicated customer success manager.' },
 ];
 
-const PRELOADED_PARTIES = {
-  customer: [
-    { id: 'cust-1', name: 'Fatima Khan', company: 'Khan Enterprises', stateCode: '29', gstin: '29ABCDE1234F1Z5' },
-    { id: 'cust-2', name: 'Iyer Consultancy', company: 'Iyer & Associates', stateCode: '29', gstin: '29AABCI5678G2Z3' },
-    { id: 'cust-3', name: 'Nair Foods', company: 'Nair Foods Pvt Ltd', stateCode: '27', gstin: '27AABCN9988H1Z8' },
-  ],
-  lead: [
-    { id: 'lead-1', name: 'Mohan Das', company: 'Das Industries', stateCode: '29', gstin: '29AABCD4321J1Z0' },
-    { id: 'lead-2', name: 'Deepa Reddy', company: 'Reddy Tech', stateCode: '36', gstin: '36ABCDE8765K1Z4' },
-    { id: 'lead-3', name: 'Apex Global Logistics', company: 'Apex Global', stateCode: '29', gstin: '29AABCA2233L1Z9' },
-  ],
-};
-
 const SAMPLE_PRESETS: Record<string, { label: string; lines: Line[]; partyId: string; pos: string }> = {
   enterprise: {
     label: 'Enterprise Suite (₹1,01,539)',
@@ -139,30 +126,20 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
 
   const parties = useQuery({
     queryKey: ['party-search', partyType, partySearch],
-    queryFn: () => get<{ items: { id: string; name?: string; displayName?: string }[] }>(`/${partyType === 'lead' ? 'leads' : 'customers'}?limit=10${partySearch.length >= 2 ? `&q=${encodeURIComponent(partySearch)}` : ''}`),
+    queryFn: () => get<{ items: { id: string; name?: string; displayName?: string }[] }>(`/${partyType === 'lead' ? 'leads' : 'customers'}?limit=50${partySearch.length >= 2 ? `&q=${encodeURIComponent(partySearch)}` : ''}`),
     enabled: !id,
   });
 
   const availableParties = useMemo(() => {
     const serverItems = parties.data?.items ?? [];
-    const list: { id: string; name: string; company: string; stateCode: string; gstin: string }[] = [];
-    for (const item of serverItems) {
-      list.push({
-        id: item.id,
-        name: item.displayName || item.name || item.id,
-        company: (item as any).company || (item as any).legalName || '',
-        stateCode: (item as any).stateCode || (item as any).state || '29',
-        gstin: (item as any).gstin || '29ABCDE1234F1Z5',
-      });
-    }
-    const fallbackList = PRELOADED_PARTIES[partyType as keyof typeof PRELOADED_PARTIES] || [];
-    for (const fb of fallbackList) {
-      if (!list.some((p) => p.id === fb.id)) {
-        list.push(fb);
-      }
-    }
-    return list;
-  }, [partyType, parties.data]);
+    return serverItems.map((item) => ({
+      id: item.id,
+      name: item.displayName || item.name || item.id,
+      company: (item as any).company || (item as any).legalName || '',
+      stateCode: (item as any).stateCode || (item as any).state || '29',
+      gstin: (item as any).gstin || '29ABCDE1234F1Z5',
+    }));
+  }, [parties.data]);
 
   const availableProducts = useMemo(() => {
     const list = [...DEFAULT_PRODUCTS];
@@ -558,7 +535,7 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
           {/* CARD 2: LINE ITEMS & COMMERCIAL SCOPE (EMERALD ACCENT) */}
           {/* ============================================================== */}
           <section className="w-full max-w-full min-w-0 rounded-2xl border border-emerald-200/70 border-l-[5px] border-l-emerald-600 bg-white p-4 sm:p-5 shadow-sm space-y-4 transition-all">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-100/60 pb-3 w-full max-w-full">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-100/60 pb-3 w-full max-w-full min-w-0">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 shrink-0">
                   <Layers size={16} strokeWidth={2.2} />

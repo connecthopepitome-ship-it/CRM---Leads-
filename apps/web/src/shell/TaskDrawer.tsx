@@ -228,10 +228,10 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
       )}
 
       <aside
-        className={`fixed inset-y-0 right-0 z-50 flex flex-col glass-dark-drawer text-white transition-all duration-300 ease-in-out shrink-0 select-none md:static md:z-20 ${
+        className={`fixed inset-y-0 right-0 z-50 flex-col glass-dark-drawer text-white transition-all duration-300 ease-in-out shrink-0 select-none md:static md:z-20 ${
           open
-            ? 'translate-x-0 w-[88vw] max-w-[340px] md:w-80 xl:md:w-[320px] shadow-2xl md:shadow-none'
-            : 'translate-x-full md:translate-x-0 md:w-0 border-l-0 overflow-hidden'
+            ? 'flex translate-x-0 w-[88vw] max-w-[340px] md:w-80 xl:md:w-[320px] shadow-2xl md:shadow-none'
+            : 'hidden md:flex md:translate-x-0 md:w-0 border-l-0 overflow-hidden pointer-events-none'
         }`}
         aria-label="Tasks panel"
       >
