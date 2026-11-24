@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { computeDocument, GST_STATES, isIntraState } from '@ss/domain';
 import { ApiError, get, patch, post } from '../lib/api';
 import { money, toPaise } from '../lib/format';
@@ -105,15 +105,25 @@ const SAMPLE_PRESETS: Record<string, { label: string; lines: Line[]; partyId: st
   },
 };
 
-export default function QuoteBuilder() {
+interface QuoteBuilderProps {
+  mode?: 'quote' | 'order' | 'invoice';
+}
+
+export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
   const { id } = useParams();
   const [params] = useSearchParams();
   const nav = useNavigate();
+  const loc = useLocation();
+  const mode = initialMode || (loc.pathname.includes('/orders/') ? 'order' : loc.pathname.includes('/invoices/') ? 'invoice' : 'quote');
+  const isOrder = mode === 'order';
+  const isInvoice = mode === 'invoice';
+  const isQuote = !isOrder && !isInvoice;
+
   const productsQuery = useOptions('products');
   const company = useQuery({ queryKey: ['company'], queryFn: () => get<{ gstRegistered: boolean; stateCode: string } | null>('/admin/company').catch(() => null) });
-  const existing = useQuery({ queryKey: ['quote', id], queryFn: () => get<Record<string, unknown>>(`/quotes/${id}`), enabled: !!id });
+  const existing = useQuery({ queryKey: ['quote', id], queryFn: () => get<Record<string, unknown>>(`/quotes/${id}`), enabled: !!id && isQuote });
 
-  const [partyType, setPartyType] = useState(params.get('partyType') ?? 'customer');
+  const [partyType, setPartyType] = useState(isOrder || isInvoice ? 'customer' : (params.get('partyType') ?? 'customer'));
   const [partyId, setPartyId] = useState(params.get('partyId') ?? 'cust-1');
   const [partySearch, setPartySearch] = useState('');
   
@@ -134,11 +144,21 @@ export default function QuoteBuilder() {
   });
 
   const availableParties = useMemo(() => {
-    const list = [...(PRELOADED_PARTIES[partyType as keyof typeof PRELOADED_PARTIES] || [])];
     const serverItems = parties.data?.items ?? [];
+    const list: { id: string; name: string; company: string; stateCode: string; gstin: string }[] = [];
     for (const item of serverItems) {
-      if (!list.some((p) => p.id === item.id)) {
-        list.push({ id: item.id, name: item.displayName || item.name || item.id, company: '', stateCode: '29', gstin: '29ABCDE1234F1Z5' });
+      list.push({
+        id: item.id,
+        name: item.displayName || item.name || item.id,
+        company: (item as any).company || (item as any).legalName || '',
+        stateCode: (item as any).stateCode || (item as any).state || '29',
+        gstin: (item as any).gstin || '29ABCDE1234F1Z5',
+      });
+    }
+    const fallbackList = PRELOADED_PARTIES[partyType as keyof typeof PRELOADED_PARTIES] || [];
+    for (const fb of fallbackList) {
+      if (!list.some((p) => p.id === fb.id)) {
+        list.push(fb);
       }
     }
     return list;
@@ -270,6 +290,57 @@ export default function QuoteBuilder() {
   const save = async () => {
     setBusy(true);
     setError(null);
+    const validLines = lines.filter((l) => (l.kind === 'heading' ? l.description : l.description || l.rate)).map(toBody);
+
+    if (isOrder) {
+      const orderBody = {
+        customerId: partyId,
+        customerName: selectedParty?.name || 'Customer',
+        date: new Date().toISOString().slice(0, 10),
+        expectedDelivery: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+        lines: validLines,
+        totals: t,
+      };
+      try {
+        const ord = await post<{ id: string }>('/orders', orderBody);
+        if (!ord?.id) throw new Error('Failed to create sales order');
+        toast('Sales order created successfully');
+        nav(`/sales/orders/${ord.id}`);
+      } catch (err: any) {
+        const msg = err?.title || err?.message || 'Failed to create sales order';
+        setError(msg);
+        errorToast(err);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (isInvoice) {
+      const invBody = {
+        customerId: partyId,
+        customerName: selectedParty?.name || 'Customer',
+        type: company.data?.gstRegistered === false ? 'bill_of_supply' : 'tax_invoice',
+        date: new Date().toISOString().slice(0, 10),
+        dueDate: new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10),
+        lines: validLines,
+        totals: t,
+      };
+      try {
+        const invRes = await post<{ id: string }>('/invoices', invBody);
+        if (!invRes?.id) throw new Error('Failed to create invoice');
+        toast('Invoice created successfully');
+        nav(`/sales/invoices/${invRes.id}`);
+      } catch (err: any) {
+        const msg = err?.title || err?.message || 'Failed to create invoice';
+        setError(msg);
+        errorToast(err);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     const body = {
       partyType,
       partyId,
@@ -278,7 +349,7 @@ export default function QuoteBuilder() {
       overallDiscountPct: Number(overall) || 0,
       termsText: terms || null,
       notes: notes || null,
-      lines: lines.filter((l) => (l.kind === 'heading' ? l.description : l.description || l.rate)).map(toBody),
+      lines: validLines,
     };
     try {
       const q = id ? await patch<{ id: string }>(`/quotes/${id}`, body, Number(existing.data?.version)) : await post<{ id: string }>('/quotes', body);
@@ -314,9 +385,15 @@ export default function QuoteBuilder() {
     <div className="space-y-6 pb-28 sm:pb-16 font-sans">
       {/* Page Header */}
       <PageHeader
-        back={id ? `/sales/quotes/${id}` : '/sales'}
-        title={id ? 'Edit Quotation' : 'New Quotation'}
-        subtitle="Commercial proposal builder with automatic GST tax calculations and live totals."
+        back={isOrder ? '/sales?tab=orders' : isInvoice ? '/sales?tab=invoices' : id ? `/sales/quotes/${id}` : '/sales'}
+        title={isOrder ? 'New Sales Order' : isInvoice ? 'New Invoice' : id ? 'Edit Quotation' : 'New Quotation'}
+        subtitle={
+          isOrder
+            ? 'Create a confirmed sales order with delivery terms and line items.'
+            : isInvoice
+            ? 'Create and issue a commercial invoice with automatic GST calculations.'
+            : 'Commercial proposal builder with automatic GST tax calculations and live totals.'
+        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {/* Responsive Sample Data Preset Selector */}
@@ -350,7 +427,7 @@ export default function QuoteBuilder() {
 
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E3EFDF] text-[#233D2D] border border-[#CFE5CB]">
               <span className="w-1.5 h-1.5 rounded-full bg-[#3D7952] animate-pulse" />
-              Draft
+              {isOrder ? 'Order' : isInvoice ? 'Invoice' : 'Draft'}
             </span>
           </div>
         }
@@ -386,38 +463,40 @@ export default function QuoteBuilder() {
               </div>
 
               {/* Segmented Radio Pill for Party Type */}
-              <div className="flex items-center rounded-xl bg-slate-100 p-0.5 text-xs font-semibold self-start sm:self-auto shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPartyType('customer');
-                    setPartyId('cust-1');
-                  }}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1 transition-all ${
-                    partyType === 'customer'
-                      ? 'bg-white text-blue-700 shadow-2xs font-bold'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <Users size={13} />
-                  <span>Customer</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPartyType('lead');
-                    setPartyId('lead-1');
-                  }}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1 transition-all ${
-                    partyType === 'lead'
-                      ? 'bg-white text-blue-700 shadow-2xs font-bold'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <UserSquare2 size={13} />
-                  <span>Lead</span>
-                </button>
-              </div>
+              {isQuote && (
+                <div className="flex items-center rounded-xl bg-slate-100 p-0.5 text-xs font-semibold self-start sm:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPartyType('customer');
+                      setPartyId('cust-1');
+                    }}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1 transition-all ${
+                      partyType === 'customer'
+                        ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    <Users size={13} />
+                    <span>Customer</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPartyType('lead');
+                      setPartyId('lead-1');
+                    }}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1 transition-all ${
+                      partyType === 'lead'
+                        ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    <UserSquare2 size={13} />
+                    <span>Lead</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 w-full max-w-full min-w-0">
@@ -459,7 +538,7 @@ export default function QuoteBuilder() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="font-bold text-slate-900 text-sm truncate">{selectedParty.name}</div>
-                    <div className="text-[11px] text-slate-500 truncate flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <span>{selectedParty.company || 'Direct Client'}</span>
                       <span>·</span>
                       <span className="font-mono text-slate-600">GSTIN: {selectedParty.gstin || '29ABCDE1234F1Z5'}</span>
@@ -479,7 +558,7 @@ export default function QuoteBuilder() {
           {/* CARD 2: LINE ITEMS & COMMERCIAL SCOPE (EMERALD ACCENT) */}
           {/* ============================================================== */}
           <section className="w-full max-w-full min-w-0 rounded-2xl border border-emerald-200/70 border-l-[5px] border-l-emerald-600 bg-white p-4 sm:p-5 shadow-sm space-y-4 transition-all">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-100/60 pb-3 w-full max-w-full">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-100/60 pb-3 w-full max-w-full">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 shrink-0">
                   <Layers size={16} strokeWidth={2.2} />
@@ -495,7 +574,7 @@ export default function QuoteBuilder() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() =>
@@ -800,7 +879,9 @@ export default function QuoteBuilder() {
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#E3EFDF] text-[#3D7952]">
                   <Calculator size={15} />
                 </div>
-                <h2 className="text-sm font-bold text-[#202820] tracking-tight">Quotation Summary</h2>
+                <h2 className="text-sm font-bold text-[#202820] tracking-tight">
+                  {isOrder ? 'Order Summary' : isInvoice ? 'Invoice Summary' : 'Quotation Summary'}
+                </h2>
               </div>
               <span className="text-[10px] font-bold text-[#233D2D] bg-[#E3EFDF] px-2 py-0.5 rounded-full">
                 INR (₹)
@@ -878,7 +959,7 @@ export default function QuoteBuilder() {
               onClick={() => void save()}
             >
               <Check size={16} strokeWidth={2.5} />
-              <span>Save Draft Proposal</span>
+              <span>{isOrder ? 'Create Sales Order' : isInvoice ? 'Create Invoice' : 'Save Draft Proposal'}</span>
             </Button>
           </div>
         </aside>

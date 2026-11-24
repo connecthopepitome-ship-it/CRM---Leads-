@@ -154,7 +154,7 @@ export default function InvoiceDetail() {
           </div>
 
           <h1
-            className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#202820] font-mono break-all sm:break-normal max-w-full"
+            className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#202820] font-mono whitespace-nowrap sm:whitespace-normal break-normal max-w-full"
           >
             {i.number ?? `Draft ${i.type === 'proforma' ? 'proforma' : 'invoice'}`}
           </h1>

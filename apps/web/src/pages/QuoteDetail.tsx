@@ -84,6 +84,13 @@ export default function QuoteDetail() {
 
   const revise = useAction(() => post<{ id: string }>(`/quotes/${id}/revise`), [inv], (r) => nav(`/sales/quotes/${r.id}/edit`));
 
+  const markAccepted = useAction(() => post(`/quotes/${id}/accept`), [inv, ['sales']], () => toast('Quote marked as accepted'));
+  const markRejected = useAction(() => post(`/quotes/${id}/reject`), [inv, ['sales']], () => toast('Quote marked as rejected'));
+  const createOrder = useAction(() => post<{ id: string }>(`/quotes/${id}/create-order`), [inv, ['sales']], (r) => {
+    toast('Sales order created');
+    nav(`/sales/orders/${r.id}`);
+  });
+
   const createInvoice = async (note?: string) => {
     try {
       const r = await post<{ id: string }>(`/quotes/${id}/create-invoice`, note ? { onBehalfNote: note } : {});
@@ -159,7 +166,7 @@ export default function QuoteDetail() {
           </div>
 
           <h1
-            className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#202820] font-mono break-all sm:break-normal max-w-full"
+            className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#202820] font-mono whitespace-nowrap sm:whitespace-normal break-normal max-w-full"
           >
             {d.displayNumber ?? 'Draft Quotation'}
           </h1>
@@ -183,6 +190,21 @@ export default function QuoteDetail() {
               <Button onClick={() => setApproval('approve')}>Approve</Button>
               <Button variant="secondary" onClick={() => setApproval('reject')}>Reject</Button>
             </>
+          )}
+          {sent && (
+            <>
+              <Button busy={markAccepted.isPending} onClick={() => markAccepted.mutate(undefined)} className="bg-[#3D7952] text-white hover:bg-[#2F5E3F]">
+                Mark accepted
+              </Button>
+              <Button variant="secondary" busy={markRejected.isPending} onClick={() => markRejected.mutate(undefined)} className="text-rose-600 hover:bg-rose-50">
+                Mark rejected
+              </Button>
+            </>
+          )}
+          {d.status === 'accepted' && !d.orderId && (
+            <Button busy={createOrder.isPending} onClick={() => createOrder.mutate(undefined)} className="bg-[#233D2D] text-white hover:bg-[#1a2e22]">
+              Create sales order
+            </Button>
           )}
           {sent && d.isLatest && <Button variant="secondary" busy={revise.isPending} onClick={() => revise.mutate(undefined)}>Revise</Button>}
           {sent && <Button variant="ghost" onClick={() => void copyLink()}>Copy link</Button>}
@@ -232,6 +254,36 @@ export default function QuoteDetail() {
             <span>Copy Link</span>
           </Button>
         </div>
+
+        {sent && (
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              busy={markAccepted.isPending}
+              onClick={() => markAccepted.mutate(undefined)}
+              className="w-full justify-center bg-[#3D7952] text-white py-2.5 text-xs font-bold shadow-xs"
+            >
+              Mark Accepted
+            </Button>
+            <Button
+              variant="secondary"
+              busy={markRejected.isPending}
+              onClick={() => markRejected.mutate(undefined)}
+              className="w-full justify-center text-rose-600 border border-rose-200 bg-white hover:bg-rose-50 py-2.5 text-xs font-bold shadow-xs"
+            >
+              Mark Rejected
+            </Button>
+          </div>
+        )}
+
+        {d.status === 'accepted' && !d.orderId && (
+          <Button
+            busy={createOrder.isPending}
+            onClick={() => createOrder.mutate(undefined)}
+            className="w-full justify-center bg-[#233D2D] text-white py-2.5 text-xs font-bold shadow-xs"
+          >
+            Create Sales Order
+          </Button>
+        )}
 
         {(d.status === 'accepted' || (sent && d.isLatest)) && perm('invoice:create') && (
           <Button

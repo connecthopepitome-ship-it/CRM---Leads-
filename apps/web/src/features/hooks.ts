@@ -12,7 +12,19 @@ export interface Option {
 
 /** API-051 lookups, cached 5 minutes. */
 export function useOptions(type: string) {
-  return useQuery({ queryKey: ['options', type], queryFn: () => get<{ items: Option[] }>(`/masters/${type}/options`).then((r) => r.items), staleTime: 300_000 });
+  return useQuery({
+    queryKey: ['options', type],
+    queryFn: () =>
+      get<any>(`/masters/${type}/options`).then((r) => {
+        const raw = Array.isArray(r) ? r : Array.isArray(r?.items) ? r.items : [];
+        return raw.map((item: any) => ({
+          ...item,
+          id: item.id ?? item.key ?? String(item.value ?? ''),
+          label: item.label || item.name || item.displayName || item.bankName || item.key || String(item.id ?? ''),
+        })) as Option[];
+      }),
+    staleTime: 300_000,
+  });
 }
 
 export function useUsers(enabled = true) {

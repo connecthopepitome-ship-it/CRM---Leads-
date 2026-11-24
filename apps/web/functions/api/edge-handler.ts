@@ -138,24 +138,6 @@ const memoryStore = {
       creditNotes: [],
       allocations: [{ paymentId: 'pay-1', amount: 2950000 }],
     },
-    {
-      id: 'inv-2',
-      number: 'INV/26-27/0002',
-      customerId: 'cust-2',
-      customerName: 'Iyer Consultancy',
-      type: 'tax_invoice',
-      status: 'partly_paid',
-      date: '2026-11-18',
-      dueDate: '2026-12-03',
-      paid: 1500000,
-      credited: 0,
-      balanceDue: 4400000,
-      totals: { grandTotal: 5900000, subTotal: 5000000, taxable: 5000000, cgst: 450000, sgst: 450000, igst: 0, roundOff: 0, discountTotal: 0, inWords: 'Fifty nine lakh rupees only' },
-      lines: [{ id: 'ln-2', kind: 'item', description: 'Cloud Architecture Consulting', qty: 1, rate: 5000000, amount: 5000000, taxRatePct: 18 }],
-      pdf: { status: 'ready' },
-      creditNotes: [],
-      allocations: [],
-    },
   ],
   payments: [
     {
@@ -231,6 +213,166 @@ function jsonRes(data: unknown, status = 200, extraHeaders: Record<string, strin
       ...extraHeaders,
     },
   });
+}
+
+function roundHalfUp(n: number): number {
+  return Math.floor(n + 0.5);
+}
+
+function calculateLinesAndTotals(
+  submittedLines: any[],
+  placeOfSupply = '29',
+  companyState = '29',
+  gstRegistered = true,
+  overallDiscountPct = 0
+) {
+  const isIntraState = placeOfSupply === companyState;
+  const processedLines: any[] = [];
+  let subTotal = 0;
+  let discountTotal = 0;
+  let taxableTotal = 0;
+  let cgstTotal = 0;
+  let sgstTotal = 0;
+  let igstTotal = 0;
+
+  for (let i = 0; i < (submittedLines || []).length; i++) {
+    const l = submittedLines[i];
+    if (l.kind === 'heading') {
+      processedLines.push({
+        id: l.id || `ln-${Date.now()}-${i}`,
+        kind: 'heading',
+        description: l.description || '',
+        qty: 0,
+        rate: 0,
+        amount: 0,
+        total: 0,
+      });
+      continue;
+    }
+
+    const qty = Number(l.qty) || 0;
+    const rate = Number(l.rate) || 0;
+    const discountPct = Number(l.discountPct) || 0;
+    const taxRatePct = Number(l.taxRatePct) || 18;
+
+    const gross = roundHalfUp(qty * rate);
+    const lineDiscount = discountPct > 0 ? roundHalfUp((gross * discountPct) / 100) : 0;
+    const taxable = gross - lineDiscount;
+
+    let cgst = 0;
+    let sgst = 0;
+    let igst = 0;
+
+    if (gstRegistered && taxRatePct > 0) {
+      if (isIntraState) {
+        cgst = roundHalfUp((taxable * taxRatePct) / 200);
+        sgst = cgst;
+      } else {
+        igst = roundHalfUp((taxable * taxRatePct) / 100);
+      }
+    }
+
+    const total = taxable + cgst + sgst + igst;
+
+    subTotal += gross;
+    discountTotal += lineDiscount;
+    taxableTotal += taxable;
+    cgstTotal += cgst;
+    sgstTotal += sgst;
+    igstTotal += igst;
+
+    processedLines.push({
+      id: l.id || `ln-${Date.now()}-${i}`,
+      kind: 'item',
+      productId: l.productId || null,
+      description: l.description || '',
+      qty,
+      unit: l.unit || 'Nos',
+      rate,
+      discountPct: discountPct || null,
+      taxRatePct,
+      hsnSac: l.hsnSac || null,
+      amount: taxable,
+      total,
+      invoicedQty: l.invoicedQty || 0,
+      pendingQty: l.pendingQty !== undefined ? l.pendingQty : qty,
+    });
+  }
+
+  const beforeRound = taxableTotal + cgstTotal + sgstTotal + igstTotal;
+  const roundOff = roundHalfUp(beforeRound / 100) * 100 - beforeRound;
+  const grandTotal = beforeRound + roundOff;
+
+  return {
+    lines: processedLines,
+    totals: {
+      subTotal,
+      discountTotal,
+      taxable: taxableTotal,
+      cgst: cgstTotal,
+      sgst: sgstTotal,
+      igst: igstTotal,
+      roundOff,
+      grandTotal,
+      inWords: `${(grandTotal / 100).toLocaleString('en-IN')} rupees only`,
+    },
+  };
+}
+
+async function getNextCustomerCode(db?: D1DatabaseLike): Promise<string> {
+  let maxSeq = 2; // base C-0001, C-0002
+  if (db) {
+    try {
+      const { results } = await db.prepare("SELECT code FROM customers WHERE code LIKE 'C-%' AND deleted_at IS NULL").all();
+      for (const r of (results || [])) {
+        const m = ((r as any).code || '').match(/^C-(\d+)$/);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (n > maxSeq && n < 9000) maxSeq = n;
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching customer code:', e);
+    }
+  }
+  for (const c of memoryStore.customers) {
+    const m = (c.code || '').match(/^C-(\d+)$/);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n > maxSeq && n < 9000) maxSeq = n;
+    }
+  }
+  return `C-${String(maxSeq + 1).padStart(4, '0')}`;
+}
+
+async function getNextDocNumber(db: D1DatabaseLike | undefined, table: string, col: string, prefix: string): Promise<string> {
+  let maxSeq = 1;
+  if (db) {
+    try {
+      const { results } = await db.prepare(`SELECT ${col} as num FROM ${table} WHERE ${col} LIKE ? AND deleted_at IS NULL`).bind(`${prefix}%`).all();
+      for (const r of (results || [])) {
+        const m = ((r as any).num || '').match(/(\d+)$/);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (n > maxSeq) maxSeq = n;
+        }
+      }
+    } catch (e) {
+      console.error(`Error querying max ${prefix}:`, e);
+    }
+  }
+  const storeItems = table === 'quotes' ? memoryStore.quotes : (table === 'orders' ? memoryStore.orders : memoryStore.invoices);
+  for (const it of storeItems) {
+    const num = (it as any).displayNumber || (it as any).number || '';
+    if (num.startsWith(prefix)) {
+      const m = num.match(/(\d+)$/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n > maxSeq) maxSeq = n;
+      }
+    }
+  }
+  return `${prefix}${String(maxSeq + 1).padStart(4, '0')}`;
 }
 
 export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Promise<Response> {
@@ -534,6 +676,118 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     return jsonRes({ ok: ids, skipped: [] });
   }
 
+  // /leads/:id/convert (Requirement A)
+  const convertMatch = path.match(/^\/leads\/([^/?]+)\/convert$/);
+  if (convertMatch && method === 'POST') {
+    const leadId = convertMatch[1];
+    const body = (await request.json().catch(() => ({}))) as any;
+
+    let lead: any = null;
+    if (db) {
+      try {
+        const { results } = await db.prepare('SELECT * FROM leads WHERE id = ? AND deleted_at IS NULL').bind(leadId).all();
+        lead = results?.[0];
+      } catch (e) {
+        console.error('D1 fetch lead for convert error:', e);
+      }
+    }
+    if (!lead) {
+      lead = memoryStore.leads.find((l) => l.id === leadId);
+    }
+    if (!lead) {
+      return jsonRes({ title: 'Lead not found', status: 404, code: 'NOT_FOUND' }, 404);
+    }
+
+    // Prevent double conversion
+    if (lead.stage === 'won' || lead.customer_id || lead.customerId) {
+      const existingCustId = lead.customer_id || lead.customerId;
+      return jsonRes({ customerId: existingCustId, outcome: 'already_converted' }, 200);
+    }
+
+    let customerId = body.customerId;
+    if (!customerId || body.mode === 'create') {
+      customerId = 'cust-' + Date.now();
+      const code = await getNextCustomerCode(db);
+      const displayName = lead.name || 'New Customer';
+      const legalName = (lead.company || '').trim() || displayName;
+      const phone = lead.phone || null;
+      const email = lead.email || null;
+      const city = lead.city || 'Bengaluru';
+      const state = 'Karnataka';
+      const address = city ? `${city}, India` : 'Bengaluru, India';
+      const contacts = [{ id: 'cnt-' + Date.now(), name: displayName, phone, email, isPrimary: true }];
+      const addresses = [{ id: 'addr-' + Date.now(), line1: address, city, state, type: 'billing' }];
+
+      const newCust = {
+        id: customerId,
+        code,
+        displayName,
+        legalName,
+        gstin: null,
+        phone,
+        email,
+        address,
+        city,
+        state,
+        contacts,
+        addresses,
+      };
+
+      if (db) {
+        try {
+          await db.prepare(`
+            INSERT INTO customers (id, code, display_name, legal_name, gstin, phone, email, address, city, state, data_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            newCust.id,
+            newCust.code,
+            newCust.displayName,
+            newCust.legalName,
+            newCust.gstin,
+            newCust.phone,
+            newCust.email,
+            newCust.address,
+            newCust.city,
+            newCust.state,
+            JSON.stringify({ contacts: newCust.contacts, addresses: newCust.addresses }),
+            new Date().toISOString(),
+            new Date().toISOString()
+          ).run();
+        } catch (e) {
+          console.error('D1 insert customer on convert error:', e);
+        }
+      }
+      memoryStore.customers.unshift(newCust);
+    }
+
+    if (db) {
+      try {
+        await db.prepare(`
+          UPDATE leads SET stage = 'won', customer_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+        `).bind(customerId, leadId).run();
+
+        await db.prepare(`
+          UPDATE timeline SET record_type = 'customer', record_id = ? WHERE record_type = 'lead' AND record_id = ?
+        `).bind(customerId, leadId).run();
+
+        await db.prepare(`
+          INSERT INTO audit_log (id, at, user_name, action, record_type, record_id, changes_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).bind('aud-' + Date.now(), new Date().toISOString(), 'Owner Admin', 'lead.convert', 'lead', leadId, JSON.stringify({ customerId })).run();
+      } catch (e) {
+        console.error('D1 update lead on convert error:', e);
+      }
+    }
+
+    const memL = memoryStore.leads.find((l) => l.id === leadId);
+    if (memL) {
+      memL.stage = 'won';
+      memL.customerId = customerId;
+    }
+
+    return jsonRes({ customerId, outcome: 'converted' }, 200);
+  }
+
   // /leads/:id
   const leadMatch = path.match(/^\/leads\/([^/?]+)/);
   if (leadMatch) {
@@ -673,7 +927,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       }
 
       const id = 'cust-' + Date.now();
-      const code = 'C-' + String(Math.floor(1000 + Math.random() * 9000));
+      const code = await getNextCustomerCode(db);
       const newCust = {
         id,
         code,
@@ -850,102 +1104,768 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
   // 6. /quotes
   if (path === '/quotes' || path === '/quotes/') {
     if (method === 'GET') {
-      return jsonRes({ items: memoryStore.quotes, nextCursor: null });
-    }
-    if (method === 'POST') {
-      const body = (await request.json().catch(() => ({}))) as any;
-      let nextNum = 'QT/26-27/0002';
       if (db) {
         try {
-          const qRow: any = await db.prepare("SELECT display_number FROM quotes WHERE display_number LIKE 'QT/26-27/%' AND deleted_at IS NULL ORDER BY display_number DESC LIMIT 1").first();
-          if (qRow?.display_number) {
-            const m = qRow.display_number.match(/(\d+)$/);
-            const seq = m ? parseInt(m[1], 10) + 1 : 2;
-            nextNum = `QT/26-27/${String(seq).padStart(4, '0')}`;
+          const { results } = await db.prepare('SELECT * FROM quotes WHERE deleted_at IS NULL ORDER BY created_at DESC').all();
+          if (results && results.length > 0) {
+            const items = results.map((r: any) => {
+              const d = r.data_json ? JSON.parse(r.data_json) : {};
+              return {
+                id: r.id,
+                displayNumber: r.display_number,
+                partyType: r.party_type,
+                partyId: r.party_id,
+                partyName: r.party_name,
+                status: r.status,
+                date: r.date,
+                validUntil: r.valid_until,
+                totals: d.totals || {
+                  grandTotal: r.grand_total,
+                  subTotal: r.sub_total,
+                  taxable: r.taxable,
+                  cgst: r.cgst,
+                  sgst: r.sgst,
+                  igst: r.igst,
+                },
+                lines: d.lines || [],
+                pdf: { status: 'ready' },
+                revisions: d.revisions || [],
+                version: r.version,
+                orderId: d.orderId || null,
+                isLatest: true,
+              };
+            });
+            return jsonRes({ items, nextCursor: null });
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error('D1 quotes fetch error:', e);
+        }
       }
+      return jsonRes({ items: memoryStore.quotes, nextCursor: null });
+    }
+
+    if (method === 'POST') {
+      const body = (await request.json().catch(() => ({}))) as any;
+
+      // Resolve real party name
+      let resolvedPartyName = (body.partyName || '').trim();
+      const pType = body.partyType || 'customer';
+      const pId = body.partyId;
+
+      if (!resolvedPartyName || resolvedPartyName === 'Customer') {
+        if (pType === 'customer' && pId) {
+          if (db) {
+            try {
+              const { results } = await db.prepare('SELECT display_name, legal_name FROM customers WHERE id = ?').bind(pId).all();
+              if (results?.[0]) resolvedPartyName = (results[0] as any).display_name || (results[0] as any).legal_name;
+            } catch (e) {}
+          }
+          if (!resolvedPartyName) {
+            const c = memoryStore.customers.find((cust) => cust.id === pId);
+            if (c) resolvedPartyName = c.displayName || c.legalName;
+          }
+        } else if (pType === 'lead' && pId) {
+          if (db) {
+            try {
+              const { results } = await db.prepare('SELECT name, company FROM leads WHERE id = ?').bind(pId).all();
+              if (results?.[0]) resolvedPartyName = (results[0] as any).name;
+            } catch (e) {}
+          }
+          if (!resolvedPartyName) {
+            const l = memoryStore.leads.find((ld) => ld.id === pId);
+            if (l) resolvedPartyName = l.name;
+          }
+        }
+      }
+      if (!resolvedPartyName) resolvedPartyName = 'Customer';
+
+      // Calculate lines and totals with accurate paise math
+      const placeOfSupply = body.placeOfSupply || '29';
+      const companyState = '29';
+      const gstRegistered = true;
+      const { lines: processedLines, totals: calculatedTotals } = calculateLinesAndTotals(
+        body.lines || [],
+        placeOfSupply,
+        companyState,
+        gstRegistered,
+        Number(body.overallDiscountPct) || 0
+      );
+
+      const nextNum = await getNextDocNumber(db, 'quotes', 'display_number', 'QT/26-27/');
+      const newQtId = 'qt-' + Date.now();
       const newQt = {
-        id: 'qt-' + Date.now(),
+        id: newQtId,
         displayNumber: nextNum,
-        partyType: body.partyType || 'customer',
-        partyId: body.partyId || 'cust-1',
-        partyName: body.partyName || 'Customer',
+        partyType: pType,
+        partyId: pId || 'cust-1',
+        partyName: resolvedPartyName,
         status: 'draft',
         date: new Date().toISOString().slice(0, 10),
-        validUntil: new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10),
-        totals: body.totals || { grandTotal: 2950000, subTotal: 2500000, taxable: 2500000, cgst: 225000, sgst: 225000, igst: 0 },
-        lines: body.lines || [],
+        validUntil: new Date(Date.now() + (Number(body.validDays) || 15) * 86400000).toISOString().slice(0, 10),
+        totals: calculatedTotals,
+        lines: processedLines,
+        placeOfSupply,
         pdf: { status: 'ready' },
         revisions: [],
+        version: 1,
+        isLatest: true,
       };
+
+      if (db) {
+        try {
+          await db.prepare(`
+            INSERT INTO quotes (id, display_number, party_type, party_id, party_name, status, date, valid_until, grand_total, sub_total, taxable, cgst, sgst, igst, data_json, created_at, updated_at, version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            newQt.id,
+            newQt.displayNumber,
+            newQt.partyType,
+            newQt.partyId,
+            newQt.partyName,
+            newQt.status,
+            newQt.date,
+            newQt.validUntil,
+            newQt.totals.grandTotal,
+            newQt.totals.subTotal,
+            newQt.totals.taxable,
+            newQt.totals.cgst,
+            newQt.totals.sgst,
+            newQt.totals.igst,
+            JSON.stringify({ lines: newQt.lines, totals: newQt.totals, placeOfSupply: newQt.placeOfSupply, revisions: newQt.revisions }),
+            new Date().toISOString(),
+            new Date().toISOString(),
+            1
+          ).run();
+        } catch (e) {
+          console.error('D1 quotes insert error:', e);
+        }
+      }
+
       memoryStore.quotes.unshift(newQt);
       return jsonRes({ outcome: 'created', quote: newQt, id: newQt.id }, 201);
     }
   }
 
-  if (path.startsWith('/quotes/')) {
-    const qid = path.replace(/^\/quotes\//, '').split('/')[0].split('?')[0];
-    const qt = memoryStore.quotes.find((q) => q.id === qid);
-    if (!qt) return jsonRes({ title: 'Quotation not found', status: 404, code: 'NOT_FOUND' }, 404);
-    return jsonRes(qt);
+  // Quote actions
+  const quoteSendMatch = path.match(/^\/quotes\/([^/?]+)\/send$/);
+  if (quoteSendMatch && method === 'POST') {
+    const qid = quoteSendMatch[1];
+    let qt: any = null;
+    if (db) {
+      try {
+        const { results } = await db.prepare('SELECT * FROM quotes WHERE id = ? AND deleted_at IS NULL').bind(qid).all();
+        qt = results?.[0];
+      } catch (e) {}
+    }
+    const memQt = memoryStore.quotes.find((q) => q.id === qid);
+    const displayNumber = qt?.display_number || memQt?.displayNumber || 'QT/26-27/0001';
+
+    if (db) {
+      try {
+        await db.prepare("UPDATE quotes SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(qid).run();
+      } catch (e) {}
+    }
+    if (memQt) memQt.status = 'sent';
+
+    const shareUrl = `https://crm---leads.connect-hopepitome.workers.dev/sales/quotes/${qid}`;
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(`Hello, your quotation ${displayNumber} from SaleSphere is available here: ${shareUrl}`)}`;
+    return jsonRes({
+      id: qid,
+      status: 'sent',
+      number: displayNumber,
+      waUrl,
+      shareUrl,
+    });
   }
 
-  // 7. /orders (Requirement 4)
-  if (path === '/orders' || path === '/orders/') {
-    if (method === 'GET') {
-      return jsonRes({ items: memoryStore.orders, nextCursor: null });
+  const quoteAcceptMatch = path.match(/^\/quotes\/([^/?]+)\/accept$/);
+  if (quoteAcceptMatch && method === 'POST') {
+    const qid = quoteAcceptMatch[1];
+    if (db) {
+      try {
+        await db.prepare("UPDATE quotes SET status = 'accepted', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(qid).run();
+      } catch (e) {}
     }
-    if (method === 'POST') {
-      const body = (await request.json().catch(() => ({}))) as any;
-      let nextOrdNum = 'SO/26-27/0002';
+    const memQt = memoryStore.quotes.find((q) => q.id === qid);
+    if (memQt) memQt.status = 'accepted';
+    return jsonRes({ id: qid, status: 'accepted' });
+  }
+
+  const quoteRejectMatch = path.match(/^\/quotes\/([^/?]+)\/reject$/);
+  if (quoteRejectMatch && method === 'POST') {
+    const qid = quoteRejectMatch[1];
+    if (db) {
+      try {
+        await db.prepare("UPDATE quotes SET status = 'rejected', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(qid).run();
+      } catch (e) {}
+    }
+    const memQt = memoryStore.quotes.find((q) => q.id === qid);
+    if (memQt) memQt.status = 'rejected';
+    return jsonRes({ id: qid, status: 'rejected' });
+  }
+
+  const quoteApprovalMatch = path.match(/^\/quotes\/([^/?]+)\/approval$/);
+  if (quoteApprovalMatch && method === 'POST') {
+    const qid = quoteApprovalMatch[1];
+    const body = (await request.json().catch(() => ({}))) as any;
+    const newStatus = body.decision === 'approve' ? 'approved' : 'draft';
+    if (db) {
+      try {
+        await db.prepare('UPDATE quotes SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(newStatus, qid).run();
+      } catch (e) {}
+    }
+    const memQt = memoryStore.quotes.find((q) => q.id === qid);
+    if (memQt) memQt.status = newStatus;
+    return jsonRes({ id: qid, status: newStatus });
+  }
+
+  const quoteReviseMatch = path.match(/^\/quotes\/([^/?]+)\/revise$/);
+  if (quoteReviseMatch && method === 'POST') {
+    const qid = quoteReviseMatch[1];
+    let qt: any = null;
+    if (db) {
+      try {
+        const { results } = await db.prepare('SELECT * FROM quotes WHERE id = ? AND deleted_at IS NULL').bind(qid).all();
+        qt = results?.[0];
+      } catch (e) {}
+    }
+    const memQt = memoryStore.quotes.find((q) => q.id === qid);
+    const baseQt = memQt || (qt ? { ...qt, totals: JSON.parse(qt.data_json || '{}').totals, lines: JSON.parse(qt.data_json || '{}').lines } : null);
+    if (!baseQt) return jsonRes({ title: 'Quotation not found', status: 404, code: 'NOT_FOUND' }, 404);
+
+    const newRevId = 'qt-' + Date.now();
+    const newRevQt = {
+      ...baseQt,
+      id: newRevId,
+      status: 'draft',
+      revision: ((baseQt as any).revision || 0) + 1,
+      createdAt: new Date().toISOString(),
+    };
+    memoryStore.quotes.unshift(newRevQt);
+    return jsonRes({ id: newRevId });
+  }
+
+  const quoteCreateOrderMatch = path.match(/^\/quotes\/([^/?]+)\/create-order$/);
+  if (quoteCreateOrderMatch && method === 'POST') {
+    const qid = quoteCreateOrderMatch[1];
+    let qt: any = null;
+    if (db) {
+      try {
+        const { results } = await db.prepare('SELECT * FROM quotes WHERE id = ? AND deleted_at IS NULL').bind(qid).all();
+        if (results?.[0]) {
+          const r: any = results[0];
+          const d = r.data_json ? JSON.parse(r.data_json) : {};
+          qt = {
+            id: r.id,
+            displayNumber: r.display_number,
+            partyType: r.party_type,
+            partyId: r.party_id,
+            partyName: r.party_name,
+            status: r.status,
+            totals: d.totals || { grandTotal: r.grand_total },
+            lines: d.lines || [],
+          };
+        }
+      } catch (e) {}
+    }
+    if (!qt) qt = memoryStore.quotes.find((q) => q.id === qid);
+    if (!qt) return jsonRes({ title: 'Quotation not found', status: 404, code: 'NOT_FOUND' }, 404);
+
+    const nextOrdNum = await getNextDocNumber(db, 'orders', 'number', 'SO/26-27/');
+    const newOrdId = 'ord-' + Date.now();
+    const customerId = qt.partyType === 'customer' ? qt.partyId : 'cust-1';
+    const customerName = qt.partyName;
+
+    const newOrd = {
+      id: newOrdId,
+      number: nextOrdNum,
+      customerId,
+      customerName,
+      quoteId: qid,
+      status: 'confirmed',
+      date: new Date().toISOString().slice(0, 10),
+      expectedDelivery: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+      totals: qt.totals,
+      lines: qt.lines,
+      invoices: [],
+      version: 1,
+    };
+
+    if (db) {
+      try {
+        await db.prepare(`
+          INSERT INTO orders (id, number, customer_id, customer_name, quote_id, status, date, expected_delivery, grand_total, data_json, created_at, updated_at, version)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          newOrd.id,
+          newOrd.number,
+          newOrd.customerId,
+          newOrd.customerName,
+          newOrd.quoteId,
+          newOrd.status,
+          newOrd.date,
+          newOrd.expectedDelivery,
+          newOrd.totals?.grandTotal || 0,
+          JSON.stringify({ lines: newOrd.lines, totals: newOrd.totals, invoices: newOrd.invoices }),
+          new Date().toISOString(),
+          new Date().toISOString(),
+          1
+        ).run();
+
+        await db.prepare("UPDATE quotes SET status = 'ordered', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(qid).run();
+      } catch (e) {
+        console.error('D1 create-order error:', e);
+      }
+    }
+
+    if (qt) qt.status = 'ordered';
+    const memQ = memoryStore.quotes.find((q) => q.id === qid);
+    if (memQ) {
+      memQ.status = 'ordered';
+      (memQ as any).orderId = newOrdId;
+    }
+    memoryStore.orders.unshift(newOrd);
+    return jsonRes({ id: newOrd.id, number: newOrd.number }, 201);
+  }
+
+  const quoteCreateInvMatch = path.match(/^\/quotes\/([^/?]+)\/create-invoice$/);
+  if (quoteCreateInvMatch && method === 'POST') {
+    const qid = quoteCreateInvMatch[1];
+    let qt: any = null;
+    if (db) {
+      try {
+        const { results } = await db.prepare('SELECT * FROM quotes WHERE id = ? AND deleted_at IS NULL').bind(qid).all();
+        if (results?.[0]) {
+          const r: any = results[0];
+          const d = r.data_json ? JSON.parse(r.data_json) : {};
+          qt = {
+            id: r.id,
+            displayNumber: r.display_number,
+            partyType: r.party_type,
+            partyId: r.party_id,
+            partyName: r.party_name,
+            status: r.status,
+            totals: d.totals || { grandTotal: r.grand_total },
+            lines: d.lines || [],
+          };
+        }
+      } catch (e) {}
+    }
+    if (!qt) qt = memoryStore.quotes.find((q) => q.id === qid);
+    if (!qt) return jsonRes({ title: 'Quotation not found', status: 404, code: 'NOT_FOUND' }, 404);
+
+    const nextInvNum = await getNextDocNumber(db, 'invoices', 'number', 'INV/26-27/');
+    const newInvId = 'inv-' + Date.now();
+    const customerId = qt.partyType === 'customer' ? qt.partyId : 'cust-1';
+    const customerName = qt.partyName;
+    const grandTotal = qt.totals?.grandTotal || 0;
+
+    const newInv = {
+      id: newInvId,
+      number: nextInvNum,
+      customerId,
+      customerName,
+      quoteId: qid,
+      orderId: null,
+      type: 'tax_invoice',
+      status: 'issued',
+      date: new Date().toISOString().slice(0, 10),
+      dueDate: new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10),
+      paid: 0,
+      credited: 0,
+      balanceDue: grandTotal,
+      totals: qt.totals,
+      lines: qt.lines,
+      pdf: { status: 'ready' },
+      creditNotes: [],
+      version: 1,
+    };
+
+    if (db) {
+      try {
+        await db.prepare(`
+          INSERT INTO invoices (id, number, customer_id, customer_name, order_id, type, status, date, due_date, grand_total, paid_amount, credited_amount, balance_due, data_json, created_at, updated_at, version)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          newInv.id,
+          newInv.number,
+          newInv.customerId,
+          newInv.customerName,
+          null,
+          newInv.type,
+          newInv.status,
+          newInv.date,
+          newInv.dueDate,
+          grandTotal,
+          0,
+          0,
+          grandTotal,
+          JSON.stringify({ lines: newInv.lines, totals: newInv.totals, quoteId: qid }),
+          new Date().toISOString(),
+          new Date().toISOString(),
+          1
+        ).run();
+      } catch (e) {
+        console.error('D1 create-invoice from quote error:', e);
+      }
+    }
+
+    memoryStore.invoices.unshift(newInv);
+    return jsonRes({ id: newInv.id, number: newInv.number }, 201);
+  }
+
+  // /quotes/:id
+  const quoteItemMatch = path.match(/^\/quotes\/([^/?]+)/);
+  if (quoteItemMatch) {
+    const qid = quoteItemMatch[1];
+
+    if (method === 'DELETE') {
       if (db) {
         try {
-          const oRow: any = await db.prepare("SELECT number FROM orders WHERE number LIKE 'SO/26-27/%' AND deleted_at IS NULL ORDER BY number DESC LIMIT 1").first();
-          if (oRow?.number) {
-            const m = oRow.number.match(/(\d+)$/);
-            const seq = m ? parseInt(m[1], 10) + 1 : 2;
-            nextOrdNum = `SO/26-27/${String(seq).padStart(4, '0')}`;
+          await db.prepare('UPDATE quotes SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?').bind(qid).run();
+        } catch (e) {}
+      }
+      const idx = memoryStore.quotes.findIndex((q) => q.id === qid);
+      if (idx !== -1) memoryStore.quotes.splice(idx, 1);
+      return jsonRes({ success: true, id: qid });
+    }
+
+    if (method === 'GET') {
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT * FROM quotes WHERE id = ? AND deleted_at IS NULL').bind(qid).all();
+          if (results?.[0]) {
+            const r: any = results[0];
+            const d = r.data_json ? JSON.parse(r.data_json) : {};
+            return jsonRes({
+              id: r.id,
+              displayNumber: r.display_number,
+              partyType: r.party_type,
+              partyId: r.party_id,
+              partyName: r.party_name,
+              status: r.status,
+              date: r.date,
+              validUntil: r.valid_until,
+              totals: d.totals || {
+                grandTotal: r.grand_total,
+                subTotal: r.sub_total,
+                taxable: r.taxable,
+                cgst: r.cgst,
+                sgst: r.sgst,
+                igst: r.igst,
+              },
+              lines: d.lines || [],
+              pdf: { status: 'ready' },
+              revisions: d.revisions || [],
+              version: r.version,
+              orderId: d.orderId || null,
+              isLatest: true,
+            });
           }
         } catch (e) {}
       }
+      const memQt = memoryStore.quotes.find((q) => q.id === qid);
+      if (!memQt) return jsonRes({ title: 'Quotation not found', status: 404, code: 'NOT_FOUND' }, 404);
+      return jsonRes(memQt);
+    }
+  }
+
+  // 7. /orders (Requirement 4 & C)
+  if (path === '/orders' || path === '/orders/') {
+    if (method === 'GET') {
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT * FROM orders WHERE deleted_at IS NULL ORDER BY created_at DESC').all();
+          if (results && results.length > 0) {
+            const items = results.map((r: any) => {
+              const d = r.data_json ? JSON.parse(r.data_json) : {};
+              return {
+                id: r.id,
+                number: r.number,
+                customerId: r.customer_id,
+                customerName: r.customer_name,
+                quoteId: r.quote_id,
+                status: r.status,
+                date: r.date,
+                expectedDelivery: r.expected_delivery,
+                totals: d.totals || { grandTotal: r.grand_total },
+                lines: d.lines || [],
+                invoices: d.invoices || [],
+                version: r.version,
+              };
+            });
+            return jsonRes({ items, nextCursor: null });
+          }
+        } catch (e) {}
+      }
+      return jsonRes({ items: memoryStore.orders, nextCursor: null });
+    }
+
+    if (method === 'POST') {
+      const body = (await request.json().catch(() => ({}))) as any;
+
+      // VALIDATION (Requirement F)
+      const customerId = (body.customerId || body.partyId || '').trim();
+      const rawLines = Array.isArray(body.lines) ? body.lines : [];
+      const lines = rawLines.filter((l: any) => (l.kind === 'heading' ? l.description : l.description || l.rate));
+
+      const errors: Record<string, string> = {};
+      if (!customerId) errors.customerId = 'Customer is required.';
+      if (lines.length === 0) errors.lines = 'At least one line item is required.';
+
+      if (Object.keys(errors).length > 0) {
+        return jsonRes({
+          type: 'https://salesphere.live/errors/validation',
+          title: 'Validation error',
+          status: 422,
+          errors,
+        }, 422);
+      }
+
+      // Compute totals if needed
+      let totals = body.totals;
+      let processedLines = lines;
+      if (!totals || !totals.grandTotal) {
+        const computed = calculateLinesAndTotals(lines, '29');
+        totals = computed.totals;
+        processedLines = computed.lines;
+      }
+
+      // Customer name lookup
+      let customerName = (body.customerName || '').trim();
+      if (!customerName || customerName === 'Customer') {
+        if (db) {
+          try {
+            const { results } = await db.prepare('SELECT display_name, legal_name FROM customers WHERE id = ?').bind(customerId).all();
+            if (results?.[0]) customerName = (results[0] as any).display_name || (results[0] as any).legal_name;
+          } catch (e) {}
+        }
+        if (!customerName) {
+          const c = memoryStore.customers.find((cust) => cust.id === customerId);
+          if (c) customerName = c.displayName || c.legalName;
+        }
+      }
+      if (!customerName) customerName = 'Customer';
+
+      const nextOrdNum = await getNextDocNumber(db, 'orders', 'number', 'SO/26-27/');
+      const newOrdId = 'ord-' + Date.now();
       const newOrd = {
-        id: 'ord-' + Date.now(),
+        id: newOrdId,
         number: nextOrdNum,
-        customerId: body.customerId || 'cust-1',
-        customerName: body.customerName || 'Customer',
+        customerId,
+        customerName,
         quoteId: body.quoteId || null,
         status: 'confirmed',
-        date: new Date().toISOString().slice(0, 10),
-        expectedDelivery: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
-        totals: { grandTotal: 2950000 },
-        lines: body.lines || [],
+        date: body.date || new Date().toISOString().slice(0, 10),
+        expectedDelivery: body.expectedDelivery || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+        totals,
+        lines: processedLines,
         invoices: [],
+        version: 1,
       };
+
+      if (db) {
+        try {
+          await db.prepare(`
+            INSERT INTO orders (id, number, customer_id, customer_name, quote_id, status, date, expected_delivery, grand_total, data_json, created_at, updated_at, version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            newOrd.id,
+            newOrd.number,
+            newOrd.customerId,
+            newOrd.customerName,
+            newOrd.quoteId,
+            newOrd.status,
+            newOrd.date,
+            newOrd.expectedDelivery,
+            newOrd.totals.grandTotal,
+            JSON.stringify({ lines: newOrd.lines, totals: newOrd.totals, invoices: newOrd.invoices }),
+            new Date().toISOString(),
+            new Date().toISOString(),
+            1
+          ).run();
+        } catch (e) {
+          console.error('D1 orders insert error:', e);
+        }
+      }
+
       memoryStore.orders.unshift(newOrd);
       return jsonRes({ id: newOrd.id, ...newOrd }, 201);
     }
   }
 
-  if (path.startsWith('/orders/')) {
-    const oid = path.replace(/^\/orders\//, '').split('/')[0].split('?')[0];
-    const ord = memoryStore.orders.find((o) => o.id === oid);
+  // Order create-invoice (Requirement D)
+  const orderCreateInvMatch = path.match(/^\/orders\/([^/?]+)\/create-invoice$/);
+  if (orderCreateInvMatch && method === 'POST') {
+    const oid = orderCreateInvMatch[1];
+    let ord: any = null;
+    if (db) {
+      try {
+        const { results } = await db.prepare('SELECT * FROM orders WHERE id = ? AND deleted_at IS NULL').bind(oid).all();
+        if (results?.[0]) {
+          const r: any = results[0];
+          const d = r.data_json ? JSON.parse(r.data_json) : {};
+          ord = {
+            id: r.id,
+            number: r.number,
+            customerId: r.customer_id,
+            customerName: r.customer_name,
+            status: r.status,
+            totals: d.totals || { grandTotal: r.grand_total },
+            lines: d.lines || [],
+          };
+        }
+      } catch (e) {}
+    }
+    if (!ord) ord = memoryStore.orders.find((o) => o.id === oid);
     if (!ord) return jsonRes({ title: 'Order not found', status: 404, code: 'NOT_FOUND' }, 404);
-    return jsonRes(ord);
+
+    const nextInvNum = await getNextDocNumber(db, 'invoices', 'number', 'INV/26-27/');
+    const newInvId = 'inv-' + Date.now();
+    const grandTotal = ord.totals?.grandTotal || 0;
+
+    const newInv = {
+      id: newInvId,
+      number: nextInvNum,
+      customerId: ord.customerId,
+      customerName: ord.customerName,
+      orderId: oid,
+      type: 'tax_invoice',
+      status: 'issued',
+      date: new Date().toISOString().slice(0, 10),
+      dueDate: new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10),
+      paid: 0,
+      credited: 0,
+      balanceDue: grandTotal,
+      totals: ord.totals,
+      lines: ord.lines,
+      pdf: { status: 'ready' },
+      creditNotes: [],
+      version: 1,
+    };
+
+    if (db) {
+      try {
+        await db.prepare(`
+          INSERT INTO invoices (id, number, customer_id, customer_name, order_id, type, status, date, due_date, grand_total, paid_amount, credited_amount, balance_due, data_json, created_at, updated_at, version)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          newInv.id,
+          newInv.number,
+          newInv.customerId,
+          newInv.customerName,
+          oid,
+          newInv.type,
+          newInv.status,
+          newInv.date,
+          newInv.dueDate,
+          grandTotal,
+          0,
+          0,
+          grandTotal,
+          JSON.stringify({ lines: newInv.lines, totals: newInv.totals, orderId: oid }),
+          new Date().toISOString(),
+          new Date().toISOString(),
+          1
+        ).run();
+      } catch (e) {
+        console.error('D1 create-invoice from order error:', e);
+      }
+    }
+
+    memoryStore.invoices.unshift(newInv);
+    return jsonRes({ id: newInv.id, number: newInv.number }, 201);
+  }
+
+  // /orders/:id
+  const orderItemMatch = path.match(/^\/orders\/([^/?]+)/);
+  if (orderItemMatch) {
+    const oid = orderItemMatch[1];
+
+    if (method === 'DELETE') {
+      if (db) {
+        try {
+          await db.prepare('UPDATE orders SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?').bind(oid).run();
+        } catch (e) {}
+      }
+      const idx = memoryStore.orders.findIndex((o) => o.id === oid);
+      if (idx !== -1) memoryStore.orders.splice(idx, 1);
+      return jsonRes({ success: true, id: oid });
+    }
+
+    if (method === 'GET') {
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT * FROM orders WHERE id = ? AND deleted_at IS NULL').bind(oid).all();
+          if (results?.[0]) {
+            const r: any = results[0];
+            const d = r.data_json ? JSON.parse(r.data_json) : {};
+            return jsonRes({
+              id: r.id,
+              number: r.number,
+              customerId: r.customer_id,
+              customerName: r.customer_name,
+              quoteId: r.quote_id,
+              status: r.status,
+              date: r.date,
+              expectedDelivery: r.expected_delivery,
+              totals: d.totals || { grandTotal: r.grand_total },
+              lines: d.lines || [],
+              invoices: d.invoices || [],
+              version: r.version,
+            });
+          }
+        } catch (e) {}
+      }
+      const memOrd = memoryStore.orders.find((o) => o.id === oid);
+      if (!memOrd) return jsonRes({ title: 'Order not found', status: 404, code: 'NOT_FOUND' }, 404);
+      return jsonRes(memOrd);
+    }
   }
 
   // 8. /invoices
   if (path === '/invoices' || path === '/invoices/') {
     if (method === 'GET') {
-      // ACCOUNTING DYNAMICS (Requirement 6): reconcile payment allocations
-      const items = memoryStore.invoices.map((inv) => {
+      let invItems = memoryStore.invoices;
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT * FROM invoices WHERE deleted_at IS NULL ORDER BY created_at DESC').all();
+          if (results && results.length > 0) {
+            invItems = results.map((r: any) => {
+              const d = r.data_json ? JSON.parse(r.data_json) : {};
+              return {
+                id: r.id,
+                number: r.number,
+                customerId: r.customer_id,
+                customerName: r.customer_name,
+                orderId: r.order_id,
+                type: r.type,
+                status: r.status,
+                date: r.date,
+                dueDate: r.due_date,
+                paid: r.paid_amount,
+                credited: r.credited_amount,
+                balanceDue: r.balance_due,
+                totals: d.totals || { grandTotal: r.grand_total },
+                lines: d.lines || [],
+                pdf: { status: 'ready' },
+                creditNotes: [],
+                version: r.version,
+              };
+            });
+          }
+        } catch (e) {}
+      }
+
+      // Reconcile payment allocations
+      const items = invItems.map((inv) => {
         const allocated = memoryStore.payments
           .filter((p) => p.status === 'active')
           .flatMap((p) => p.allocations || [])
           .filter((a) => a.invoiceId === inv.id)
           .reduce((sum, a) => sum + (a.amount || 0), 0);
-        const grandTotal = inv.totals?.grandTotal || 0;
-        const paid = allocated;
+        const grandTotal = inv.totals?.grandTotal || inv.grandTotal || 0;
+        const paid = allocated || inv.paid || 0;
         const balanceDue = Math.max(0, grandTotal - paid);
         const status = balanceDue <= 0 ? 'paid' : (paid > 0 ? 'partly_paid' : inv.status);
         return {
@@ -957,64 +1877,215 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       });
       return jsonRes({ items, nextCursor: null });
     }
+
     if (method === 'POST') {
       const body = (await request.json().catch(() => ({}))) as any;
-      let nextInvNum = 'INV/26-27/0003';
-      if (db) {
-        try {
-          const iRow: any = await db.prepare("SELECT number FROM invoices WHERE number LIKE 'INV/26-27/%' AND deleted_at IS NULL ORDER BY number DESC LIMIT 1").first();
-          if (iRow?.number) {
-            const m = iRow.number.match(/(\d+)$/);
-            const seq = m ? parseInt(m[1], 10) + 1 : 3;
-            nextInvNum = `INV/26-27/${String(seq).padStart(4, '0')}`;
-          }
-        } catch (e) {}
+
+      let customerId = (body.customerId || '').trim();
+      let customerName = (body.customerName || '').trim();
+      let lines = Array.isArray(body.lines) ? body.lines : [];
+      let totals = body.totals;
+
+      // Copy from order if orderId provided and lines empty
+      if (body.orderId && lines.length === 0) {
+        let ord: any = null;
+        if (db) {
+          try {
+            const { results } = await db.prepare('SELECT * FROM orders WHERE id = ? AND deleted_at IS NULL').bind(body.orderId).all();
+            if (results?.[0]) {
+              const r: any = results[0];
+              const d = r.data_json ? JSON.parse(r.data_json) : {};
+              ord = { customerId: r.customer_id, customerName: r.customer_name, totals: d.totals || { grandTotal: r.grand_total }, lines: d.lines || [] };
+            }
+          } catch (e) {}
+        }
+        if (!ord) ord = memoryStore.orders.find((o) => o.id === body.orderId);
+        if (ord) {
+          customerId = ord.customerId;
+          customerName = ord.customerName;
+          lines = ord.lines;
+          totals = ord.totals;
+        }
       }
+
+      // VALIDATION (Requirement F)
+      const validLines = lines.filter((l: any) => (l.kind === 'heading' ? l.description : l.description || l.rate));
+      const errors: Record<string, string> = {};
+      if (!customerId) errors.customerId = 'Customer is required.';
+      if (validLines.length === 0) errors.lines = 'At least one line item is required.';
+
+      if (Object.keys(errors).length > 0) {
+        return jsonRes({
+          type: 'https://salesphere.live/errors/validation',
+          title: 'Validation error',
+          status: 422,
+          errors,
+        }, 422);
+      }
+
+      if (!totals || !totals.grandTotal) {
+        const computed = calculateLinesAndTotals(validLines, '29');
+        totals = computed.totals;
+      }
+
+      if (!customerName || customerName === 'Customer') {
+        if (db) {
+          try {
+            const { results } = await db.prepare('SELECT display_name, legal_name FROM customers WHERE id = ?').bind(customerId).all();
+            if (results?.[0]) customerName = (results[0] as any).display_name || (results[0] as any).legal_name;
+          } catch (e) {}
+        }
+        if (!customerName) {
+          const c = memoryStore.customers.find((cust) => cust.id === customerId);
+          if (c) customerName = c.displayName || c.legalName;
+        }
+      }
+      if (!customerName) customerName = 'Customer';
+
+      const nextInvNum = await getNextDocNumber(db, 'invoices', 'number', 'INV/26-27/');
+      const newInvId = 'inv-' + Date.now();
+      const grandTotal = totals.grandTotal || 0;
+
       const newInv = {
-        id: 'inv-' + Date.now(),
+        id: newInvId,
         number: nextInvNum,
-        customerId: body.customerId || 'cust-1',
-        customerName: body.customerName || 'Customer',
+        customerId,
+        customerName,
         orderId: body.orderId || null,
         type: body.type || 'tax_invoice',
         status: 'issued',
-        date: new Date().toISOString().slice(0, 10),
-        dueDate: new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10),
+        date: body.date || new Date().toISOString().slice(0, 10),
+        dueDate: body.dueDate || new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10),
         paid: 0,
         credited: 0,
-        balanceDue: 2950000,
-        totals: { grandTotal: 2950000, subTotal: 2500000, taxable: 2500000, cgst: 225000, sgst: 225000, igst: 0, roundOff: 0, discountTotal: 0, inWords: 'Twenty nine lakh fifty thousand rupees only' },
-        lines: [],
+        balanceDue: grandTotal,
+        totals,
+        lines: validLines,
         pdf: { status: 'ready' },
         creditNotes: [],
+        version: 1,
       };
+
+      if (db) {
+        try {
+          await db.prepare(`
+            INSERT INTO invoices (id, number, customer_id, customer_name, order_id, type, status, date, due_date, grand_total, paid_amount, credited_amount, balance_due, data_json, created_at, updated_at, version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            newInv.id,
+            newInv.number,
+            newInv.customerId,
+            newInv.customerName,
+            newInv.orderId,
+            newInv.type,
+            newInv.status,
+            newInv.date,
+            newInv.dueDate,
+            grandTotal,
+            0,
+            0,
+            grandTotal,
+            JSON.stringify({ lines: newInv.lines, totals: newInv.totals, orderId: newInv.orderId }),
+            new Date().toISOString(),
+            new Date().toISOString(),
+            1
+          ).run();
+        } catch (e) {
+          console.error('D1 invoices insert error:', e);
+        }
+      }
+
       memoryStore.invoices.unshift(newInv);
       return jsonRes({ id: newInv.id, ...newInv }, 201);
     }
   }
 
-  if (path.startsWith('/invoices/')) {
-    const invId = path.replace(/^\/invoices\//, '').split('/')[0].split('?')[0];
-    const inv = memoryStore.invoices.find((i) => i.id === invId);
-    if (!inv) return jsonRes({ title: 'Invoice not found', status: 404, code: 'NOT_FOUND' }, 404);
+  // /invoices/:id
+  const invoiceItemMatch = path.match(/^\/invoices\/([^/?]+)/);
+  if (invoiceItemMatch) {
+    const invId = invoiceItemMatch[1];
 
-    // Reconcile allocations
-    const allocated = memoryStore.payments
-      .filter((p) => p.status === 'active')
-      .flatMap((p) => p.allocations || [])
-      .filter((a) => a.invoiceId === inv.id)
-      .reduce((sum, a) => sum + (a.amount || 0), 0);
-    const grandTotal = inv.totals?.grandTotal || 0;
-    const paid = allocated;
-    const balanceDue = Math.max(0, grandTotal - paid);
-    const status = balanceDue <= 0 ? 'paid' : (paid > 0 ? 'partly_paid' : inv.status);
+    if (method === 'DELETE') {
+      let inv: any = null;
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT * FROM invoices WHERE id = ? AND deleted_at IS NULL').bind(invId).all();
+          inv = results?.[0];
+        } catch (e) {}
+      }
+      if (!inv) inv = memoryStore.invoices.find((i) => i.id === invId);
 
-    return jsonRes({
-      ...inv,
-      paid,
-      balanceDue,
-      status,
-    });
+      const status = inv?.status || 'issued';
+      if (status === 'issued' || status === 'paid' || status === 'partly_paid') {
+        return jsonRes({
+          type: 'https://salesphere.live/errors/business',
+          title: 'Cannot delete invoice',
+          status: 422,
+          detail: 'Issued invoices cannot be deleted; please issue a credit note instead.',
+        }, 422);
+      }
+
+      if (db) {
+        try {
+          await db.prepare('UPDATE invoices SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?').bind(invId).run();
+        } catch (e) {}
+      }
+      const idx = memoryStore.invoices.findIndex((i) => i.id === invId);
+      if (idx !== -1) memoryStore.invoices.splice(idx, 1);
+      return jsonRes({ success: true, id: invId });
+    }
+
+    if (method === 'GET') {
+      let inv: any = null;
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT * FROM invoices WHERE id = ? AND deleted_at IS NULL').bind(invId).all();
+          if (results?.[0]) {
+            const r: any = results[0];
+            const d = r.data_json ? JSON.parse(r.data_json) : {};
+            inv = {
+              id: r.id,
+              number: r.number,
+              customerId: r.customer_id,
+              customerName: r.customer_name,
+              orderId: r.order_id,
+              type: r.type,
+              status: r.status,
+              date: r.date,
+              dueDate: r.due_date,
+              paid: r.paid_amount,
+              credited: r.credited_amount,
+              balanceDue: r.balance_due,
+              totals: d.totals || { grandTotal: r.grand_total },
+              lines: d.lines || [],
+              pdf: { status: 'ready' },
+              creditNotes: [],
+              version: r.version,
+            };
+          }
+        } catch (e) {}
+      }
+      if (!inv) inv = memoryStore.invoices.find((i) => i.id === invId);
+      if (!inv) return jsonRes({ title: 'Invoice not found', status: 404, code: 'NOT_FOUND' }, 404);
+
+      // Reconcile allocations
+      const allocated = memoryStore.payments
+        .filter((p) => p.status === 'active')
+        .flatMap((p) => p.allocations || [])
+        .filter((a) => a.invoiceId === inv.id)
+        .reduce((sum, a) => sum + (a.amount || 0), 0);
+      const grandTotal = inv.totals?.grandTotal || inv.grandTotal || 0;
+      const paid = allocated || inv.paid || 0;
+      const balanceDue = Math.max(0, grandTotal - paid);
+      const status = balanceDue <= 0 ? 'paid' : (paid > 0 ? 'partly_paid' : inv.status);
+
+      return jsonRes({
+        ...inv,
+        paid,
+        balanceDue,
+        status,
+      });
+    }
   }
 
   // 9. /payments
@@ -1097,24 +2168,30 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         { id: 'stg-7', key: 'lost', label: 'Lost', probabilityPct: 0 },
       ],
       leadSources: [
-        { id: 'src-1', key: 'website', label: 'Website' },
-        { id: 'src-2', key: 'referral', label: 'Referral' },
-        { id: 'src-3', key: 'google_ads', label: 'Google Ads' },
-        { id: 'src-4', key: 'cold_call', label: 'Cold Outreach' },
+        { id: 'src-1', key: 'website', label: 'Website', value: 'website' },
+        { id: 'src-2', key: 'referral', label: 'Referral', value: 'referral' },
+        { id: 'src-3', key: 'google_ads', label: 'Google Ads', value: 'google_ads' },
+        { id: 'src-4', key: 'cold_call', label: 'Cold Outreach', value: 'cold_call' },
       ],
       products: [
-        { id: 'prod-1', name: 'Enterprise CRM Implementation', rate: 2500000, unit: 'service', taxRatePct: 18 },
-        { id: 'prod-2', name: 'Annual Software Support', rate: 500000, unit: 'year', taxRatePct: 18 },
+        { id: 'prod-1', key: 'prod-1', label: 'Enterprise CRM Implementation', name: 'Enterprise CRM Implementation', value: 'prod-1', rate: 2500000, unit: 'service', taxRatePct: 18 },
+        { id: 'prod-2', key: 'prod-2', label: 'Annual Software Support', name: 'Annual Software Support', value: 'prod-2', rate: 500000, unit: 'year', taxRatePct: 18 },
       ],
       bankAccounts: [
-        { id: 'bnk-1', bankName: 'HDFC Bank', accountNo: '50200012345678', ifsc: 'HDFC0000240', branch: 'Indiranagar' },
+        { id: 'bnk-1', key: 'bnk-1', label: 'HDFC Bank - 50200012345678', bankName: 'HDFC Bank', accountNo: '50200012345678', ifsc: 'HDFC0000240', branch: 'Indiranagar' },
       ],
       messageTemplates: [
-        { id: 'tpl-1', key: 'invoice', channel: 'whatsapp', body: 'Dear {{name}}, invoice {{doc_no}} for ₹{{amount}} is ready: {{link}}' },
-        { id: 'tpl-2', key: 'quote', channel: 'whatsapp', body: 'Dear {{name}}, quotation {{doc_no}} is ready: {{link}}' },
+        { id: 'tpl-1', key: 'invoice', label: 'Invoice Template', channel: 'whatsapp', body: 'Dear {{name}}, invoice {{doc_no}} for ₹{{amount}} is ready: {{link}}' },
+        { id: 'tpl-2', key: 'quote', label: 'Quote Template', channel: 'whatsapp', body: 'Dear {{name}}, quotation {{doc_no}} is ready: {{link}}' },
       ],
     };
-    return jsonRes(optionsMap[mType] || []);
+    const rawItems = optionsMap[mType] || [];
+    const items = rawItems.map((it: any) => ({
+      ...it,
+      label: it.label || it.name || it.displayName || it.key,
+      value: it.value || it.id || it.key,
+    }));
+    return jsonRes({ items });
   }
 
   // 12. /documents/:type/:id/preview (Requirement 4)

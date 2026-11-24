@@ -80,8 +80,10 @@ export function App() {
                   <Route path="sales/quotes/new" element={<QuoteBuilder />} />
                   <Route path="sales/quotes/:id" element={<QuoteDetail />} />
                   <Route path="sales/quotes/:id/edit" element={<QuoteBuilder />} />
-                  <Route path="sales/invoices/:id" element={<InvoiceDetail />} />
+                  <Route path="sales/orders/new" element={<QuoteBuilder mode="order" />} />
                   <Route path="sales/orders/:id" element={<OrderDetail />} />
+                  <Route path="sales/invoices/new" element={<QuoteBuilder mode="invoice" />} />
+                  <Route path="sales/invoices/:id" element={<InvoiceDetail />} />
                   <Route path="sales/payments/new" element={<PaymentForm />} />
                   <Route path="sales/payments/:id" element={<PaymentDetail />} />
                   <Route path="reports" element={<Reports />} />

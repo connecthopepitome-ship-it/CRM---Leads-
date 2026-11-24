@@ -179,6 +179,20 @@ export default function SalesHub() {
               </LinkButton>
             )}
 
+            {tab === 'orders' && (
+              <LinkButton to="/sales/orders/new" variant="primary" className="gap-1.5 shadow-xs">
+                <Plus size={15} strokeWidth={2.5} />
+                <span>New Sales Order</span>
+              </LinkButton>
+            )}
+
+            {tab === 'invoices' && can('invoice', 'create') && (
+              <LinkButton to="/sales/invoices/new" variant="primary" className="gap-1.5 shadow-xs">
+                <Plus size={15} strokeWidth={2.5} />
+                <span>New Invoice</span>
+              </LinkButton>
+            )}
+
             {tab === 'payments' && can('payment', 'create') && (
               <LinkButton to="/sales/payments/new" variant="primary" className="gap-1.5 shadow-xs">
                 <Plus size={15} strokeWidth={2.5} />
@@ -194,6 +208,20 @@ export default function SalesHub() {
             <LinkButton to="/sales/quotes/new" variant="primary" className="w-full justify-center py-2.5 font-bold shadow-xs text-xs">
               <Plus size={15} strokeWidth={2.5} />
               <span>+ New Quotation</span>
+            </LinkButton>
+          )}
+
+          {tab === 'orders' && (
+            <LinkButton to="/sales/orders/new" variant="primary" className="w-full justify-center py-2.5 font-bold shadow-xs text-xs">
+              <Plus size={15} strokeWidth={2.5} />
+              <span>+ New Sales Order</span>
+            </LinkButton>
+          )}
+
+          {tab === 'invoices' && can('invoice', 'create') && (
+            <LinkButton to="/sales/invoices/new" variant="primary" className="w-full justify-center py-2.5 font-bold shadow-xs text-xs">
+              <Plus size={15} strokeWidth={2.5} />
+              <span>+ New Invoice</span>
             </LinkButton>
           )}
 
