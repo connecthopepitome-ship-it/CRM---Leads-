@@ -336,10 +336,24 @@ export default function SalesHub() {
                       </span>
                     </div>
 
-                    <span className="inline-flex items-center gap-1 text-xs font-bold text-[#3D7952]">
-                      <span>Details</span>
-                      <span>→</span>
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {tab !== 'payments' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(`/api/v1/documents/${tab === 'quotes' ? 'quote' : tab === 'orders' ? 'order' : 'invoice'}/${row.id}/pdf`, '_blank');
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-[#DCE7D9] bg-[#F5F9F2] px-2.5 py-1 text-xs font-semibold text-[#3D7952] hover:bg-[#EAF5E8]"
+                        >
+                          <FileText size={11} />
+                          <span>PDF</span>
+                        </button>
+                      )}
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-[#3D7952]">
+                        <span>Details</span>
+                        <span>→</span>
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
@@ -357,7 +371,7 @@ export default function SalesHub() {
                     <th className="px-5 py-3">Amount</th>
                     <th className="px-5 py-3">Status</th>
                     <th className="px-5 py-3">Valid Until / Due</th>
-                    <th className="w-12 px-5 py-3 text-right"></th>
+                    <th className="px-5 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#DCE7D9]/60">
@@ -399,7 +413,17 @@ export default function SalesHub() {
                         </td>
 
                         {/* Actions Menu */}
-                        <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                        <td className="px-5 py-3.5 text-right flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          {tab !== 'payments' && (
+                            <button
+                              onClick={() => window.open(`/api/v1/documents/${tab === 'quotes' ? 'quote' : tab === 'orders' ? 'order' : 'invoice'}/${row.id}/pdf`, '_blank')}
+                              className="inline-flex items-center gap-1 rounded-lg border border-[#DCE7D9] bg-white px-2.5 py-1 text-xs font-semibold text-[#3D7952] hover:bg-[#F5F9F2] shadow-2xs"
+                              title="Print / Download PDF"
+                            >
+                              <FileText size={12} />
+                              <span>PDF</span>
+                            </button>
+                          )}
                           <button
                             onClick={() => nav(`/sales/${tab}/${row.id}`)}
                             className="rounded-lg p-1 text-[#778477] hover:text-[#202820] hover:bg-[#E3EFDF] transition-colors"

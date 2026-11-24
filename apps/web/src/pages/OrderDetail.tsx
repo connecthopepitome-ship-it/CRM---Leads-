@@ -9,6 +9,7 @@ import { useAuth } from '../lib/auth';
 import { date, money } from '../lib/format';
 import { useAction } from '../features/hooks';
 import { DocPreview } from '../features/DocPreview';
+import { downloadDocPdf, sharePdfViaWhatsApp } from '../lib/pdfShare';
 import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, Field, KeyValue, LinkButton, PageHeader, SelectField, Skeleton, Table, Textarea, cx, toast } from '../ui';
 
 interface OrderLine { id: string; kind?: string; description: string; qty: number; invoicedQty?: number; pendingQty: number; unit?: string }
@@ -47,6 +48,21 @@ export default function OrderDetail() {
     window.open(`/api/v1/documents/order/${id}/pdf`, '_blank', 'noopener');
   };
 
+  const handleDownloadPdf = async () => {
+    await downloadDocPdf('order', id, q.data?.number || 'SO');
+  };
+
+  const handleSendWhatsApp = async () => {
+    const o = q.data;
+    if (!o) return;
+    await sharePdfViaWhatsApp({
+      type: 'order',
+      id,
+      docNumber: o.number || 'SO',
+      partyName: o.customerName,
+    });
+  };
+
   if (q.isLoading) return <Skeleton rows={6} />;
   const is404 = !q.data || (q.error as any)?.status === 404 || (q.error as any)?.code === 'NOT_FOUND';
   if (is404) {
@@ -67,7 +83,11 @@ export default function OrderDetail() {
   return (
     <>
       <PageHeader back="/sales?tab=orders" title={o.number ? `Order ${o.number}` : 'Order'} subtitle={<><Link className="underline" to={`/customers/${o.customerId}`}>{o.customerName ?? 'Customer'}</Link> · <Badge status={o.status}>{LABEL[o.status] ?? o.status}</Badge></>} actions={<>
-        <Button variant="secondary" onClick={openPdf}>PDF / Print</Button>
+        <Button onClick={() => void handleSendWhatsApp()} className="bg-[#25D366] hover:bg-[#20bd5a] text-white">
+          Send PDF via WhatsApp
+        </Button>
+        <Button variant="secondary" onClick={() => void handleDownloadPdf()}>Download PDF</Button>
+        <Button variant="secondary" onClick={openPdf}>Print PDF</Button>
         {pending && perm('invoice:create') && !['cancelled', 'closed', 'on_hold'].includes(o.status) && <Button busy={invoice.isPending} onClick={() => invoice.mutate(undefined)}>Create invoice for pending items</Button>}
         {perm('order:status') && moves.length > 0 && <Button variant="secondary" onClick={() => setNext(moves[0]!)}>Change status</Button>}
       </>} />

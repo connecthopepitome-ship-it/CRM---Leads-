@@ -1370,7 +1370,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (memQt) memQt.status = 'sent';
 
     const shareUrl = `https://crm---leads.connect-hopepitome.workers.dev/sales/quotes/${qid}`;
-    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(`Hello, your quotation ${displayNumber} from SaleSphere is available here: ${shareUrl}`)}`;
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(`Dear Customer,\n\nPlease find attached official Quotation ${displayNumber} from HopEpitome Strategics.\n\nThank you for choosing HopEpitome Strategics.`)}`;
     return jsonRes({
       id: qid,
       status: 'sent',

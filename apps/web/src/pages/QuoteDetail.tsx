@@ -11,8 +11,9 @@ import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, Field, Lin
 import { errorToast } from '../ui/toast';
 import { 
   ArrowLeft, Copy, FileText, Send, Edit, Plus, Trash2, 
-  Calendar, User, CheckCircle2, RotateCcw, AlertCircle 
+  Calendar, User, CheckCircle2, RotateCcw, AlertCircle, Download 
 } from 'lucide-react';
+import { downloadDocPdf, sharePdfViaWhatsApp } from '../lib/pdfShare';
 
 interface QuoteLine {
   id: string;
@@ -166,6 +167,25 @@ export default function QuoteDetail() {
     window.open(`/api/v1/documents/quote/${id}/pdf`, '_blank', 'noopener');
   };
 
+  const handleDownloadPdf = async () => {
+    await downloadDocPdf('quote', id, q.data?.displayNumber || 'Draft');
+  };
+
+  const handleSendWhatsApp = async () => {
+    const d = q.data;
+    if (!d) return;
+    if (d.status === 'draft') {
+      await post(`/quotes/${id}/send`, { channel: 'whatsapp' }).catch(() => {});
+      await q.refetch();
+    }
+    await sharePdfViaWhatsApp({
+      type: 'quote',
+      id,
+      docNumber: d.displayNumber || 'Draft',
+      partyName: d.partyName,
+    });
+  };
+
   const remove = async () => {
     if (!confirm('Delete this draft?')) return;
     await api(`/quotes/${id}`, { method: 'DELETE' }).then(() => nav('/sales')).catch(errorToast);
@@ -235,8 +255,9 @@ export default function QuoteDetail() {
         <div className="hidden md:flex flex-wrap items-center gap-2">
           {editable && <LinkButton to={`/sales/quotes/${id}/edit`} variant="secondary">Edit</LinkButton>}
           {editable && (
-            <Button busy={send.isPending} onClick={() => send.mutate('whatsapp')} className="bg-[#25D366] hover:bg-[#20bd5a] text-white">
-              Send via WhatsApp
+            <Button onClick={() => void handleSendWhatsApp()} className="bg-[#25D366] hover:bg-[#20bd5a] text-white">
+              <Send size={14} className="mr-1.5" />
+              <span>Send PDF via WhatsApp</span>
             </Button>
           )}
           {editable && <Button variant="secondary" busy={send.isPending} onClick={() => send.mutate('link')}>Send & copy link</Button>}
@@ -262,9 +283,13 @@ export default function QuoteDetail() {
             </Button>
           )}
           {sent && d.isLatest && <Button variant="secondary" busy={revise.isPending} onClick={() => revise.mutate(undefined)}>Revise</Button>}
+          <Button variant="secondary" onClick={() => void handleDownloadPdf()} className="flex items-center gap-1.5 font-medium">
+            <Download size={14} className="text-[#3D7952]" />
+            <span>Download PDF</span>
+          </Button>
           <Button variant="secondary" onClick={openPdf} className="flex items-center gap-1.5 font-medium">
             <FileText size={14} className="text-[#3D7952]" />
-            <span>PDF / Print</span>
+            <span>Print PDF</span>
           </Button>
           {sent && <Button variant="ghost" onClick={() => void copyLink()}>Copy link</Button>}
           {(d.status === 'accepted' || (sent && d.isLatest)) && perm('invoice:create') && (
@@ -284,12 +309,11 @@ export default function QuoteDetail() {
       <div className="flex flex-col gap-2.5 md:hidden">
         {editable && (
           <Button
-            busy={send.isPending}
-            onClick={() => send.mutate('whatsapp')}
+            onClick={() => void handleSendWhatsApp()}
             className="w-full justify-center bg-[#25D366] hover:bg-[#20bd5a] text-white py-2.5 font-bold shadow-xs text-xs"
           >
             <Send size={14} className="mr-1.5" />
-            <span>Send via WhatsApp</span>
+            <span>Send PDF via WhatsApp</span>
           </Button>
         )}
 
@@ -306,11 +330,19 @@ export default function QuoteDetail() {
           )}
           <Button
             variant="secondary"
+            onClick={() => void handleDownloadPdf()}
+            className="w-full justify-center text-xs py-2 font-semibold"
+          >
+            <Download size={13} className="mr-1.5 text-[#3D7952]" />
+            <span>Download PDF</span>
+          </Button>
+          <Button
+            variant="secondary"
             onClick={openPdf}
             className="w-full justify-center text-xs py-2 font-semibold"
           >
             <FileText size={13} className="mr-1.5 text-[#3D7952]" />
-            <span>PDF / Print</span>
+            <span>Print PDF</span>
           </Button>
           <Button
             variant="secondary"
@@ -584,6 +616,21 @@ export default function QuoteDetail() {
                 <span className="font-medium text-[#202820]">
                   {d.viewCount ? `${d.viewCount} times` : 'Not viewed yet'}
                 </span>
+              </div>
+
+              {/* PDF Output Actions */}
+              <div className="mt-4 pt-3 border-t border-[#DCE7D9] space-y-2">
+                <span className="block text-[10px] uppercase font-bold text-[#778477]">PDF Output Document</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => void handleDownloadPdf()} className="w-full justify-center text-xs font-semibold">
+                    <Download size={13} className="mr-1 text-[#3D7952]" />
+                    Download PDF
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={openPdf} className="w-full justify-center text-xs font-semibold">
+                    <FileText size={13} className="mr-1 text-[#3D7952]" />
+                    Print / View
+                  </Button>
+                </div>
               </div>
             </div>
           </Card>

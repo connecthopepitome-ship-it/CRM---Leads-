@@ -12,8 +12,9 @@ import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, Field, Lin
 import { errorToast } from '../ui/toast';
 import { 
   ArrowLeft, Copy, FileText, CreditCard, Calendar, 
-  MapPin, Building2, Send, RotateCcw, AlertTriangle 
+  MapPin, Building2, Send, RotateCcw, AlertTriangle, Download 
 } from 'lucide-react';
+import { downloadDocPdf, sharePdfViaWhatsApp } from '../lib/pdfShare';
 
 interface InvoiceLine {
   id?: string;
@@ -76,31 +77,32 @@ export default function InvoiceDetail() {
 
   const share = async (via: 'whatsapp' | 'copy') => {
     try {
-      const r = await post<{ url: string }>('/share-links', { documentType: 'invoice', documentId: id });
       if (via === 'copy') {
+        const r = await post<{ url: string }>('/share-links', { documentType: 'invoice', documentId: id });
         await navigator.clipboard.writeText(r.url);
         return toast('Invoice link copied');
       }
-      const c = await get<{ contacts: { phone: string | null; name: string; isPrimary: boolean }[] }>(`/customers/${q.data!.customerId}`);
-      const contact = c.contacts.find((x) => x.isPrimary && x.phone) ?? c.contacts.find((x) => x.phone);
-      if (!contact) return toast('Add a mobile number to the customer first.', 'danger');
-      const tpl = templates.data?.find((t) => t.key === 'invoice');
-      const bodyTpl = (tpl?.data as { body?: string } | undefined)?.body ?? 'Invoice {{doc_no}}: {{link}}';
-      const text = renderTemplate(String(bodyTpl), { name: contact.name, doc_no: q.data?.number ?? '', amount: ((q.data?.balanceDue ?? 0) / 100).toFixed(2), link: r.url });
-      const w = await post<{ url: string }>('/messages/whatsapp', { recordType: 'customer', recordId: q.data!.customerId, text });
-      window.open(w.url, '_blank', 'noopener');
+      const c = await get<{ contacts: { phone: string | null; name: string; isPrimary: boolean }[] }>(`/customers/${q.data!.customerId}`).catch(() => null);
+      const contact = c?.contacts?.find((x) => x.isPrimary && x.phone) ?? c?.contacts?.find((x) => x.phone);
+      await sharePdfViaWhatsApp({
+        type: 'invoice',
+        id,
+        docNumber: q.data?.number ?? 'INV',
+        partyName: contact?.name || q.data?.customerName,
+        partyPhone: contact?.phone,
+        balanceDueText: ((q.data?.balanceDue ?? 0) / 100).toFixed(2),
+      });
     } catch (e) {
       errorToast(e);
     }
   };
 
-  const openPdf = async () => {
-    try {
-      const r = await post<{ url: string }>('/share-links', { documentType: 'invoice', documentId: id });
-      window.open(`/api/v1/public/s/${r.url.split('/s/')[1]}/pdf`, '_blank', 'noopener');
-    } catch (e) {
-      errorToast(e);
-    }
+  const openPdf = () => {
+    window.open(`/api/v1/documents/invoice/${id}/pdf`, '_blank', 'noopener');
+  };
+
+  const handleDownloadPdf = async () => {
+    await downloadDocPdf('invoice', id, q.data?.number ?? 'INV');
   };
 
   if (q.isLoading) return <Skeleton rows={6} />;
@@ -189,11 +191,19 @@ export default function InvoiceDetail() {
           )}
           {!draft && (
             <Button onClick={() => void share('whatsapp')} className="bg-[#25D366] hover:bg-[#20bd5a] text-white">
-              Share WhatsApp
+              <Send size={14} className="mr-1.5" />
+              <span>Send PDF via WhatsApp</span>
             </Button>
           )}
-          {!draft && <Button variant="secondary" onClick={() => void share('copy')}>Copy link</Button>}
-          {!draft && <Button variant="secondary" onClick={() => void openPdf()}>PDF</Button>}
+          <Button variant="secondary" onClick={() => void handleDownloadPdf()} className="flex items-center gap-1.5 font-medium">
+            <Download size={14} className="text-[#3D7952]" />
+            <span>Download PDF</span>
+          </Button>
+          <Button variant="secondary" onClick={openPdf} className="flex items-center gap-1.5 font-medium">
+            <FileText size={14} className="text-[#3D7952]" />
+            <span>Print PDF</span>
+          </Button>
+          {!draft && <Button variant="ghost" onClick={() => void share('copy')}>Copy link</Button>}
           {live && i.type !== 'proforma' && can('payment', 'create') && (
             <LinkButton to={`/sales/payments/new?customerId=${i.customerId}&invoiceId=${i.id}`} variant="primary">
               Record payment
@@ -218,11 +228,27 @@ export default function InvoiceDetail() {
             className="w-full justify-center bg-[#25D366] hover:bg-[#20bd5a] text-white py-2.5 font-bold shadow-xs text-xs"
           >
             <Send size={14} className="mr-1.5" />
-            <span>Share on WhatsApp</span>
+            <span>Send PDF via WhatsApp</span>
           </Button>
         )}
 
         <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => void handleDownloadPdf()}
+            className="w-full justify-center text-xs py-2 font-semibold"
+          >
+            <Download size={13} className="mr-1.5 text-[#3D7952]" />
+            <span>Download PDF</span>
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={openPdf}
+            className="w-full justify-center text-xs py-2 font-semibold"
+          >
+            <FileText size={13} className="mr-1.5 text-[#3D7952]" />
+            <span>Print PDF</span>
+          </Button>
           {!draft && (
             <Button
               variant="secondary"
@@ -231,16 +257,6 @@ export default function InvoiceDetail() {
             >
               <Copy size={13} className="mr-1.5 text-[#3D7952]" />
               <span>Copy Link</span>
-            </Button>
-          )}
-          {!draft && (
-            <Button
-              variant="secondary"
-              onClick={() => void openPdf()}
-              className="w-full justify-center text-xs py-2 font-semibold"
-            >
-              <FileText size={13} className="mr-1.5 text-[#3D7952]" />
-              <span>PDF</span>
             </Button>
           )}
         </div>
@@ -522,6 +538,21 @@ export default function InvoiceDetail() {
                 <span className={`font-mono text-sm ${balanceDue > 0 ? 'text-[#D99A45]' : 'text-[#3D7952]'}`}>
                   {money(balanceDue)}
                 </span>
+              </div>
+
+              {/* PDF Output Actions */}
+              <div className="mt-4 pt-3 border-t border-[#DCE7D9] space-y-2">
+                <span className="block text-[10px] uppercase font-bold text-[#778477]">PDF Output Document</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => void handleDownloadPdf()} className="w-full justify-center text-xs font-semibold">
+                    <Download size={13} className="mr-1 text-[#3D7952]" />
+                    Download PDF
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={openPdf} className="w-full justify-center text-xs font-semibold">
+                    <FileText size={13} className="mr-1 text-[#3D7952]" />
+                    Print / View
+                  </Button>
+                </div>
               </div>
             </div>
           </Card>
