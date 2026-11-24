@@ -26,9 +26,11 @@ createRoot(document.getElementById('root')!).render(
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   void import('virtual:pwa-register')
     .then(({ registerSW }) => {
-      registerSW({
+      const updateSW = registerSW({
         immediate: true,
-        onNeedRefresh() {},
+        onNeedRefresh() {
+          void updateSW(true);
+        },
         onRegisterError(err) {
           console.debug('SW register skipped:', err);
         },
