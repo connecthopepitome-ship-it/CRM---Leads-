@@ -2,6 +2,7 @@
  * SaleSphere Edge API Handler
  * High-performance edge router with Cloudflare D1 durable persistence and in-memory fallback.
  */
+import { renderDocumentHtml, DEFAULT_HOPEPITOME_COMPANY, type DocInput, amountInWords, upiQrSvg } from '@ss/doc-templates';
 
 export interface D1DatabaseLike {
   prepare(query: string): {
@@ -186,18 +187,10 @@ const memoryStore = {
     },
   ],
   company: {
-    legalName: 'SaleSphere Technologies India Pvt Ltd',
-    tradeName: 'SaleSphere',
+    ...DEFAULT_HOPEPITOME_COMPANY,
+    tradeName: 'HopEpitome',
+    pan: 'ABCDE1234F',
     gstRegistered: true,
-    gstin: '29AABCU9603R1ZM',
-    stateCode: '29',
-    address: 'Indiranagar 100ft Road, Bengaluru, Karnataka, 560038',
-    phone: '+91 80 4000 1122',
-    email: 'accounts@salesphere.live',
-    pan: 'AABCU9603R',
-    jurisdiction: 'Bengaluru',
-    signatory: 'Authorized Signatory',
-    logoDataUrl: null,
   },
 };
 
@@ -2630,14 +2623,502 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     return jsonRes({ items });
   }
 
-  // 12. /documents/:type/:id/preview (Requirement 4)
-  if (path.startsWith('/documents/')) {
-    return jsonRes({
-      status: 'ready',
-      html: '<div style="padding: 24px; font-family: sans-serif;"><h2>Document Preview</h2><p>Official document render.</p></div>',
-      url: 'https://salesphere.live',
+  // Helper to parse share token
+  function parseShareToken(tok: string): { type: string; id: string } | null {
+    if (!tok) return null;
+    if (tok.includes('_')) {
+      const parts = tok.split('_');
+      return { type: parts[0], id: parts.slice(1).join('_') };
+    }
+    try {
+      const decoded = atob(tok.replace(/-/g, '+').replace(/_/g, '/'));
+      if (decoded.includes(':')) {
+        const [type, id] = decoded.split(':');
+        return { type, id };
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  // Helper to build DocInput from database
+  async function buildDocInput(type: string, id: string): Promise<DocInput | null> {
+    const norm = type.toLowerCase().replace(/s$/, '');
+
+    if (norm === 'quote' || norm === 'quotation') {
+      let q: any = null;
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT * FROM quotes WHERE id = ? AND deleted_at IS NULL').bind(id).all();
+          q = results?.[0];
+        } catch (e) {}
+      }
+      if (!q) q = memoryStore.quotes.find((item) => item.id === id);
+      if (!q) return null;
+
+      const dataJson = q.data_json ? (typeof q.data_json === 'string' ? JSON.parse(q.data_json) : q.data_json) : {};
+      const rawLines = dataJson.lines || q.lines || [];
+      const lines: any[] = rawLines.map((l: any) => ({
+        kind: l.kind || 'item',
+        description: l.description || l.name || 'Enterprise Service / Solution',
+        hsnSac: l.hsnSac || '998313',
+        qty: Number(l.qty) || 1,
+        unit: l.unit || 'Nos',
+        rate: Number(l.ratePaise ?? l.rate ?? 0),
+        discount: Number(l.discountPaise ?? l.discount ?? 0),
+        taxable: Number(l.taxablePaise ?? l.taxable ?? 0),
+        taxRatePct: Number(l.taxRatePct ?? 18),
+        cgst: Number(l.cgstPaise ?? l.cgst ?? 0),
+        sgst: Number(l.sgstPaise ?? l.sgst ?? 0),
+        igst: Number(l.igstPaise ?? l.igst ?? 0),
+        total: Number(l.totalPaise ?? l.total ?? l.amount ?? 0),
+      }));
+
+      const partyId = q.party_id || q.partyId;
+      const partyType = q.party_type || q.partyType || 'customer';
+      let partyDetails: any = null;
+      if (partyType === 'customer' && partyId) {
+        if (db) {
+          try {
+            const { results } = await db.prepare('SELECT * FROM customers WHERE id = ?').bind(partyId).all();
+            partyDetails = results?.[0];
+          } catch (e) {}
+        }
+        if (!partyDetails) partyDetails = memoryStore.customers.find((c) => c.id === partyId);
+      } else if (partyType === 'lead' && partyId) {
+        if (db) {
+          try {
+            const { results } = await db.prepare('SELECT * FROM leads WHERE id = ?').bind(partyId).all();
+            partyDetails = results?.[0];
+          } catch (e) {}
+        }
+        if (!partyDetails) partyDetails = memoryStore.leads.find((l) => l.id === partyId);
+      }
+
+      const billToName = q.party_name || q.partyName || partyDetails?.displayName || partyDetails?.display_name || partyDetails?.name || 'Customer';
+      const billToCompany = partyDetails?.legalName || partyDetails?.legal_name || partyDetails?.company || null;
+      const billToAddress = partyDetails?.billingAddress || partyDetails?.billing_address || (partyDetails?.city ? `${partyDetails.city}${partyDetails.pincode ? ' - ' + partyDetails.pincode : ''}` : 'Address on file');
+      const billToGstin = partyDetails?.gstin || null;
+      const billToStateCode = partyDetails?.stateCode || partyDetails?.state_code || '29';
+
+      const totalsObj = dataJson.totals || q.totals || {};
+      const grandTotal = Number(totalsObj.grandTotal ?? q.grand_total ?? 0);
+      const taxable = Number(totalsObj.taxable ?? q.taxable ?? 0);
+      const cgst = Number(totalsObj.cgst ?? q.cgst ?? 0);
+      const sgst = Number(totalsObj.sgst ?? q.sgst ?? 0);
+      const igst = Number(totalsObj.igst ?? q.igst ?? 0);
+      const subTotal = Number(totalsObj.subTotal ?? q.sub_total ?? taxable);
+      const discountTotal = Number(totalsObj.discountTotal ?? 0);
+
+      if (lines.length === 0) {
+        lines.push({
+          kind: 'item',
+          description: 'Enterprise Solution Implementation',
+          hsnSac: '998313',
+          qty: 1,
+          unit: 'service',
+          rate: grandTotal,
+          discount: 0,
+          taxable: taxable || grandTotal,
+          taxRatePct: 18,
+          cgst,
+          sgst,
+          igst,
+          total: grandTotal,
+        });
+      }
+
+      const docInput: DocInput = {
+        kind: 'quotation',
+        number: q.display_number || q.displayNumber || q.number || 'QT/26-27/0001',
+        date: q.date || new Date().toISOString().split('T')[0],
+        validUntil: q.valid_until || q.validUntil || null,
+        placeOfSupply: billToStateCode,
+        company: DEFAULT_HOPEPITOME_COMPANY,
+        billTo: {
+          name: billToName,
+          company: billToCompany,
+          address: billToAddress,
+          gstin: billToGstin,
+          stateCode: billToStateCode,
+          phone: partyDetails?.phone || null,
+          email: partyDetails?.email || null,
+        },
+        lines,
+        totals: {
+          subTotal,
+          discountTotal,
+          taxable,
+          cgst,
+          sgst,
+          igst,
+          roundOff: 0,
+          grandTotal,
+          inWords: amountInWords(grandTotal),
+        },
+        refs: [
+          { label: 'Scope', value: 'Enterprise Digital System' },
+          { label: 'Engagement Lead', value: 'HopEpitome Strategics' },
+        ],
+        terms: '1. Quotation validity: 30 calendar days from issue date.\n2. Commercial terms: 50% mobilization advance upon order confirmation, 50% upon milestone completion.\n3. GST and statutory levies applied as per prevailing Indian tax regulations.\n4. Governed by HopEpitome professional services terms and Bangalore jurisdiction.',
+        notes: 'HopEpitome Strategics: We build digital systems for businesses and distinctive professional identities for people.',
+      };
+      return docInput;
+    }
+
+    if (norm === 'order') {
+      let o: any = null;
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT * FROM orders WHERE id = ? AND deleted_at IS NULL').bind(id).all();
+          o = results?.[0];
+        } catch (e) {}
+      }
+      if (!o) o = memoryStore.orders.find((item) => item.id === id);
+      if (!o) return null;
+
+      const dataJson = o.data_json ? (typeof o.data_json === 'string' ? JSON.parse(o.data_json) : o.data_json) : {};
+      const rawLines = dataJson.lines || o.lines || [];
+      const lines: any[] = rawLines.map((l: any) => ({
+        kind: l.kind || 'item',
+        description: l.description || l.name || 'Enterprise Service / Solution',
+        hsnSac: l.hsnSac || '998313',
+        qty: Number(l.qty) || 1,
+        unit: l.unit || 'Nos',
+        rate: Number(l.ratePaise ?? l.rate ?? 0),
+        discount: Number(l.discountPaise ?? l.discount ?? 0),
+        taxable: Number(l.taxablePaise ?? l.taxable ?? 0),
+        taxRatePct: Number(l.taxRatePct ?? 18),
+        cgst: Number(l.cgstPaise ?? l.cgst ?? 0),
+        sgst: Number(l.sgstPaise ?? l.sgst ?? 0),
+        igst: Number(l.igstPaise ?? l.igst ?? 0),
+        total: Number(l.totalPaise ?? l.total ?? l.amount ?? 0),
+      }));
+
+      const customerId = o.customer_id || o.customerId;
+      let customer: any = null;
+      if (customerId) {
+        if (db) {
+          try {
+            const { results } = await db.prepare('SELECT * FROM customers WHERE id = ?').bind(customerId).all();
+            customer = results?.[0];
+          } catch (e) {}
+        }
+        if (!customer) customer = memoryStore.customers.find((c) => c.id === customerId);
+      }
+
+      const billToName = o.customer_name || o.customerName || customer?.displayName || customer?.display_name || customer?.name || 'Customer';
+      const billToCompany = customer?.legalName || customer?.legal_name || customer?.company || null;
+      const billToAddress = customer?.billingAddress || customer?.billing_address || (customer?.city ? `${customer.city}${customer.pincode ? ' - ' + customer.pincode : ''}` : 'Address on file');
+      const billToGstin = customer?.gstin || null;
+      const billToStateCode = customer?.stateCode || customer?.state_code || '29';
+
+      const totalsObj = dataJson.totals || o.totals || {};
+      const grandTotal = Number(totalsObj.grandTotal ?? o.grand_total ?? 0);
+      const taxable = Number(totalsObj.taxable ?? o.taxable ?? 0);
+      const cgst = Number(totalsObj.cgst ?? o.cgst ?? 0);
+      const sgst = Number(totalsObj.sgst ?? o.sgst ?? 0);
+      const igst = Number(totalsObj.igst ?? o.igst ?? 0);
+      const subTotal = Number(totalsObj.subTotal ?? o.sub_total ?? taxable);
+      const discountTotal = Number(totalsObj.discountTotal ?? 0);
+
+      if (lines.length === 0) {
+        lines.push({
+          kind: 'item',
+          description: 'Confirmed Scope Items',
+          hsnSac: '998313',
+          qty: 1,
+          unit: 'service',
+          rate: grandTotal,
+          discount: 0,
+          taxable: taxable || grandTotal,
+          taxRatePct: 18,
+          cgst,
+          sgst,
+          igst,
+          total: grandTotal,
+        });
+      }
+
+      const refs: { label: string; value: string }[] = [];
+      if (o.quote_id || o.quoteId) {
+        refs.push({ label: 'Quotation Ref', value: o.quote_number || 'QT' });
+      }
+
+      const docInput: DocInput = {
+        kind: 'order',
+        number: o.number || 'SO/26-27/0001',
+        date: o.date || new Date().toISOString().split('T')[0],
+        expectedDelivery: o.expected_delivery || o.expectedDelivery || null,
+        placeOfSupply: billToStateCode,
+        company: DEFAULT_HOPEPITOME_COMPANY,
+        billTo: {
+          name: billToName,
+          company: billToCompany,
+          address: billToAddress,
+          gstin: billToGstin,
+          stateCode: billToStateCode,
+          phone: customer?.phone || null,
+          email: customer?.email || null,
+        },
+        lines,
+        totals: {
+          subTotal,
+          discountTotal,
+          taxable,
+          cgst,
+          sgst,
+          igst,
+          roundOff: 0,
+          grandTotal,
+          inWords: amountInWords(grandTotal),
+        },
+        refs,
+        terms: '1. Order delivery commences upon receipt of signed contract and payment milestone clearance.\n2. Any variation in scope of work shall be billed as an addendum.\n3. HopEpitome standard service levels and warranty provisions apply.',
+        notes: 'HopEpitome Strategics: We build digital systems for businesses and distinctive professional identities for people.',
+      };
+      return docInput;
+    }
+
+    if (norm === 'invoice') {
+      let inv: any = null;
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT * FROM invoices WHERE id = ? AND deleted_at IS NULL').bind(id).all();
+          inv = results?.[0];
+        } catch (e) {}
+      }
+      if (!inv) inv = memoryStore.invoices.find((item) => item.id === id);
+      if (!inv) return null;
+
+      const dataJson = inv.data_json ? (typeof inv.data_json === 'string' ? JSON.parse(inv.data_json) : inv.data_json) : {};
+      const rawLines = dataJson.lines || inv.lines || [];
+      const lines: any[] = rawLines.map((l: any) => ({
+        kind: l.kind || 'item',
+        description: l.description || l.name || 'Enterprise Service / Solution',
+        hsnSac: l.hsnSac || '998313',
+        qty: Number(l.qty) || 1,
+        unit: l.unit || 'Nos',
+        rate: Number(l.ratePaise ?? l.rate ?? 0),
+        discount: Number(l.discountPaise ?? l.discount ?? 0),
+        taxable: Number(l.taxablePaise ?? l.taxable ?? 0),
+        taxRatePct: Number(l.taxRatePct ?? 18),
+        cgst: Number(l.cgstPaise ?? l.cgst ?? 0),
+        sgst: Number(l.sgstPaise ?? l.sgst ?? 0),
+        igst: Number(l.igstPaise ?? l.igst ?? 0),
+        total: Number(l.totalPaise ?? l.total ?? l.amount ?? 0),
+      }));
+
+      const customerId = inv.customer_id || inv.customerId;
+      let customer: any = null;
+      if (customerId) {
+        if (db) {
+          try {
+            const { results } = await db.prepare('SELECT * FROM customers WHERE id = ?').bind(customerId).all();
+            customer = results?.[0];
+          } catch (e) {}
+        }
+        if (!customer) customer = memoryStore.customers.find((c) => c.id === customerId);
+      }
+
+      const billToName = inv.customer_name || inv.customerName || customer?.displayName || customer?.display_name || customer?.name || 'Customer';
+      const billToCompany = customer?.legalName || customer?.legal_name || customer?.company || null;
+      const billToAddress = customer?.billingAddress || customer?.billing_address || (customer?.city ? `${customer.city}${customer.pincode ? ' - ' + customer.pincode : ''}` : 'Address on file');
+      const billToGstin = customer?.gstin || null;
+      const billToStateCode = customer?.stateCode || customer?.state_code || '29';
+
+      const totalsObj = dataJson.totals || inv.totals || {};
+      const grandTotal = Number(totalsObj.grandTotal ?? inv.grand_total ?? 0);
+      const balanceDue = Number(inv.balance_due ?? inv.balanceDue ?? 0);
+      const taxable = Number(totalsObj.taxable ?? inv.taxable ?? 0);
+      const cgst = Number(totalsObj.cgst ?? inv.cgst ?? 0);
+      const sgst = Number(totalsObj.sgst ?? inv.sgst ?? 0);
+      const igst = Number(totalsObj.igst ?? inv.igst ?? 0);
+      const subTotal = Number(totalsObj.subTotal ?? inv.sub_total ?? taxable);
+      const discountTotal = Number(totalsObj.discountTotal ?? 0);
+
+      if (lines.length === 0) {
+        lines.push({
+          kind: 'item',
+          description: 'Professional Services Supplied',
+          hsnSac: '998313',
+          qty: 1,
+          unit: 'service',
+          rate: grandTotal,
+          discount: 0,
+          taxable: taxable || grandTotal,
+          taxRatePct: 18,
+          cgst,
+          sgst,
+          igst,
+          total: grandTotal,
+        });
+      }
+
+      const refs: { label: string; value: string }[] = [];
+      if (inv.order_id || inv.orderId) refs.push({ label: 'Sales Order', value: inv.order_number || inv.orderId });
+      if (inv.quote_id || inv.quoteId) refs.push({ label: 'Quotation', value: inv.quote_number || inv.quoteId });
+
+      const docInput: DocInput = {
+        kind: inv.type === 'bill_of_supply' ? 'bill_of_supply' : 'tax_invoice',
+        number: inv.number || 'INV/26-27/0001',
+        date: inv.date || new Date().toISOString().split('T')[0],
+        dueDate: inv.due_date || inv.dueDate || null,
+        placeOfSupply: billToStateCode,
+        company: DEFAULT_HOPEPITOME_COMPANY,
+        billTo: {
+          name: billToName,
+          company: billToCompany,
+          address: billToAddress,
+          gstin: billToGstin,
+          stateCode: billToStateCode,
+          phone: customer?.phone || null,
+          email: customer?.email || null,
+        },
+        lines,
+        totals: {
+          subTotal,
+          discountTotal,
+          taxable,
+          cgst,
+          sgst,
+          igst,
+          roundOff: 0,
+          grandTotal,
+          inWords: amountInWords(grandTotal),
+        },
+        refs,
+        payment: {
+          balance: balanceDue,
+          paid: Math.max(0, grandTotal - balanceDue),
+          vpa: DEFAULT_HOPEPITOME_COMPANY.upiId || 'service@hopepitome',
+          payeeName: DEFAULT_HOPEPITOME_COMPANY.legalName,
+          showQr: balanceDue > 0,
+          bank: {
+            name: DEFAULT_HOPEPITOME_COMPANY.bankName || 'HDFC Bank Ltd',
+            accountNo: DEFAULT_HOPEPITOME_COMPANY.bankAccount || '50200088991122',
+            ifsc: DEFAULT_HOPEPITOME_COMPANY.bankIfsc || 'HDFC0001234',
+            branch: DEFAULT_HOPEPITOME_COMPANY.bankBranch || 'Outer Ring Road, Bengaluru',
+          },
+        },
+        terms: '1. Payment is strictly due by the due date specified on this tax invoice.\n2. Please mention invoice number when remitting payments via NEFT/RTGS or UPI.\n3. Remittances payable to "HopEpitome Strategics".\n4. Late payments subject to interest @ 18% p.a. in terms of the MSMED Act.',
+        notes: 'Thank you for your business. HopEpitome Strategics — Elevating Enterprise Excellence.',
+      };
+      return docInput;
+    }
+
+    return null;
+  }
+
+  // 12. Document Output Engine: /documents/:type/:id/:action
+  const docMatch = path.match(/^\/documents\/([^/?]+)\/([^/?]+)(?:\/([^/?]+))?/);
+  if (docMatch) {
+    const docType = docMatch[1];
+    const docId = docMatch[2];
+    const action = docMatch[3] || 'preview';
+    const docInput = await buildDocInput(docType, docId);
+    if (!docInput) {
+      return jsonRes({ type: 'https://salesphere.live/errors/not-found', title: 'Document not found', status: 404, code: 'NOT_FOUND' }, 404);
+    }
+    let html = await renderDocumentHtml(docInput);
+    if (action === 'pdf' || url.searchParams.get('print') === 'true') {
+      html += '<script>window.addEventListener("load",()=>setTimeout(()=>window.print(),350));</script>';
+    }
+    return new Response(html, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+      },
     });
   }
+
+  // 12b. /share-links
+  if (path === '/share-links' || path === '/share-links/') {
+    if (method === 'POST') {
+      const body = (await request.json().catch(() => ({}))) as any;
+      const { documentType, documentId } = body;
+      if (!documentType || !documentId) {
+        return jsonRes({ type: 'https://salesphere.live/errors/validation', title: 'Missing document type or id', status: 422 }, 422);
+      }
+      const token = `${documentType}_${documentId}`;
+      const publicUrl = `${url.origin}/s/${token}`;
+      return jsonRes({ url: publicUrl, token });
+    }
+  }
+
+  // 12c. /public/s/:token and /public/s/:token/:action
+  const publicTokenMatch = path.match(/^\/public\/s\/([^/?]+)(?:\/([^/?]+))?/);
+  if (publicTokenMatch) {
+    const token = publicTokenMatch[1];
+    const subAction = publicTokenMatch[2];
+    const parsed = parseShareToken(token);
+    if (!parsed) {
+      return jsonRes({ type: 'https://salesphere.live/errors/not-found', title: 'Invalid token', status: 404 }, 404);
+    }
+    const docInput = await buildDocInput(parsed.type, parsed.id);
+    if (!docInput) {
+      return jsonRes({ type: 'https://salesphere.live/errors/not-found', title: 'Document not found', status: 404 }, 404);
+    }
+
+    if (subAction === 'pdf') {
+      let html = await renderDocumentHtml(docInput);
+      html += '<script>window.addEventListener("load",()=>setTimeout(()=>window.print(),350));</script>';
+      return new Response(html, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+        },
+      });
+    }
+
+    if (subAction === 'respond' && method === 'POST') {
+      const body = (await request.json().catch(() => ({}))) as any;
+      if (docInput.kind === 'quotation' && body.type) {
+        const newStatus = body.type === 'accept' ? 'accepted' : body.type === 'reject' ? 'rejected' : 'sent';
+        if (db) {
+          try {
+            await db.prepare('UPDATE quotes SET status = ?, updated_at = ? WHERE id = ?').bind(newStatus, new Date().toISOString(), parsed.id).run();
+          } catch (e) {}
+        }
+        const memQt = memoryStore.quotes.find((q) => q.id === parsed.id);
+        if (memQt) memQt.status = newStatus;
+      }
+      return jsonRes({ outcome: 'recorded', status: 'ok' });
+    }
+
+    const html = await renderDocumentHtml(docInput);
+    const grandTotalPaise = docInput.totals.grandTotal;
+    const upiUri = `upi://pay?pa=${encodeURIComponent(DEFAULT_HOPEPITOME_COMPANY.upiId || 'service@hopepitome')}&pn=${encodeURIComponent(DEFAULT_HOPEPITOME_COMPANY.legalName)}&am=${(grandTotalPaise / 100).toFixed(2)}&cu=INR`;
+    let qrSvg = '';
+    try {
+      qrSvg = await upiQrSvg(upiUri);
+    } catch (e) {}
+
+    const viewType = docInput.kind === 'quotation' ? 'quote' : docInput.kind === 'order' ? 'order' : 'invoice';
+    return jsonRes({
+      type: viewType,
+      companyName: DEFAULT_HOPEPITOME_COMPANY.legalName,
+      companyPhone: DEFAULT_HOPEPITOME_COMPANY.phone,
+      poweredBy: true,
+      html,
+      number: docInput.number,
+      validUntil: docInput.validUntil,
+      totals: docInput.totals,
+      actions: docInput.kind === 'quotation' ? ['accept', 'changes', 'reject'] : undefined,
+      balanceDue: docInput.payment?.balance,
+      paid: (docInput.payment?.balance ?? 0) === 0,
+      upi: {
+        uri: upiUri,
+        amount: grandTotalPaise,
+        qrSvg,
+        vpa: DEFAULT_HOPEPITOME_COMPANY.upiId || 'service@hopepitome',
+      },
+    });
+  }
+
 
   // 13. /admin/company (Requirement 4)
   if (path === '/admin/company' || path === '/admin/company/') {

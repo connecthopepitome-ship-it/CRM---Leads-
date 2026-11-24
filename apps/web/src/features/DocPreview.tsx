@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { Skeleton } from '../ui';
 
-export function DocPreview({ type, id, version }: { type: 'quote' | 'invoice' | 'receipt' | 'credit_note'; id: string; version?: number }) {
+export function DocPreview({ type, id, version }: { type: 'quote' | 'order' | 'invoice' | 'receipt' | 'credit_note'; id: string; version?: number }) {
   const q = useQuery({
     queryKey: ['preview', type, id, version],
     queryFn: async () => {

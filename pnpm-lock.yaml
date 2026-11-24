@@ -272,6 +272,9 @@ importers:
       '@ss/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@ss/doc-templates':
+        specifier: workspace:*
+        version: link:../../packages/doc-templates
       '@ss/domain':
         specifier: workspace:*
         version: link:../../packages/domain

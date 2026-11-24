@@ -8,6 +8,7 @@ import { useAppConfig } from '../lib/appConfig';
 import { useAuth } from '../lib/auth';
 import { date, money } from '../lib/format';
 import { useAction } from '../features/hooks';
+import { DocPreview } from '../features/DocPreview';
 import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, Field, KeyValue, LinkButton, PageHeader, SelectField, Skeleton, Table, Textarea, cx, toast } from '../ui';
 
 interface OrderLine { id: string; kind?: string; description: string; qty: number; invoicedQty?: number; pendingQty: number; unit?: string }
@@ -42,6 +43,10 @@ export default function OrderDetail() {
   });
   const invoice = useAction(() => post<{ id: string }>('/invoices', { type: cfg?.gstRegistered === false ? 'bill_of_supply' : 'tax_invoice', orderId: id }), [['order', id], ['sales']], (r) => nav(`/sales/invoices/${r.id}`));
 
+  const openPdf = () => {
+    window.open(`/api/v1/documents/order/${id}/pdf`, '_blank', 'noopener');
+  };
+
   if (q.isLoading) return <Skeleton rows={6} />;
   const is404 = !q.data || (q.error as any)?.status === 404 || (q.error as any)?.code === 'NOT_FOUND';
   if (is404) {
@@ -62,6 +67,7 @@ export default function OrderDetail() {
   return (
     <>
       <PageHeader back="/sales?tab=orders" title={o.number ? `Order ${o.number}` : 'Order'} subtitle={<><Link className="underline" to={`/customers/${o.customerId}`}>{o.customerName ?? 'Customer'}</Link> · <Badge status={o.status}>{LABEL[o.status] ?? o.status}</Badge></>} actions={<>
+        <Button variant="secondary" onClick={openPdf}>PDF / Print</Button>
         {pending && perm('invoice:create') && !['cancelled', 'closed', 'on_hold'].includes(o.status) && <Button busy={invoice.isPending} onClick={() => invoice.mutate(undefined)}>Create invoice for pending items</Button>}
         {perm('order:status') && moves.length > 0 && <Button variant="secondary" onClick={() => setNext(moves[0]!)}>Change status</Button>}
       </>} />
@@ -154,6 +160,16 @@ export default function OrderDetail() {
               { key: 'grandTotal', label: 'Total', align: 'right', render: (i) => money(i?.grandTotal ?? 0) },
               { key: 'balanceDue', label: 'Balance', align: 'right', render: (i) => money(i?.balanceDue ?? 0) },
             ]} />
+          </div>
+        </Card>
+
+        {/* Live Document Preview */}
+        <Card title="Document Preview" className="lg:col-span-3 w-full min-w-0 max-w-full">
+          <div className="w-full flex justify-end pb-3">
+            <Button variant="secondary" onClick={openPdf} size="sm">Open Printable PDF</Button>
+          </div>
+          <div className="w-full overflow-hidden rounded-xl border border-[#DCE7D9] bg-white p-2">
+            <DocPreview type="order" id={id} />
           </div>
         </Card>
       </div>

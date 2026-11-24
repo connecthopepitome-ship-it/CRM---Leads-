@@ -162,6 +162,10 @@ export default function QuoteDetail() {
     }
   };
 
+  const openPdf = () => {
+    window.open(`/api/v1/documents/quote/${id}/pdf`, '_blank', 'noopener');
+  };
+
   const remove = async () => {
     if (!confirm('Delete this draft?')) return;
     await api(`/quotes/${id}`, { method: 'DELETE' }).then(() => nav('/sales')).catch(errorToast);
@@ -258,6 +262,10 @@ export default function QuoteDetail() {
             </Button>
           )}
           {sent && d.isLatest && <Button variant="secondary" busy={revise.isPending} onClick={() => revise.mutate(undefined)}>Revise</Button>}
+          <Button variant="secondary" onClick={openPdf} className="flex items-center gap-1.5 font-medium">
+            <FileText size={14} className="text-[#3D7952]" />
+            <span>PDF / Print</span>
+          </Button>
           {sent && <Button variant="ghost" onClick={() => void copyLink()}>Copy link</Button>}
           {(d.status === 'accepted' || (sent && d.isLatest)) && perm('invoice:create') && (
             <Button onClick={() => handleCreateInvoice()} className="bg-[#3D7952] text-white">
@@ -296,6 +304,14 @@ export default function QuoteDetail() {
               <span>Edit Quote</span>
             </LinkButton>
           )}
+          <Button
+            variant="secondary"
+            onClick={openPdf}
+            className="w-full justify-center text-xs py-2 font-semibold"
+          >
+            <FileText size={13} className="mr-1.5 text-[#3D7952]" />
+            <span>PDF / Print</span>
+          </Button>
           <Button
             variant="secondary"
             onClick={() => void copyLink()}

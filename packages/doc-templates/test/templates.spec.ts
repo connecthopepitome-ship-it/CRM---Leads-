@@ -45,4 +45,52 @@ describe('document templates', () => {
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;');
   });
+
+  it('renders sales order with Hopepitome default branding and styling', async () => {
+    const html = await renderDocumentHtml({
+      kind: 'order',
+      number: 'SO/26-27/0002',
+      date: '2026-11-24',
+      expectedDelivery: '2026-12-15',
+      company: {
+        legalName: 'HopEpitome Strategics',
+        address: 'Bangalore, Karnataka',
+        stateCode: '29',
+        website: 'hopepitome.com',
+      },
+      billTo: { name: 'Sharma Textiles', address: 'Bangalore' },
+      lines: [line(1)],
+      totals: { subTotal: 100_000, discountTotal: 0, taxable: 100_000, cgst: 9_000, sgst: 9_000, igst: 0, roundOff: 0, grandTotal: 118_000, inWords: 'Rupees One Thousand One Hundred Eighty Only' },
+    });
+    expect(html).toContain('SALES ORDER');
+    expect(html).toContain('SO/26-27/0002');
+    expect(html).toContain('HopEpitome Strategics');
+    expect(html).toContain('hopepitome.com');
+  });
+
+  it('renders payment receipt with allocation details', async () => {
+    const html = await renderDocumentHtml({
+      kind: 'receipt',
+      number: 'REC/26-27/0001',
+      date: '2026-11-24',
+      company: {
+        legalName: 'HopEpitome Strategics',
+        address: 'Bangalore, Karnataka',
+        stateCode: '29',
+      },
+      billTo: { name: 'Sharma Textiles' },
+      lines: [],
+      totals: { subTotal: 0, discountTotal: 0, taxable: 0, cgst: 0, sgst: 0, igst: 0, roundOff: 0, grandTotal: 50_000, inWords: 'Rupees Five Hundred Only' },
+      receipt: {
+        amount: 50_000,
+        mode: 'upi',
+        reference: 'UPI123456789',
+        tds: 0,
+        allocations: [{ number: 'INV/26-27/0001', amount: 50_000 }],
+      },
+    });
+    expect(html).toContain('PAYMENT RECEIPT');
+    expect(html).toContain('INV/26-27/0001');
+    expect(html).toContain('UPI123456789');
+  });
 });

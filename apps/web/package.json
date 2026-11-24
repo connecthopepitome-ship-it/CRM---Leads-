@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@ss/contracts": "workspace:*",
+    "@ss/doc-templates": "workspace:*",
     "@ss/domain": "workspace:*",
     "@tanstack/react-query": "^5.62.0",
     "idb": "^8.0.0",
