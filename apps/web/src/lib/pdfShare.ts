@@ -25,25 +25,54 @@ const TYPE_NAMES: Record<DocShareOptions['type'], string> = {
  * Converts HopEpitome HTML into a high-resolution A4 PDF Blob
  */
 export async function generatePdfBlobFromHtml(html: string): Promise<Blob> {
+  // Parse full HTML document to extract styling and sheet content
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const styleEls = doc.querySelectorAll('style, link[rel="stylesheet"]');
+  const sheetEl = doc.querySelector('.doc-sheet') || doc.body.firstElementChild || doc.body;
+
+  // Staging container positioned at (0, 0) behind viewport so html2canvas captures full coordinates without clipping
   const container = document.createElement('div');
   container.id = 'hop-pdf-staging';
   container.style.position = 'fixed';
-  container.style.left = '-10000px';
-  container.style.top = '0';
-  container.style.width = '210mm';
+  container.style.left = '0px';
+  container.style.top = '0px';
+  container.style.width = '794px'; // 210mm at 96 DPI
+  container.style.minHeight = '1123px'; // 297mm at 96 DPI
   container.style.background = '#ffffff';
-  container.innerHTML = html;
+  container.style.zIndex = '-99999';
+  container.style.pointerEvents = 'none';
+  container.style.opacity = '1';
+
+  // Append all style definitions and document sheet
+  styleEls.forEach((s) => container.appendChild(s.cloneNode(true)));
+  container.appendChild(sheetEl.cloneNode(true));
   document.body.appendChild(container);
 
   try {
+    // Wait for fonts and any SVG/images to render
+    if (document.fonts && document.fonts.ready) {
+      await document.fonts.ready;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const target = (container.querySelector('.doc-sheet') as HTMLElement) || container;
     const opt = {
       margin: 0,
       filename: 'document.pdf',
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        letterRendering: true,
+        windowWidth: 794,
+        scrollY: 0,
+        scrollX: 0,
+      },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     };
-    const blob: Blob = await (html2pdf() as any).from(container).set(opt).output('blob');
+
+    const blob: Blob = await (html2pdf() as any).from(target).set(opt).output('blob');
     return blob;
   } finally {
     if (document.body.contains(container)) {
@@ -157,3 +186,4 @@ export async function sharePdfViaWhatsApp({
     window.open(`/api/v1/documents/${type}/${id}/pdf`, '_blank', 'noopener');
   }
 }
+
