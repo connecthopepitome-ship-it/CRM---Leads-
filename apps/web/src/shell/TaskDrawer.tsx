@@ -1,8 +1,11 @@
 import { useState, useEffect, type FormEvent } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
   X, Check, Plus, Clock, Phone, FileText, Calendar, 
   ChevronDown, ChevronUp, Trash2, AlertCircle, ChevronLeft, ChevronRight, CheckSquare 
 } from 'lucide-react';
+import { get, post, patch, del } from '../lib/api';
+import { dateTime } from '../lib/format';
 import { toast } from '../ui';
 
 export interface Task {
@@ -19,93 +22,6 @@ export interface Task {
   completedAt?: string;
 }
 
-const DEFAULT_TASKS: Task[] = [
-  {
-    id: 'task-1',
-    title: 'Follow up with Fatima Khan',
-    dueCategory: 'today',
-    dueTime: '10:00 AM',
-    iconType: 'phone',
-    completed: false,
-    contact: 'Fatima Khan',
-    company: 'Khan Enterprises',
-    priority: 'high',
-    notes: 'Discuss quotation QT/26-27/0004 for 10 units enterprise license and finalize delivery timeline.',
-  },
-  {
-    id: 'task-2',
-    title: 'Send revised quotation',
-    dueCategory: 'today',
-    dueTime: '11:30 AM',
-    iconType: 'document',
-    completed: false,
-    contact: 'Iyer Consultancy',
-    company: 'Iyer & Associates',
-    priority: 'medium',
-    notes: 'Include 5% volume discount for annual advance payment term.',
-  },
-  {
-    id: 'task-3',
-    title: 'Call Iyer Consultancy',
-    dueCategory: 'today',
-    dueTime: '04:00 PM',
-    iconType: 'phone',
-    completed: false,
-    contact: 'Mr. Subramanian Iyer',
-    company: 'Iyer Consultancy',
-    priority: 'normal',
-    notes: 'Check if purchase committee approval was received.',
-  },
-  {
-    id: 'task-4',
-    title: 'Product demo with Apex Global',
-    dueCategory: 'upcoming',
-    dueTime: 'Tomorrow, 11:00 AM',
-    iconType: 'calendar',
-    completed: false,
-    contact: 'Rajesh Verma',
-    company: 'Apex Global Logistics',
-    priority: 'high',
-    notes: 'Walk through customized sales pipeline and quotation approval hierarchy.',
-  },
-  {
-    id: 'task-5',
-    title: 'Review monthly billing pipeline',
-    dueCategory: 'upcoming',
-    dueTime: 'Thu, 2:00 PM',
-    iconType: 'document',
-    completed: false,
-    contact: 'Accounts Team',
-    priority: 'medium',
-    notes: 'Reconcile collected amounts against month target.',
-  },
-  {
-    id: 'task-6',
-    title: 'Contract sign-off with Nair Foods',
-    dueCategory: 'upcoming',
-    dueTime: 'Fri, 4:30 PM',
-    iconType: 'document',
-    completed: false,
-    contact: 'Anand Nair',
-    company: 'Nair Foods Pvt Ltd',
-    priority: 'high',
-    notes: 'Execute service level agreement for annual maintenance.',
-  },
-  {
-    id: 'task-7',
-    title: 'Client onboarding call with Deepa Reddy',
-    dueCategory: 'today',
-    dueTime: 'Yesterday, 3:00 PM',
-    iconType: 'phone',
-    completed: true,
-    contact: 'Deepa Reddy',
-    company: 'Reddy Tech',
-    priority: 'normal',
-    notes: 'Welcome kickoff meeting conducted successfully.',
-    completedAt: '3:45 PM',
-  },
-];
-
 interface TaskDrawerProps {
   open: boolean;
   onClose: () => void;
@@ -113,14 +29,42 @@ interface TaskDrawerProps {
 }
 
 export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
-  const [tasks, setTasks] = useState<Task[]>(() => {
+  const qc = useQueryClient();
+
+  // Clear demo localStorage tasks
+  useEffect(() => {
     try {
-      const saved = localStorage.getItem('ss_tasks');
-      const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) ? parsed : DEFAULT_TASKS;
-    } catch {
-      return DEFAULT_TASKS;
-    }
+      localStorage.removeItem('ss_tasks');
+    } catch {}
+  }, []);
+
+  const q = useQuery({
+    queryKey: ['follow-ups'],
+    queryFn: () => get<{ items: any[] }>('/follow-ups'),
+  });
+
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+
+  const tasks: Task[] = (q.data?.items ?? []).map((fu: any) => {
+    const isCompleted = fu.status === 'completed' || fu.completed;
+    const dueD = fu.dueAt ? new Date(fu.dueAt) : now;
+    const isTodayOrPast = dueD.toISOString().split('T')[0] <= todayStr;
+    const dueCategory: 'today' | 'upcoming' = isTodayOrPast ? 'today' : 'upcoming';
+    const iconType = fu.type === 'call' ? 'phone' : (fu.type === 'email' ? 'document' : 'clock');
+
+    return {
+      id: fu.id,
+      title: fu.title || fu.note || `${String(fu.type || 'call').toUpperCase()} follow-up`,
+      dueCategory,
+      dueTime: dateTime(fu.dueAt),
+      iconType,
+      completed: isCompleted,
+      contact: fu.partyName || fu.customer,
+      priority: 'normal',
+      notes: fu.note || undefined,
+      completedAt: fu.completedAt ? dateTime(fu.completedAt) : undefined,
+    };
   });
 
   const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'completed'>('today');
@@ -134,15 +78,6 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
   const [newNotes, setNewNotes] = useState('');
   const [newPriority, setNewPriority] = useState<'high' | 'medium' | 'normal'>('normal');
   const [newCategory, setNewCategory] = useState<'today' | 'upcoming'>('today');
-
-  // Persist tasks in localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('ss_tasks', JSON.stringify(tasks));
-    } catch {
-      // ignore
-    }
-  }, [tasks]);
 
   // Lock body scroll on mobile when drawer is open
   useEffect(() => {
@@ -165,55 +100,63 @@ export function TaskDrawer({ open, onClose, onToggle }: TaskDrawerProps) {
     return t.completed;
   });
 
-  const toggleTask = (id: string, e?: React.MouseEvent) => {
+  const toggleTask = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id === id) {
-          const next = !t.completed;
-          toast(next ? `Done: "${t.title}"` : `Reopened: "${t.title}"`);
-          return {
-            ...t,
-            completed: next,
-            completedAt: next ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : undefined,
-          };
-        }
-        return t;
-      })
-    );
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+    const nextStatus = task.completed ? 'pending' : 'completed';
+    try {
+      await patch(`/follow-ups/${id}`, { status: nextStatus });
+      await qc.invalidateQueries({ queryKey: ['follow-ups'] });
+      toast(nextStatus === 'completed' ? `Done: "${task.title}"` : `Reopened: "${task.title}"`, 'success');
+    } catch {
+      toast('Failed to update task status', 'error');
+    }
   };
 
-  const handleAddTask = (e: FormEvent) => {
+  const handleAddTask = async (e: FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
 
-    const newTask: Task = {
-      id: `task-${Date.now()}`,
-      title: newTitle.trim(),
-      dueCategory: newCategory,
-      dueTime: newTime.trim() || (newCategory === 'today' ? '5:00 PM' : 'Tomorrow, 10:00 AM'),
-      iconType: 'clock',
-      completed: false,
-      contact: newContact.trim() || undefined,
-      priority: newPriority,
-      notes: newNotes.trim() || undefined,
-    };
+    try {
+      const dueD = new Date();
+      if (newCategory === 'upcoming') {
+        dueD.setDate(dueD.getDate() + 1);
+      }
+      dueD.setHours(11, 0, 0, 0);
 
-    setTasks((prev) => [newTask, ...prev]);
-    setIsAdding(false);
-    setNewTitle('');
-    setNewTime('');
-    setNewContact('');
-    setNewNotes('');
-    setNewPriority('normal');
-    setActiveTab(newCategory);
-    toast(`Task created: "${newTask.title}"`);
+      await post('/follow-ups', {
+        recordType: 'lead',
+        recordId: 'lead-1',
+        dueAt: dueD.toISOString(),
+        type: 'call',
+        note: newTitle.trim(),
+        partyName: newContact.trim() || 'General Task',
+      });
+
+      await qc.invalidateQueries({ queryKey: ['follow-ups'] });
+      setIsAdding(false);
+      setNewTitle('');
+      setNewTime('');
+      setNewContact('');
+      setNewNotes('');
+      setNewPriority('normal');
+      setActiveTab(newCategory);
+      toast(`Task created: "${newTitle.trim()}"`, 'success');
+    } catch {
+      toast('Failed to create task', 'error');
+    }
   };
 
-  const deleteTask = (id: string, e?: React.MouseEvent) => {
+  const deleteTask = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    setTasks((prev) => prev.filter((t) => t.id !== id));
-    toast('Task removed');
+    try {
+      await del(`/follow-ups/${id}`);
+      await qc.invalidateQueries({ queryKey: ['follow-ups'] });
+      toast('Task removed', 'info');
+    } catch {
+      toast('Failed to delete task', 'error');
+    }
   };
 
   return (

@@ -127,6 +127,24 @@ CREATE TABLE IF NOT EXISTS timeline (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS follow_ups (
+  id TEXT PRIMARY KEY,
+  record_type TEXT NOT NULL,
+  record_id TEXT NOT NULL,
+  party_name TEXT,
+  type TEXT NOT NULL DEFAULT 'call',
+  due_at TEXT NOT NULL,
+  note TEXT,
+  assignee TEXT DEFAULT 'Owner Admin',
+  status TEXT NOT NULL DEFAULT 'pending',
+  completed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_follow_ups_record ON follow_ups(record_type, record_id);
+CREATE INDEX IF NOT EXISTS idx_follow_ups_due ON follow_ups(due_at);
+
 CREATE TABLE IF NOT EXISTS notifications (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,

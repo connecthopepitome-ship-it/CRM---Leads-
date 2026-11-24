@@ -1,9 +1,9 @@
 /** CMP-027 ActionBar, SCR-006 call outcome sheet, SCR-007 composer, notes, follow-ups, CMP-028 timeline (FR-035, FR-044 – FR-049, FR-081). */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Mail, MapPin, MessageCircle, Phone, StickyNote, CalendarPlus } from 'lucide-react';
+import { Mail, MapPin, MessageCircle, Phone, StickyNote, CalendarPlus, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { mapsLink } from '@ss/domain';
-import { ApiError, get, post } from '../lib/api';
+import { ApiError, get, post, patch, del } from '../lib/api';
 import { dateTime, uid } from '../lib/format';
 import { enqueue, onOutboxChange, pending, type OutboxItem } from '../lib/outbox';
 import { Badge, Button, Dialog, EmptyState, Field, Select, SelectField, Skeleton, Textarea, TextField, toast } from '../ui';
@@ -57,12 +57,17 @@ export function ActionBar({ rec }: { rec: RecordRef }) {
     } catch (e) {
       if (!(e instanceof ApiError && e.code === 'OFFLINE')) errorToast(e);
     }
-    const mobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
-    if (mobile && rec.phone) window.location.href = `tel:${rec.phone}`;
-    else {
-      setShowNumber(true); // FR-044 AC4 desktop: show number + copy, still offer the outcome sheet
-      setSheet('outcome');
+    // Open tel: on all devices (mobile dialer, desktop Phone Link / FaceTime)
+    if (rec.phone) {
+      const cleanPhone = rec.phone.replace(/[^\d+]/g, '');
+      const a = document.createElement('a');
+      a.href = `tel:${cleanPhone}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
+    setShowNumber(true);
+    setSheet('outcome');
   };
 
   const btn = 'flex min-h-touch flex-1 flex-col items-center justify-center gap-1 rounded-md border border-border bg-surface px-2 text-xs font-medium hover:bg-surface-2 disabled:opacity-50';
@@ -95,6 +100,14 @@ export function ActionBar({ rec }: { rec: RecordRef }) {
 
 function CallOutcomeSheet({ rec, activityId, showNumber, onClose }: { rec: RecordRef; activityId: string; showNumber: boolean; onClose(saved: boolean): void }) {
   const outcomes = useOptions('callOutcomes');
+  const defaultOutcomes = [
+    { id: 'connected', label: 'Connected' },
+    { id: 'no_answer', label: 'No answer' },
+    { id: 'busy', label: 'Busy' },
+    { id: 'wrong_number', label: 'Wrong number' },
+    { id: 'call_back_later', label: 'Call back later' },
+  ];
+  const outcomeList = outcomes.data && outcomes.data.length > 0 ? outcomes.data : defaultOutcomes;
   const [outcomeId, setOutcomeId] = useState('');
   const [note, setNote] = useState('');
   const [fu, setFu] = useState('');
@@ -105,7 +118,7 @@ function CallOutcomeSheet({ rec, activityId, showNumber, onClose }: { rec: Recor
     try {
       if (!navigator.onLine) throw new ApiError(0, 'OFFLINE', 'offline');
       await post(`/activities/${activityId}/outcome`, payload);
-      toast('Call outcome saved');
+      toast('Call outcome saved', 'success');
     } catch (e) {
       if (e instanceof ApiError && e.code === 'OFFLINE') {
         await enqueue('call_outcome', { activityId, recordType: rec.recordType, recordId: rec.recordId, ...payload });
@@ -126,15 +139,15 @@ function CallOutcomeSheet({ rec, activityId, showNumber, onClose }: { rec: Recor
       <fieldset className="mb-3">
         <legend className="mb-2 text-sm font-medium">Outcome</legend>
         <div className="grid grid-cols-2 gap-2">
-          {outcomes.data?.map((o) => (
-            <label key={o.id} className={`flex min-h-touch cursor-pointer items-center gap-2 rounded-md border px-3 text-sm ${outcomeId === o.id ? 'border-primary bg-primary-subtle' : 'border-border'}`}>
+          {outcomeList.map((o) => (
+            <label key={o.id} className={`flex min-h-touch cursor-pointer items-center gap-2 rounded-md border px-3 text-sm ${outcomeId === o.id ? 'border-primary bg-primary-subtle font-medium text-primary' : 'border-border'}`}>
               <input type="radio" name="outcome" value={o.id} checked={outcomeId === o.id} onChange={() => setOutcomeId(o.id)} />
               {o.label}
             </label>
           ))}
         </div>
       </fieldset>
-      <Field label="Note">{(id) => <Textarea id={id} value={note} onChange={(e) => setNote(e.target.value)} />}</Field>
+      <Field label="Note">{(id) => <Textarea id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Summary of the conversation..." />}</Field>
       <div className="mt-3"><TextField label="Next follow-up (optional)" type="datetime-local" value={fu} onChange={(e) => setFu(e.target.value)} /></div>
     </Dialog>
   );
@@ -142,19 +155,26 @@ function CallOutcomeSheet({ rec, activityId, showNumber, onClose }: { rec: Recor
 
 function WhatsAppComposer({ rec, onClose }: { rec: RecordRef; onClose(): void }) {
   const templates = useOptions('messageTemplates');
-  const wa = (templates.data ?? []).filter((t) => t.data.channel === 'whatsapp');
+  const wa = (templates.data ?? []).filter((t: any) => (t?.data?.channel || t?.channel) === 'whatsapp');
   const [templateId, setTemplateId] = useState('');
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    const t = wa.find((x) => x.id === templateId);
-    if (t) setText(String(t.data.body ?? '').replace(/\{\{\s*name\s*\}\}/g, rec.name));
+    const t: any = wa.find((x: any) => x.id === templateId);
+    if (t) {
+      const raw = String(t.data?.body || t.body || '');
+      const filled = raw
+        .replace(/\{\{\s*name\s*\}\}|\{\s*name\s*\}/gi, rec.name)
+        .replace(/\{\{\s*company\s*\}\}|\{\s*company\s*\}/gi, (rec as any).company || rec.name);
+      setText(filled);
+    }
   }, [templateId]); // eslint-disable-line react-hooks/exhaustive-deps
   const open = async () => {
     setBusy(true);
     try {
       const r = await post<{ url: string }>('/messages/whatsapp', { recordType: rec.recordType, recordId: rec.recordId, text });
       window.open(r.url, '_blank', 'noopener');
+      toast('WhatsApp opened and activity logged', 'success');
       onClose();
     } catch (e) {
       errorToast(e);
@@ -164,39 +184,105 @@ function WhatsAppComposer({ rec, onClose }: { rec: RecordRef; onClose(): void })
   };
   return (
     <Dialog open sheet onClose={onClose} title="WhatsApp message" footer={<Button busy={busy} disabled={!text.trim()} onClick={() => void open()}>Open WhatsApp</Button>}>
-      <SelectField label="Template" placeholder="No template" value={templateId} onChange={(e) => setTemplateId(e.target.value)} options={wa.map((t) => ({ value: t.id, label: t.label }))} />
-      <div className="mt-3"><Field label="Message">{(id) => <Textarea id={id} rows={5} value={text} onChange={(e) => setText(e.target.value)} />}</Field></div>
-      <p className="mt-2 text-xs text-muted">We log that WhatsApp was opened; delivery can’t be confirmed.</p>
+      <SelectField label="Template" placeholder="Choose a template (optional)" value={templateId} onChange={(e) => setTemplateId(e.target.value)} options={wa.map((t: any) => ({ value: t.id, label: t.label }))} />
+      <div className="mt-3"><Field label="Message">{(id) => <Textarea id={id} rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder="Type WhatsApp message..." />}</Field></div>
+      <p className="mt-2 text-xs text-muted">Opens WhatsApp Web or App with the pre-filled message.</p>
     </Dialog>
   );
 }
 
 function EmailComposer({ rec, onClose }: { rec: RecordRef; onClose(): void }) {
+  const templates = useOptions('messageTemplates');
+  const emailTemplates = (templates.data ?? []).filter((t: any) => (t?.data?.channel || t?.channel) === 'email');
+  const [templateId, setTemplateId] = useState('');
   const [to, setTo] = useState(rec.email ?? '');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
-  const [notConnected, setNotConnected] = useState(false);
-  const send = async () => {
+  const [showSaleSphereSend, setShowSaleSphereSend] = useState(false);
+
+  useEffect(() => {
+    const t: any = emailTemplates.find((x: any) => x.id === templateId);
+    if (t) {
+      const rawSubject = String(t.data?.subject || t.subject || 'Proposal from HopEpitome Strategics');
+      const rawBody = String(t.data?.body || t.body || '');
+      setSubject(rawSubject.replace(/\{\{\s*name\s*\}\}|\{\s*name\s*\}/gi, rec.name));
+      setBody(rawBody.replace(/\{\{\s*name\s*\}\}|\{\s*name\s*\}/gi, rec.name).replace(/\{\{\s*company\s*\}\}|\{\s*company\s*\}/gi, (rec as any).company || rec.name));
+    }
+  }, [templateId]);
+
+  // Primary action: Open device default mail app
+  const openMailApp = async () => {
     setBusy(true);
     try {
-      await post('/emails', { recordType: rec.recordType, recordId: rec.recordId, to: to.split(/[,;\s]+/).filter(Boolean), subject, html: body.replace(/\n/g, '<br>') });
-      toast('Email queued — it will appear on the timeline once sent');
+      await post('/activities', {
+        recordType: rec.recordType,
+        recordId: rec.recordId,
+        type: 'email',
+        summary: `Email composed: ${subject || 'No subject'}`,
+        note: subject + (body ? '\n\n' + body : ''),
+      });
+      const mailtoUrl = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.location.href = mailtoUrl;
+      toast('Opened in default mail app and logged to timeline', 'info');
       onClose();
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'GOOGLE_NOT_CONNECTED') setNotConnected(true);
-      else errorToast(e);
+      errorToast(e);
     } finally {
       setBusy(false);
     }
   };
+
+  // Secondary action: Send via SaleSphere Gmail integration
+  const sendViaSaleSphere = async () => {
+    setBusy(true);
+    try {
+      await post('/emails', { recordType: rec.recordType, recordId: rec.recordId, to: to.split(/[,;\s]+/).filter(Boolean), subject, html: body.replace(/\n/g, '<br>') });
+      toast('Email sent via SaleSphere');
+      onClose();
+    } catch (e) {
+      errorToast(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <Dialog open sheet onClose={onClose} title="Email" footer={notConnected ? <a className="text-sm text-primary underline" href={`mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`}>Open in my mail app</a> : <Button busy={busy} disabled={!to || !subject} onClick={() => void send()}>Send email</Button>}>
-      {notConnected && <p className="mb-3 rounded-md bg-warning-subtle p-2 text-sm text-warning">Email not set up — ask your admin. You can still use your own mail app.</p>}
+    <Dialog
+      open
+      sheet
+      onClose={onClose}
+      title="Compose Email"
+      footer={
+        <div className="flex w-full items-center justify-between gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setShowSaleSphereSend(!showSaleSphereSend)}>
+            {showSaleSphereSend ? 'Back to default' : 'Send via SaleSphere (Gmail)'}
+          </Button>
+          {showSaleSphereSend ? (
+            <Button busy={busy} disabled={!to || !subject} onClick={() => void sendViaSaleSphere()}>
+              Send via SaleSphere
+            </Button>
+          ) : (
+            <Button busy={busy} disabled={!to} onClick={() => void openMailApp()}>
+              Open Mail App
+            </Button>
+          )}
+        </div>
+      }
+    >
       <div className="flex flex-col gap-3">
+        {emailTemplates.length > 0 && (
+          <SelectField
+            label="Template"
+            placeholder="Choose a template (optional)"
+            value={templateId}
+            onChange={(e) => setTemplateId(e.target.value)}
+            options={emailTemplates.map((t: any) => ({ value: t.id, label: t.label }))}
+          />
+        )}
         <TextField label="To" type="email" value={to} onChange={(e) => setTo(e.target.value)} required />
-        <TextField label="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} required />
-        <Field label="Message">{(id) => <Textarea id={id} rows={6} value={body} onChange={(e) => setBody(e.target.value)} />}</Field>
+        <TextField label="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Email subject" />
+        <Field label="Message">{(id) => <Textarea id={id} rows={6} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Type your message..." />}</Field>
       </div>
     </Dialog>
   );
@@ -270,7 +356,10 @@ function FollowUpSheet({ rec, onClose }: { rec: RecordRef; onClose(): void }) {
 const TYPE_LABEL: Record<string, string> = { call: 'Call', whatsapp: 'WhatsApp', email: 'Email', note: 'Note', stage: 'Stage', assign: 'Assignment', system: 'Update', quote: 'Quotation', invoice: 'Invoice', payment: 'Payment', file: 'File', visit: 'Visit' };
 
 export function Timeline({ recordType, recordId }: { recordType: 'lead' | 'customer'; recordId: string }) {
+  const qc = useQueryClient();
   const [type, setType] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
   const q = useQuery({ queryKey: ['timeline', recordId, type], queryFn: () => get<{ items: Activity[] }>(`/timeline/${recordType}/${recordId}?limit=100${type ? `&types=${type}` : ''}`), enabled: Boolean(recordId && recordId !== 'undefined') });
   const [queued, setQueued] = useState<OutboxItem[]>([]);
   useEffect(() => {
@@ -278,6 +367,29 @@ export function Timeline({ recordType, recordId }: { recordType: 'lead' | 'custo
     load();
     return onOutboxChange(load);
   }, [recordId]);
+
+  const handleDelete = async (actId: string) => {
+    if (!confirm('Delete this note?')) return;
+    try {
+      await del(`/activities/${actId}`);
+      toast('Note deleted', 'success');
+      void qc.invalidateQueries({ queryKey: ['timeline', recordId] });
+    } catch (e) {
+      errorToast(e);
+    }
+  };
+
+  const handleSaveEdit = async (actId: string) => {
+    try {
+      await patch(`/activities/${actId}`, { note: editText });
+      toast('Note updated', 'success');
+      setEditingId(null);
+      void qc.invalidateQueries({ queryKey: ['timeline', recordId] });
+    } catch (e) {
+      errorToast(e);
+    }
+  };
+
   return (
     <section aria-labelledby="tl-h">
       <div className="mb-2 flex items-center justify-between">
@@ -302,8 +414,41 @@ export function Timeline({ recordType, recordId }: { recordType: 'lead' | 'custo
                 {a.outcomeLabel && <Badge tone="info">{a.outcomeLabel}</Badge>}
                 {a.status === 'pending' && a.type === 'call' && <span className="text-xs text-warning">Outcome not recorded</span>}
                 <span className="ml-auto text-xs text-muted">{a.userName} · {dateTime(a.occurredAt)}</span>
+                {a.type === 'note' && (
+                  <div className="flex items-center gap-1.5 ml-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingId(a.id);
+                        setEditText(a.note || '');
+                      }}
+                      className="p-1 text-[#778477] hover:text-[#3D7952] rounded"
+                      title="Edit note"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(a.id)}
+                      className="p-1 text-[#778477] hover:text-red-600 rounded"
+                      title="Delete note"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                )}
               </div>
-              {a.note && <p className="mt-1 whitespace-pre-wrap">{a.note}</p>}
+              {editingId === a.id ? (
+                <div className="mt-2 space-y-2">
+                  <Textarea rows={3} value={editText} onChange={(e) => setEditText(e.target.value)} />
+                  <div className="flex justify-end gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => setEditingId(null)}>Cancel</Button>
+                    <Button size="sm" onClick={() => void handleSaveEdit(a.id)}>Save</Button>
+                  </div>
+                </div>
+              ) : (
+                a.note && <p className="mt-1 whitespace-pre-wrap">{a.note}</p>
+              )}
             </li>
           ))}
         </ol>

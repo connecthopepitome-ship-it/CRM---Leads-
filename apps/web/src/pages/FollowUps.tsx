@@ -1,14 +1,14 @@
 /** SCR-008 Follow-ups Calendar Workspace (Grovia-inspired Minimalist SaaS Design System) */
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { get, patch } from '../lib/api';
+import { get, patch, post } from '../lib/api';
 import { dateTime } from '../lib/format';
 import { useAction } from '../features/hooks';
 import { Badge, Button, EmptyState, ErrorState, LinkButton, Skeleton, toast } from '../ui';
 import { 
   ChevronLeft, ChevronRight, Plus, Check, Clock, Calendar, 
-  CheckSquare, Phone, FileText, User 
+  CheckSquare, Phone, FileText, User, AlertCircle 
 } from 'lucide-react';
 
 interface CalendarTask {
@@ -17,103 +17,84 @@ interface CalendarTask {
   customer: string;
   time: string;
   completed: boolean;
+  isOverdue?: boolean;
 }
 
-const SAMPLE_TASKS_BY_DATE: Record<number, CalendarTask[]> = {
-  14: [
-    {
-      id: 'task-14-1',
-      title: 'Follow-up with Rahul Gupta',
-      customer: 'Gupta Steel Traders',
-      time: '10:00 AM',
-      completed: false,
-    },
-    {
-      id: 'task-14-2',
-      title: 'Quotation discussion - Nair Foods',
-      customer: 'Nair Foods Pvt Ltd',
-      time: '02:00 PM',
-      completed: false,
-    },
-    {
-      id: 'task-14-3',
-      title: 'Call Sharma Textiles',
-      customer: 'Sharma Textiles',
-      time: '04:00 PM',
-      completed: false,
-    },
-  ],
-  15: [
-    {
-      id: 'task-15-1',
-      title: 'Contract review with Deepa Reddy',
-      customer: 'Reddy Tech Solutions',
-      time: '11:00 AM',
-      completed: false,
-    },
-    {
-      id: 'task-15-2',
-      title: 'Payment reminder for milestone 2',
-      customer: 'Khan Enterprises',
-      time: '03:30 PM',
-      completed: false,
-    },
-  ],
-  17: [
-    {
-      id: 'task-17-1',
-      title: 'Finalize SLA terms with Mohan Das',
-      customer: 'Das Precision Tools',
-      time: '01:00 PM',
-      completed: false,
-    },
-  ],
-};
-
 export default function FollowUps() {
+  const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
   const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day'>('month');
-  const [selectedDay, setSelectedDay] = useState<number>(14); // 14 Nov matching Grovia Screen 5
+  const [selectedDay, setSelectedDay] = useState<number>(new Date().getDate());
 
-  const [dateTasks, setDateTasks] = useState(SAMPLE_TASKS_BY_DATE);
+  const q = useQuery({
+    queryKey: ['follow-ups'],
+    queryFn: () => get<{ items: any[] }>('/follow-ups'),
+  });
+
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskTime, setNewTaskTime] = useState('11:00 AM');
   const [newTaskCustomer, setNewTaskCustomer] = useState('');
+  const [newTaskType, setNewTaskType] = useState('call');
+
+  // Group real follow-ups from D1 by day of month
+  const allFollowUps = q.data?.items ?? [];
+  const dateTasks: Record<number, CalendarTask[]> = {};
+  allFollowUps.forEach((fu) => {
+    const d = new Date(fu.dueAt);
+    const day = d.getDate();
+    if (!dateTasks[day]) dateTasks[day] = [];
+    const isCompleted = fu.completed || fu.status === 'completed';
+    const isOverdue = !isCompleted && d < new Date();
+    dateTasks[day].push({
+      id: fu.id,
+      title: fu.title || fu.note || `${(fu.type || 'call').toUpperCase()} follow-up`,
+      customer: fu.partyName || fu.customer || 'Client',
+      time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      completed: isCompleted,
+      isOverdue,
+    });
+  });
 
   const currentTasks = dateTasks[selectedDay] || [];
 
-  const toggleTask = (id: string) => {
-    setDateTasks((prev) => ({
-      ...prev,
-      [selectedDay]: (prev[selectedDay] || []).map((t) =>
-        t.id === id ? { ...t, completed: !t.completed } : t
-      ),
-    }));
-    toast('Task status updated');
+  const toggleTask = async (id: string, currentCompleted: boolean) => {
+    try {
+      await patch(`/follow-ups/${id}`, { status: currentCompleted ? 'pending' : 'completed' });
+      await qc.invalidateQueries({ queryKey: ['follow-ups'] });
+      toast('Follow-up updated', 'success');
+    } catch (e: any) {
+      toast('Failed to update follow-up', 'error');
+    }
   };
 
-  const handleAddTask = (e: React.FormEvent) => {
+  const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
 
-    const newTask: CalendarTask = {
-      id: `task-${Date.now()}`,
-      title: newTaskTitle.trim(),
-      customer: newTaskCustomer.trim() || 'General Client',
-      time: newTaskTime || '10:00 AM',
-      completed: false,
-    };
+    try {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const due = new Date(year, month, selectedDay, 11, 0, 0).toISOString();
 
-    setDateTasks((prev) => ({
-      ...prev,
-      [selectedDay]: [...(prev[selectedDay] || []), newTask],
-    }));
+      await post('/follow-ups', {
+        recordType: 'lead',
+        recordId: 'lead-1',
+        dueAt: due,
+        type: newTaskType,
+        note: newTaskTitle.trim(),
+        partyName: newTaskCustomer.trim() || 'Client Follow-up',
+      });
 
-    setIsAddingTask(false);
-    setNewTaskTitle('');
-    setNewTaskCustomer('');
-    toast('Follow-up scheduled');
+      await qc.invalidateQueries({ queryKey: ['follow-ups'] });
+      setIsAddingTask(false);
+      setNewTaskTitle('');
+      setNewTaskCustomer('');
+      toast('Follow-up scheduled', 'success');
+    } catch (e: any) {
+      toast('Failed to create follow-up', 'error');
+    }
   };
 
   // Calendar dates matrix for November 2026 (Nov 1 is Sunday)
@@ -308,29 +289,40 @@ export default function FollowUps() {
                   className={`rounded-xl p-3 border transition-colors ${
                     t.completed
                       ? 'bg-[#1C321F]/60 border-[#2E4E36]/40 opacity-70'
+                      : t.isOverdue
+                      ? 'bg-[#3b1c1c] border-red-500/80 hover:bg-[#482020]'
                       : 'bg-[#1C321F] border-[#2E4E36] hover:bg-[#28492C]'
                   }`}
                 >
                   <div className="flex items-start gap-2.5">
                     <button
                       type="button"
-                      onClick={() => toggleTask(t.id)}
+                      onClick={() => void toggleTask(t.id, t.completed)}
                       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border mt-0.5 transition-colors ${
                         t.completed
                           ? 'border-emerald-400 bg-emerald-500 text-white'
+                          : t.isOverdue
+                          ? 'border-red-400 bg-transparent hover:border-red-300'
                           : 'border-emerald-400/60 bg-transparent hover:border-emerald-300'
                       }`}
                     >
                       {t.completed && <Check size={11} strokeWidth={3} />}
                     </button>
                     <div className="min-w-0 flex-1">
-                      <p
-                        className={`text-xs font-semibold ${
-                          t.completed ? 'line-through text-emerald-300/60' : 'text-white'
-                        }`}
-                      >
-                        {t.title}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <p
+                          className={`text-xs font-semibold ${
+                            t.completed ? 'line-through text-emerald-300/60' : 'text-white'
+                          }`}
+                        >
+                          {t.title}
+                        </p>
+                        {t.isOverdue && !t.completed && (
+                          <span className="rounded bg-red-600/80 px-1 py-0.2 text-[9px] font-bold text-white uppercase tracking-wider">
+                            Overdue
+                          </span>
+                        )}
+                      </div>
                       <div className="mt-1 flex items-center justify-between text-[10px] text-emerald-300/80">
                         <span className="flex items-center gap-1 font-mono">
                           <Clock size={10} className="text-emerald-400" />

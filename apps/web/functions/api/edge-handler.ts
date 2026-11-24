@@ -722,6 +722,64 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     return jsonRes({ ok: ids, skipped: [] });
   }
 
+  // /leads/:id/stage (Requirement 1)
+  const stageMatch = path.match(/^\/leads\/([^/?]+)\/stage$/);
+  if (stageMatch && method === 'POST') {
+    const leadId = stageMatch[1];
+    const body = (await request.json().catch(() => ({}))) as any;
+    const newStage = body.stage;
+    const reasonId = body.reasonId || null;
+    if (!newStage) {
+      return jsonRes({ title: 'Missing stage', status: 422 }, 422);
+    }
+
+    let lead: any = null;
+    if (db) {
+      try {
+        const { results } = await db.prepare('SELECT * FROM leads WHERE id = ? AND deleted_at IS NULL').bind(leadId).all();
+        lead = results?.[0];
+      } catch (e) {
+        console.error('D1 fetch lead error:', e);
+      }
+    }
+    if (!lead) lead = memoryStore.leads.find((l) => l.id === leadId);
+    if (!lead) return jsonRes({ title: 'Lead not found', status: 404, code: 'NOT_FOUND' }, 404);
+
+    const oldStage = lead.stage || 'new';
+    // SLA stop condition: once Contacted, Won, Lost, or subsequent stages, SLA is met
+    const stopSla = ['contacted', 'interested', 'quotation_sent', 'negotiation', 'won', 'lost', 'junk'].includes(newStage);
+    const slaStatus = stopSla ? 'met' : (lead.sla_status || 'pending');
+
+    if (db) {
+      try {
+        await db.prepare('UPDATE leads SET stage = ?, sla_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(newStage, slaStatus, leadId).run();
+
+        // Add timeline entry
+        const actId = 'act-' + Date.now();
+        const stageLabel = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+        const summary = `Stage changed from ${stageLabel(oldStage)} to ${stageLabel(newStage)} by Owner Admin`;
+        const details = reasonId ? `Reason: ${reasonId}` : (body.note || null);
+        await db.prepare(`
+          INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
+          VALUES (?, 'lead', ?, 'stage', ?, ?, 'Owner Admin', CURRENT_TIMESTAMP)
+        `).bind(actId, leadId, summary, details).run();
+
+        // Audit log
+        await db.prepare(`
+          INSERT INTO audit_log (id, at, user_name, action, record_type, record_id, changes_json)
+          VALUES (?, ?, 'Owner Admin', 'lead.stage_change', 'lead', ?, ?)
+        `).bind('aud-' + Date.now(), new Date().toISOString(), leadId, JSON.stringify({ from: oldStage, to: newStage, reason: reasonId })).run();
+      } catch (e) {
+        console.error('D1 stage update error:', e);
+      }
+    }
+
+    lead.stage = newStage;
+    lead.sla_status = slaStatus;
+    lead.slaStatus = slaStatus;
+    return jsonRes({ success: true, stage: newStage, lead });
+  }
+
   // /leads/:id/convert (Requirement A)
   const convertMatch = path.match(/^\/leads\/([^/?]+)\/convert$/);
   if (convertMatch && method === 'POST') {
@@ -898,7 +956,21 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           const pincode = body.pincode !== undefined ? body.pincode : row.pincode;
           const sourceId = body.sourceId !== undefined ? body.sourceId : (body.source_id !== undefined ? body.source_id : row.source_id);
           const interestProductId = body.interestProductId !== undefined ? body.interestProductId : (body.interest_product_id !== undefined ? body.interest_product_id : row.interest_product_id);
-          await db.prepare('UPDATE leads SET name = ?, stage = ?, expected_value = ?, pincode = ?, source_id = ?, interest_product_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(name, stage, expectedValue, pincode, sourceId, interestProductId, id).run();
+
+          let slaStatus = row.sla_status;
+          if (stage !== row.stage) {
+            if (['contacted', 'interested', 'quotation_sent', 'negotiation', 'won', 'lost', 'junk'].includes(stage)) {
+              slaStatus = 'met';
+            }
+            const stageLabel = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+            const actId = 'act-' + Date.now();
+            await db.prepare(`
+              INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
+              VALUES (?, 'lead', ?, 'stage', ?, ?, 'Owner Admin', CURRENT_TIMESTAMP)
+            `).bind(actId, id, `Stage changed from ${stageLabel(row.stage || 'new')} to ${stageLabel(stage)} by Owner Admin`, null).run();
+          }
+
+          await db.prepare('UPDATE leads SET name = ?, stage = ?, sla_status = ?, expected_value = ?, pincode = ?, source_id = ?, interest_product_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(name, stage, slaStatus, expectedValue, pincode, sourceId, interestProductId, id).run();
         } catch (e) {
           console.error('D1 lead patch error:', e);
         }
@@ -1063,6 +1135,196 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       const idx = memoryStore.customers.findIndex((c) => c.id === id);
       if (idx !== -1) memoryStore.customers.splice(idx, 1);
       return jsonRes({ success: true, id });
+    }
+
+    // /customers/:id/quotes
+    if (path.endsWith('/quotes') || path.includes('/quotes?')) {
+      let items: any[] = [];
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT * FROM quotes WHERE (party_id = ? OR party_name = ?) AND deleted_at IS NULL ORDER BY date DESC, created_at DESC').bind(id, id).all();
+          if (results) {
+            items = results.map((r: any) => ({
+              id: r.id,
+              displayNumber: r.display_number,
+              partyType: r.party_type,
+              partyId: r.party_id,
+              partyName: r.party_name,
+              status: r.status,
+              date: r.date,
+              validUntil: r.valid_until,
+              grandTotal: r.grand_total,
+              totals: { grandTotal: r.grand_total, subTotal: r.sub_total, taxable: r.taxable, cgst: r.cgst, sgst: r.sgst, igst: r.igst },
+            }));
+          }
+        } catch (e) {
+          console.error('D1 cust quotes error:', e);
+        }
+      }
+      return jsonRes({ items });
+    }
+
+    // /customers/:id/orders
+    if (path.endsWith('/orders') || path.includes('/orders?')) {
+      let items: any[] = [];
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT * FROM orders WHERE customer_id = ? AND deleted_at IS NULL ORDER BY date DESC, created_at DESC').bind(id).all();
+          if (results) {
+            items = results.map((r: any) => ({
+              id: r.id,
+              number: r.number,
+              customerId: r.customer_id,
+              customerName: r.customer_name,
+              quoteId: r.quote_id,
+              status: r.status,
+              date: r.date,
+              expectedDelivery: r.expected_delivery,
+              grandTotal: r.grand_total,
+              totals: { grandTotal: r.grand_total },
+            }));
+          }
+        } catch (e) {
+          console.error('D1 cust orders error:', e);
+        }
+      }
+      return jsonRes({ items });
+    }
+
+    // /customers/:id/invoices
+    if (path.endsWith('/invoices') || path.includes('/invoices?')) {
+      let items: any[] = [];
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT * FROM invoices WHERE customer_id = ? AND deleted_at IS NULL ORDER BY date DESC, created_at DESC').bind(id).all();
+          if (results) {
+            items = results.map((r: any) => ({
+              id: r.id,
+              number: r.number,
+              customerId: r.customer_id,
+              customerName: r.customer_name,
+              orderId: r.order_id,
+              type: r.type,
+              status: r.status,
+              date: r.date,
+              dueDate: r.due_date,
+              grandTotal: r.grand_total,
+              paidAmount: r.paid_amount,
+              creditedAmount: r.credited_amount,
+              balanceDue: r.balance_due,
+              totals: { grandTotal: r.grand_total },
+              ageing: r.status === 'paid' || (r.balance_due || 0) === 0 ? null : 'd1_30',
+            }));
+          }
+        } catch (e) {
+          console.error('D1 cust invoices error:', e);
+        }
+      }
+      return jsonRes({ items });
+    }
+
+    // /customers/:id/payments
+    if (path.endsWith('/payments') || path.includes('/payments?')) {
+      let items: any[] = [];
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT * FROM payments WHERE customer_id = ? AND deleted_at IS NULL ORDER BY date DESC, created_at DESC').bind(id).all();
+          if (results) {
+            items = results.map((r: any) => ({
+              id: r.id,
+              receiptNo: r.receipt_no,
+              customerId: r.customer_id,
+              customerName: r.customer_name,
+              invoiceId: r.invoice_id,
+              date: r.date,
+              amount: r.amount,
+              tdsAmount: r.tds_amount,
+              mode: r.mode,
+              reference: r.reference,
+              status: r.status,
+              advance: r.advance,
+            }));
+          }
+        } catch (e) {
+          console.error('D1 cust payments error:', e);
+        }
+      }
+      return jsonRes({ items });
+    }
+
+    // /customers/:id/statement
+    if (path.includes('/statement')) {
+      const from = url.searchParams.get('from') || '2026-04-01';
+      const to = url.searchParams.get('to') || '2026-11-30';
+      const format = url.searchParams.get('format');
+
+      if (format === 'pdf' || format === 'xlsx') {
+        const jobId = `job-stmt-${id}-${format}-${Date.now()}`;
+        return jsonRes({ jobId });
+      }
+
+      let opening = 0;
+      let rows: any[] = [];
+      let closing = 0;
+
+      if (db) {
+        try {
+          // Prior transactions for opening balance
+          const { results: priorInvs } = await db.prepare('SELECT grand_total FROM invoices WHERE customer_id = ? AND date < ? AND deleted_at IS NULL').bind(id, from).all();
+          const priorDebit = (priorInvs || []).reduce((acc: number, r: any) => acc + Number(r.grand_total || 0), 0);
+
+          const { results: priorPays } = await db.prepare("SELECT amount FROM payments WHERE customer_id = ? AND date < ? AND status = 'active' AND deleted_at IS NULL").bind(id, from).all();
+          const priorCredit = (priorPays || []).reduce((acc: number, r: any) => acc + Number(r.amount || 0), 0);
+
+          opening = Math.max(0, priorDebit - priorCredit);
+
+          // Period transactions
+          const { results: periodInvs } = await db.prepare('SELECT id, number, date, grand_total FROM invoices WHERE customer_id = ? AND date >= ? AND date <= ? AND deleted_at IS NULL ORDER BY date ASC, created_at ASC').bind(id, from, to).all();
+          const { results: periodPays } = await db.prepare("SELECT id, receipt_no, date, amount FROM payments WHERE customer_id = ? AND date >= ? AND date <= ? AND status = 'active' AND deleted_at IS NULL ORDER BY date ASC, created_at ASC").bind(id, from, to).all();
+
+          // Merge & sort chronologically
+          const txs: any[] = [];
+          (periodInvs || []).forEach((inv: any) => {
+            txs.push({
+              date: inv.date,
+              kind: 'invoice',
+              docNumber: inv.number,
+              debit: Number(inv.grand_total || 0),
+              credit: 0,
+            });
+          });
+          (periodPays || []).forEach((pay: any) => {
+            txs.push({
+              date: pay.date,
+              kind: 'payment',
+              docNumber: pay.receipt_no,
+              debit: 0,
+              credit: Number(pay.amount || 0),
+            });
+          });
+
+          txs.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+          let running = opening;
+          rows = txs.map((tx, idx) => {
+            running = running + tx.debit - tx.credit;
+            return {
+              seq: idx + 1,
+              date: tx.date,
+              kind: tx.kind,
+              docNumber: tx.docNumber,
+              debit: tx.debit,
+              credit: tx.credit,
+              balance: running,
+            };
+          });
+          closing = running;
+        } catch (e) {
+          console.error('D1 statement error:', e);
+        }
+      }
+
+      return jsonRes({ opening, closing, rows });
     }
 
     if (path.includes('/360')) {
@@ -2609,9 +2871,29 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       bankAccounts: [
         { id: 'bnk-1', key: 'bnk-1', label: 'HDFC Bank - 50200012345678', bankName: 'HDFC Bank', accountNo: '50200012345678', ifsc: 'HDFC0000240', branch: 'Indiranagar' },
       ],
+      callOutcomes: [
+        { id: 'connected', key: 'connected', label: 'Connected' },
+        { id: 'no_answer', key: 'no_answer', label: 'No answer' },
+        { id: 'busy', key: 'busy', label: 'Busy' },
+        { id: 'wrong_number', key: 'wrong_number', label: 'Wrong number' },
+        { id: 'call_back_later', key: 'call_back_later', label: 'Call back later' },
+      ],
+      lostReasons: [
+        { id: 'price_too_high', key: 'price_too_high', label: 'Competitor / Price too high' },
+        { id: 'no_budget', key: 'no_budget', label: 'No budget allocated' },
+        { id: 'delayed', key: 'delayed', label: 'Project delayed / Postponed' },
+        { id: 'unresponsive', key: 'unresponsive', label: 'Unresponsive after quotation' },
+      ],
+      junkReasons: [
+        { id: 'invalid_contact', key: 'invalid_contact', label: 'Invalid contact details' },
+        { id: 'spam', key: 'spam', label: 'Spam / Fake inquiry' },
+        { id: 'not_relevant', key: 'not_relevant', label: 'Out of scope / Irrelevant service' },
+      ],
       messageTemplates: [
-        { id: 'tpl-1', key: 'invoice', label: 'Invoice Template', channel: 'whatsapp', body: 'Dear {{name}}, invoice {{doc_no}} for ₹{{amount}} is ready: {{link}}' },
-        { id: 'tpl-2', key: 'quote', label: 'Quote Template', channel: 'whatsapp', body: 'Dear {{name}}, quotation {{doc_no}} is ready: {{link}}' },
+        { id: 'tpl-1', key: 'invoice', label: 'Invoice Notification', channel: 'whatsapp', data: { channel: 'whatsapp', body: 'Dear {{name}}, invoice {{doc_no}} for ₹{{amount}} is ready: {{link}}' }, body: 'Dear {{name}}, invoice {{doc_no}} for ₹{{amount}} is ready: {{link}}' },
+        { id: 'tpl-2', key: 'quote', label: 'Quotation Shared', channel: 'whatsapp', data: { channel: 'whatsapp', body: 'Dear {{name}}, quotation {{doc_no}} is ready: {{link}}' }, body: 'Dear {{name}}, quotation {{doc_no}} is ready: {{link}}' },
+        { id: 'tpl-3', key: 'intro', label: 'Introductory Message', channel: 'whatsapp', data: { channel: 'whatsapp', body: 'Hi {{name}}, great connecting with you from {{company}}! HopEpitome Strategics builds enterprise digital systems. Let me know when we can discuss.' }, body: 'Hi {{name}}, great connecting with you from {{company}}! HopEpitome Strategics builds enterprise digital systems. Let me know when we can discuss.' },
+        { id: 'tpl-4', key: 'email_intro', label: 'Proposal Introduction', channel: 'email', data: { channel: 'email', subject: 'HopEpitome Strategics - Digital Systems Proposal', body: 'Dear {{name}},\n\nThank you for connecting with HopEpitome Strategics. We look forward to assisting {{company}}.\n\nBest regards,\nHopEpitome Team' }, subject: 'HopEpitome Strategics - Digital Systems Proposal', body: 'Dear {{name}},\n\nThank you for connecting with HopEpitome Strategics. We look forward to assisting {{company}}.\n\nBest regards,\nHopEpitome Team' },
       ],
     };
     const rawItems = optionsMap[mType] || [];
@@ -3259,12 +3541,374 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
   }
 
   // 22. /timeline/:type/:id
-  if (path.startsWith('/timeline/')) {
+  const timelineMatch = path.match(/^\/timeline\/([^/?]+)\/([^/?]+)/);
+  if (timelineMatch) {
+    const recordType = timelineMatch[1];
+    const recordId = timelineMatch[2];
+    const typeFilter = url.searchParams.get('types');
+
+    let items: any[] = [];
+    if (db) {
+      try {
+        let sql = 'SELECT * FROM timeline WHERE record_type = ? AND record_id = ?';
+        const params: any[] = [recordType, recordId];
+        if (typeFilter) {
+          sql += ' AND type = ?';
+          params.push(typeFilter);
+        }
+        sql += ' ORDER BY created_at DESC LIMIT 100';
+        const { results } = await db.prepare(sql).bind(...params).all();
+        if (results && results.length > 0) {
+          items = results.map((r: any) => ({
+            id: r.id,
+            type: r.type,
+            status: 'completed',
+            note: r.details || r.summary,
+            summary: r.summary,
+            outcomeLabel: r.details && ['Connected', 'No answer', 'Busy', 'Wrong number', 'Call back later'].includes(r.details) ? r.details : null,
+            userName: r.user_name || 'Owner Admin',
+            occurredAt: r.created_at,
+          }));
+        }
+      } catch (e) {
+        console.error('D1 timeline query error:', e);
+      }
+    }
+    return jsonRes({ items });
+  }
+
+  // 22b. /activities
+  const actOutcomeMatch = path.match(/^\/activities\/([^/?]+)\/outcome$/);
+  if (actOutcomeMatch && method === 'POST') {
+    const actId = actOutcomeMatch[1];
+    const body = (await request.json().catch(() => ({}))) as any;
+    const { outcomeId, note, followUp } = body;
+
+    const outcomeLabels: Record<string, string> = {
+      connected: 'Connected',
+      no_answer: 'No answer',
+      busy: 'Busy',
+      wrong_number: 'Wrong number',
+      call_back_later: 'Call back later',
+    };
+    const outcomeLabel = outcomeLabels[outcomeId] || outcomeId || 'Completed';
+
+    if (db) {
+      try {
+        let recType = 'lead';
+        let recId = '';
+        const { results: actRows } = await db.prepare('SELECT record_type, record_id FROM timeline WHERE id = ?').bind(actId).all();
+        if (actRows?.[0]) {
+          recType = actRows[0].record_type;
+          recId = actRows[0].record_id;
+        }
+
+        // If followUp requested, schedule follow-up
+        if (followUp && followUp.dueAt) {
+          const fuId = 'fu-' + Date.now();
+          let partyName = 'Client';
+          if (recType === 'lead') {
+            const { results: lRows } = await db.prepare('SELECT name FROM leads WHERE id = ?').bind(recId).all();
+            if (lRows?.[0]?.name) partyName = lRows[0].name;
+          } else if (recType === 'customer') {
+            const { results: cRows } = await db.prepare('SELECT display_name FROM customers WHERE id = ?').bind(recId).all();
+            if (cRows?.[0]?.display_name) partyName = cRows[0].display_name;
+          }
+
+          await db.prepare(`
+            INSERT INTO follow_ups (id, record_type, record_id, party_name, type, due_at, note, assignee, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'Owner Admin', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          `).bind(fuId, recType, recId, partyName, followUp.type || 'call', followUp.dueAt, note || null).run();
+
+          // Timeline entry for follow-up scheduled
+          await db.prepare(`
+            INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
+            VALUES (?, ?, ?, 'system', ?, ?, 'Owner Admin', CURRENT_TIMESTAMP)
+          `).bind('act-' + Date.now(), recType, recId, `Follow-up scheduled for ${followUp.dueAt}`, note || null).run();
+        }
+
+        // Update or insert timeline entry with call outcome
+        await db.prepare(`
+          INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
+          VALUES (?, ?, ?, 'call', ?, ?, 'Owner Admin', CURRENT_TIMESTAMP)
+          ON CONFLICT(id) DO UPDATE SET summary = excluded.summary, details = excluded.details
+        `).bind(actId, recType, recId, `Call (${outcomeLabel})`, note || outcomeLabel).run();
+      } catch (e) {
+        console.error('D1 activity outcome error:', e);
+      }
+    }
+    return jsonRes({ success: true, activityId: actId, outcomeLabel });
+  }
+
+  const actItemMatch = path.match(/^\/activities\/([^/?]+)$/);
+  if (actItemMatch) {
+    const actId = actItemMatch[1];
+    if (method === 'PATCH') {
+      const body = (await request.json().catch(() => ({}))) as any;
+      if (db && body.note !== undefined) {
+        try {
+          await db.prepare('UPDATE timeline SET details = ? WHERE id = ?').bind(body.note, actId).run();
+        } catch (e) {
+          console.error('D1 update activity error:', e);
+        }
+      }
+      return jsonRes({ success: true, id: actId, note: body.note });
+    }
+    if (method === 'DELETE') {
+      if (db) {
+        try {
+          await db.prepare('DELETE FROM timeline WHERE id = ?').bind(actId).run();
+        } catch (e) {
+          console.error('D1 delete activity error:', e);
+        }
+      }
+      return jsonRes({ success: true, id: actId });
+    }
+  }
+
+  if (path === '/activities' || path === '/activities/') {
+    if (method === 'POST') {
+      const body = (await request.json().catch(() => ({}))) as any;
+      const { recordType, recordId, type = 'note', note = '', summary = '', clientId } = body;
+      const actId = clientId || 'act-' + Date.now();
+      const userName = 'Owner Admin';
+      const sum = summary || (type === 'note' ? 'Note added' : (type === 'call' ? 'Call logged' : `${type.toUpperCase()} activity logged`));
+      const details = note || null;
+
+      if (db && recordType && recordId) {
+        try {
+          await db.prepare(`
+            INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `).bind(actId, recordType, recordId, type, sum, details, userName).run();
+        } catch (e) {
+          console.error('D1 activity insert error:', e);
+        }
+      }
+      return jsonRes({ id: actId, success: true, clientId, type, note, occurredAt: new Date().toISOString() }, 201);
+    }
+  }
+
+  // 22c. /follow-ups
+  const fuItemMatch = path.match(/^\/follow-ups\/([^/?]+)$/);
+  if (fuItemMatch) {
+    const fuId = fuItemMatch[1];
+    if (method === 'PATCH') {
+      const body = (await request.json().catch(() => ({}))) as any;
+      const { status, dueAt, note } = body;
+      if (db) {
+        try {
+          const completedAt = status === 'completed' ? new Date().toISOString() : null;
+          await db.prepare(`
+            UPDATE follow_ups
+            SET status = COALESCE(?, status),
+                due_at = COALESCE(?, due_at),
+                note = COALESCE(?, note),
+                completed_at = COALESCE(?, completed_at),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `).bind(status || null, dueAt || null, note !== undefined ? note : null, completedAt, fuId).run();
+
+          // If completed, add timeline entry
+          if (status === 'completed') {
+            const { results } = await db.prepare('SELECT record_type, record_id, party_name, type FROM follow_ups WHERE id = ?').bind(fuId).all();
+            if (results?.[0]) {
+              const fu = results[0];
+              await db.prepare(`
+                INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
+                VALUES (?, ?, ?, 'system', ?, ?, 'Owner Admin', CURRENT_TIMESTAMP)
+              `).bind('act-' + Date.now(), fu.record_type, fu.record_id, `Follow-up completed (${fu.type})`, null).run();
+            }
+          }
+        } catch (e) {
+          console.error('D1 follow-up patch error:', e);
+        }
+      }
+      return jsonRes({ success: true, id: fuId, status });
+    }
+    if (method === 'DELETE') {
+      if (db) {
+        try {
+          await db.prepare('DELETE FROM follow_ups WHERE id = ?').bind(fuId).run();
+        } catch (e) {
+          console.error('D1 follow-up delete error:', e);
+        }
+      }
+      return jsonRes({ success: true, id: fuId });
+    }
+  }
+
+  if (path === '/follow-ups' || path === '/follow-ups/') {
+    if (method === 'POST') {
+      const body = (await request.json().catch(() => ({}))) as any;
+      const { recordType, recordId, dueAt, type = 'call', note = '', assignee = 'Owner Admin' } = body;
+      if (!dueAt) return jsonRes({ title: 'Missing dueAt', status: 422 }, 422);
+
+      const fuId = body.clientId || 'fu-' + Date.now();
+      let partyName = 'Client';
+      if (db && recordType && recordId) {
+        try {
+          if (recordType === 'lead') {
+            const { results } = await db.prepare('SELECT name FROM leads WHERE id = ?').bind(recordId).all();
+            if (results?.[0]?.name) partyName = results[0].name;
+          } else if (recordType === 'customer') {
+            const { results } = await db.prepare('SELECT display_name FROM customers WHERE id = ?').bind(recordId).all();
+            if (results?.[0]?.display_name) partyName = results[0].display_name;
+          }
+
+          await db.prepare(`
+            INSERT INTO follow_ups (id, record_type, record_id, party_name, type, due_at, note, assignee, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          `).bind(fuId, recordType, recordId, partyName, type, dueAt, note || null, assignee).run();
+
+          // Add timeline entry
+          await db.prepare(`
+            INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
+            VALUES (?, ?, ?, 'system', ?, ?, 'Owner Admin', CURRENT_TIMESTAMP)
+          `).bind('act-' + Date.now(), recordType, recordId, `Follow-up scheduled for ${dueAt}`, note || null).run();
+        } catch (e) {
+          console.error('D1 follow-up insert error:', e);
+        }
+      }
+      return jsonRes({ id: fuId, recordType, recordId, partyName, type, dueAt, note, assignee, status: 'pending' }, 201);
+    }
+
+    if (method === 'GET') {
+      const recordType = url.searchParams.get('recordType');
+      const recordId = url.searchParams.get('recordId');
+      const status = url.searchParams.get('status');
+
+      let items: any[] = [];
+      if (db) {
+        try {
+          let sql = 'SELECT * FROM follow_ups WHERE 1=1';
+          const params: any[] = [];
+          if (recordType) {
+            sql += ' AND record_type = ?';
+            params.push(recordType);
+          }
+          if (recordId) {
+            sql += ' AND record_id = ?';
+            params.push(recordId);
+          }
+          if (status) {
+            sql += ' AND status = ?';
+            params.push(status);
+          }
+          sql += ' ORDER BY due_at ASC';
+          const { results } = await db.prepare(sql).bind(...params).all();
+          if (results) {
+            items = results.map((r: any) => ({
+              id: r.id,
+              recordType: r.record_type,
+              recordId: r.record_id,
+              partyName: r.party_name,
+              customer: r.party_name,
+              type: r.type,
+              dueAt: r.due_at,
+              note: r.note,
+              title: r.note || `${(r.type || 'call').toUpperCase()} follow-up`,
+              assignee: r.assignee,
+              status: r.status,
+              completed: r.status === 'completed',
+              completedAt: r.completed_at,
+              createdAt: r.created_at,
+            }));
+          }
+        } catch (e) {
+          console.error('D1 follow-ups get error:', e);
+        }
+      }
+      return jsonRes({ items });
+    }
+  }
+
+  // 22d. /messages/whatsapp
+  if (path === '/messages/whatsapp' || path === '/messages/whatsapp/') {
+    if (method === 'POST') {
+      const body = (await request.json().catch(() => ({}))) as any;
+      const { recordType, recordId, text = '' } = body;
+
+      let phone = '';
+      let partyName = 'Customer';
+      if (db && recordType && recordId) {
+        try {
+          if (recordType === 'lead') {
+            const { results } = await db.prepare('SELECT name, phone FROM leads WHERE id = ?').bind(recordId).all();
+            if (results?.[0]) {
+              partyName = results[0].name || partyName;
+              phone = results[0].phone || '';
+            }
+          } else if (recordType === 'customer') {
+            const { results } = await db.prepare('SELECT display_name, phone, data_json FROM customers WHERE id = ?').bind(recordId).all();
+            if (results?.[0]) {
+              partyName = results[0].display_name || partyName;
+              phone = results[0].phone || '';
+              if (!phone && results[0].data_json) {
+                try {
+                  const data = JSON.parse(results[0].data_json);
+                  phone = data.contacts?.[0]?.phone || '';
+                } catch (e) {}
+              }
+            }
+          }
+
+          // Insert timeline entry
+          await db.prepare(`
+            INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
+            VALUES (?, ?, ?, 'whatsapp', ?, ?, 'Owner Admin', CURRENT_TIMESTAMP)
+          `).bind('act-' + Date.now(), recordType, recordId, `WhatsApp message sent to ${partyName}`, text).run();
+        } catch (e) {
+          console.error('D1 whatsapp message log error:', e);
+        }
+      }
+
+      let digits = phone.replace(/\D/g, '');
+      if (digits.length === 10) digits = '91' + digits;
+      else if (digits.length === 11 && digits.startsWith('0')) digits = '91' + digits.slice(1);
+
+      const waUrl = digits
+        ? `https://wa.me/${digits}?text=${encodeURIComponent(text)}`
+        : `https://wa.me/?text=${encodeURIComponent(text)}`;
+
+      return jsonRes({ success: true, url: waUrl });
+    }
+  }
+
+  // 22e. /jobs/:id
+  if (path.startsWith('/jobs/')) {
+    const jobId = path.replace(/^\/jobs\//, '').split('?')[0];
+    const match = jobId.match(/^job-stmt-([^-]+)-(\w+)/);
+    const custId = match ? match[1] : 'cust-1';
+    const fmt = match ? match[2] : 'pdf';
     return jsonRes({
-      items: [
-        { id: 'act-1', type: 'call', summary: 'Initial discovery call', at: '2026-11-20T10:30:00Z', user: { name: 'Owner Admin' } },
-        { id: 'act-2', type: 'stage', summary: 'Stage changed to New', at: '2026-11-20T10:00:00Z', user: { name: 'Owner Admin' } },
-      ],
+      status: 'done',
+      result: {
+        url: `/api/v1/customers/${custId}/statement/file?format=${fmt}`,
+        name: `Statement_${custId}.${fmt === 'xlsx' ? 'xlsx' : 'pdf'}`,
+      },
+    });
+  }
+
+  // 22f. /customers/:id/statement/file
+  const stmtFileMatch = path.match(/^\/customers\/([^/?]+)\/statement\/file/);
+  if (stmtFileMatch) {
+    const custId = stmtFileMatch[1];
+    const fmt = url.searchParams.get('format') || 'pdf';
+    if (fmt === 'xlsx' || fmt === 'csv') {
+      const csvContent = 'Date,Particulars,Document,Debit (₹),Credit (₹),Balance (₹)\n2026-11-15,Tax Invoice,INV/26-27/0001,29500.00,0.00,29500.00\n2026-11-15,Payment Receipt,RCT/26-27/0001,0.00,29500.00,0.00\n2026-11-24,Tax Invoice,INV/26-27/0004,101539.00,0.00,101539.00\n2026-11-24,Tax Invoice,INV/26-27/0008,101539.00,0.00,203078.00\n';
+      return new Response(csvContent, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="Statement_${custId}.csv"`,
+        },
+      });
+    }
+    const htmlStatement = `<!doctype html><html><head><meta charset="utf-8"><title>Statement of Account</title><style>body{font-family:sans-serif;padding:30px;color:#202820;}table{width:100%;border-collapse:collapse;margin-top:20px;}th,td{border:1px solid #DCE7D9;padding:8px 12px;font-size:13px;}th{background:#F5F9F2;text-align:left;}</style></head><body><h2>HopEpitome Strategics - Statement of Account</h2><p>Customer ID: ${custId}</p><table><thead><tr><th>Date</th><th>Particulars</th><th>Document</th><th style="text-align:right">Debit</th><th style="text-align:right">Credit</th><th style="text-align:right">Balance</th></tr></thead><tbody><tr><td>2026-11-15</td><td>Tax Invoice</td><td>INV/26-27/0001</td><td style="text-align:right">₹29,500.00</td><td style="text-align:right">-</td><td style="text-align:right">₹29,500.00</td></tr><tr><td>2026-11-15</td><td>Payment Receipt</td><td>RCT/26-27/0001</td><td style="text-align:right">-</td><td style="text-align:right">₹29,500.00</td><td style="text-align:right">₹0.00</td></tr><tr><td>2026-11-24</td><td>Tax Invoice</td><td>INV/26-27/0004</td><td style="text-align:right">₹1,01,539.00</td><td style="text-align:right">-</td><td style="text-align:right">₹1,01,539.00</td></tr><tr><td>2026-11-24</td><td>Tax Invoice</td><td>INV/26-27/0008</td><td style="text-align:right">₹1,01,539.00</td><td style="text-align:right">-</td><td style="text-align:right">₹2,03,078.00</td></tr></tbody></table><script>window.addEventListener("load",()=>setTimeout(()=>window.print(),300));</script></body></html>`;
+    return new Response(htmlStatement, {
+      status: 200,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
     });
   }
 

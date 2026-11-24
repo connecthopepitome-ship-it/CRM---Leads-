@@ -63,6 +63,8 @@ export default function LeadDetail() {
   const [deleting, setDeleting] = useState(false);
   useEffect(() => setConvert(params.get('convert') === '1'), [params]);
   const reopen = useAction(() => post(`/leads/${id}/reopen`), [['lead', id], ['timeline', id]], () => toast('Lead reopened'));
+  const fuQ = useQuery({ queryKey: ['follow-ups', 'lead', id], queryFn: () => get<{ items: any[] }>(`/follow-ups?recordType=lead&recordId=${id}&status=pending`), enabled: Boolean(id) });
+  const nextFu = fuQ.data?.items?.[0];
 
   if (q.isLoading) return <Skeleton rows={6} />;
   const is404 = !q.data || (q.error as any)?.status === 404 || (q.error as any)?.code === 'NOT_FOUND';
@@ -100,8 +102,15 @@ export default function LeadDetail() {
         <Button variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => setConfirmDelete(true)}>Delete</Button>
       </>} />
       {offline && <div className="mb-3"><Banner tone="warning">Offline — showing this lead as last synced.</Banner></div>}
+      {nextFu && (
+        <div className="mb-3">
+          <Banner tone="info">
+            <b>Next follow-up:</b> {String(nextFu.type).toUpperCase()} on {dateTime(nextFu.dueAt)} {nextFu.note && `— ${nextFu.note}`}
+          </Banner>
+        </div>
+      )}
       {l.customerId && <div className="mb-3"><Banner tone="success" action={<LinkButton to={`/customers/${l.customerId}`} variant="ghost">Open customer</LinkButton>}>{l.stage === 'won' ? 'Converted to a customer.' : 'This person is an existing customer.'}</Banner></div>}
-      <div className="mb-4"><ActionBar rec={{ recordType: 'lead', recordId: l.id, name: l.name, phone: l.phoneValid ? l.phone : null, email: l.email, address: l.city }} /></div>
+      <div className="mb-4"><ActionBar rec={{ recordType: 'lead', recordId: l.id, name: l.name, phone: l.phone || null, email: l.email, address: l.city }} /></div>
       <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
         <Timeline recordType="lead" recordId={l.id} />
         <div className="flex flex-col gap-4">
@@ -124,7 +133,7 @@ export default function LeadDetail() {
               ['Lead Source', (l as any).sourceLabel || SOURCE_LABELS[(l as any).sourceId] || (l as any).sourceId || null],
               ['Product Interest', (l as any).productLabel || PRODUCT_LABELS[(l as any).interestProductId] || (l as any).interestProductId || null],
               ['First-contact SLA', <Badge key="s" status={l.slaStatus}>{sla.text}</Badge>],
-              ['Next follow-up', l.nextFollowUpAt ? dateTime(l.nextFollowUpAt) : null],
+              ['Next follow-up', nextFu ? `${String(nextFu.type).toUpperCase()} on ${dateTime(nextFu.dueAt)}` : (l.nextFollowUpAt ? dateTime(l.nextFollowUpAt) : null)],
               ['Expected value', l.expectedValue ? money(l.expectedValue) : null],
               ['Consent', label(l.consentBasis)],
               ['Created', dateTime(l.createdAt)],

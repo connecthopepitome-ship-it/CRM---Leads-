@@ -604,7 +604,7 @@ export default function Leads() {
 
                           {/* Next Follow-up */}
                           <td className="px-4 py-3.5 text-xs text-[#778477]">
-                            {lead.nextFollowUpAt ? '17 Nov' : '—'}
+                            {lead.nextFollowUpAt ? date(String(lead.nextFollowUpAt)) : '—'}
                           </td>
 
                           {/* Action Menu button */}
