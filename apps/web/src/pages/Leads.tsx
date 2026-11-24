@@ -5,7 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { get, post } from '../lib/api';
 import { useTerm } from '../lib/appConfig';
 import { useAuth } from '../lib/auth';
-import { formatSla, getStageLabel, money, relative } from '../lib/format';
+import { dateTime, formatSla, getStageLabel, money, relative } from '../lib/format';
 import { useAction, useOptions, useUsers, type Lead } from '../features/hooks';
 import { StageDialog } from '../features/StageDialog';
 import { Badge, Button, Dialog, EmptyState, ErrorState, Input, LinkButton, PageHeader, Select, Skeleton, Table, toast } from '../ui';
@@ -604,7 +604,7 @@ export default function Leads() {
 
                           {/* Next Follow-up */}
                           <td className="px-4 py-3.5 text-xs text-[#778477]">
-                            {lead.nextFollowUpAt ? date(String(lead.nextFollowUpAt)) : '—'}
+                            {lead.nextFollowUpAt ? dateTime(String(lead.nextFollowUpAt)) : '—'}
                           </td>
 
                           {/* Action Menu button */}

@@ -504,10 +504,22 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       const q = (url.searchParams.get('q') || '').toLowerCase().trim();
       if (db) {
         try {
-          let query = 'SELECT * FROM leads WHERE deleted_at IS NULL ORDER BY created_at DESC';
+          let query = `
+            SELECT l.*,
+              (SELECT MIN(due_at) FROM follow_ups WHERE record_type = 'lead' AND record_id = l.id AND status = 'pending') AS next_follow_up_at
+            FROM leads l
+            WHERE l.deleted_at IS NULL
+            ORDER BY l.created_at DESC
+          `;
           let params: any[] = [];
           if (q) {
-            query = 'SELECT * FROM leads WHERE deleted_at IS NULL AND (LOWER(name) LIKE ? OR LOWER(company) LIKE ? OR phone LIKE ? OR LOWER(email) LIKE ?) ORDER BY created_at DESC';
+            query = `
+              SELECT l.*,
+                (SELECT MIN(due_at) FROM follow_ups WHERE record_type = 'lead' AND record_id = l.id AND status = 'pending') AS next_follow_up_at
+              FROM leads l
+              WHERE l.deleted_at IS NULL AND (LOWER(l.name) LIKE ? OR LOWER(l.company) LIKE ? OR l.phone LIKE ? OR LOWER(l.email) LIKE ?)
+              ORDER BY l.created_at DESC
+            `;
             const like = `%${q}%`;
             params = [like, like, like, like];
           }
@@ -527,6 +539,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             stage: r.stage,
             slaStatus: r.sla_status,
             slaDueAt: r.sla_due_at,
+            nextFollowUpAt: r.next_follow_up_at || null,
             expectedValue: r.expected_value,
             notes: r.notes,
             customerId: r.customer_id,
@@ -875,8 +888,15 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           UPDATE timeline SET record_type = 'customer', record_id = ? WHERE record_type = 'lead' AND record_id = ?
         `).bind(customerId, leadId).run();
 
-        // Also update any quotes issued to this lead to point to the newly converted customer
+        // Migrate follow-ups from lead to newly converted customer
         const custDisplayName = (lead.company || '').trim() || lead.name || 'Customer';
+        await db.prepare(`
+          UPDATE follow_ups
+          SET record_type = 'customer', record_id = ?, party_name = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE record_type = 'lead' AND record_id = ?
+        `).bind(customerId, custDisplayName, leadId).run();
+
+        // Also update any quotes issued to this lead to point to the newly converted customer
         await db.prepare(`
           UPDATE quotes
           SET party_id = ?, party_type = 'customer', party_name = ?, updated_at = CURRENT_TIMESTAMP
@@ -909,7 +929,12 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (method === 'GET') {
       if (db) {
         try {
-          const { results: leadResults } = await db.prepare('SELECT * FROM leads WHERE id = ? AND deleted_at IS NULL').bind(id).all();
+          const { results: leadResults } = await db.prepare(`
+            SELECT l.*,
+              (SELECT MIN(due_at) FROM follow_ups WHERE record_type = 'lead' AND record_id = l.id AND status = 'pending') AS next_follow_up_at
+            FROM leads l
+            WHERE l.id = ? AND l.deleted_at IS NULL
+          `).bind(id).all();
           const row: any = leadResults?.[0];
           if (row) {
             return jsonRes({
@@ -927,6 +952,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               stage: row.stage,
               slaStatus: row.sla_status,
               slaDueAt: row.sla_due_at,
+              nextFollowUpAt: row.next_follow_up_at || null,
               expectedValue: row.expected_value,
               notes: row.notes,
               customerId: row.customer_id,
@@ -985,6 +1011,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       if (db) {
         try {
           await db.prepare('UPDATE leads SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?').bind(id).run();
+          await db.prepare("DELETE FROM follow_ups WHERE record_type = 'lead' AND record_id = ?").bind(id).run();
           await db.prepare(`
             INSERT INTO audit_log (id, at, user_name, action, record_type, record_id, changes_json)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -1124,6 +1151,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       if (db) {
         try {
           await db.prepare('UPDATE customers SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?').bind(id).run();
+          await db.prepare("DELETE FROM follow_ups WHERE record_type = 'customer' AND record_id = ?").bind(id).run();
           await db.prepare(`
             INSERT INTO audit_log (id, at, user_name, action, record_type, record_id, changes_json)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -1862,15 +1890,19 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (!qt) qt = memoryStore.quotes.find((q) => q.id === qid);
     if (!qt) return jsonRes({ title: 'Quotation not found', status: 404, code: 'NOT_FOUND' }, 404);
 
-    // Duplicate invoicing check on quote (Requirement 2)
-    if (qt.status === 'invoiced') {
-      return jsonRes({ title: 'Quotation already fully invoiced', status: 422, code: 'QUOTE_ALREADY_INVOICED', message: 'Quotation already fully invoiced' }, 422);
+    // Check if quotation already has a sales order or invoice
+    if (qt.status === 'invoiced' || qt.status === 'ordered') {
+      return jsonRes({ title: 'Quotation already has a sales order or invoice', status: 422, code: 'QUOTE_ALREADY_INVOICED', message: 'Quotation already has a sales order or invoice' }, 422);
     }
     if (db) {
       try {
         const { results: existingInv } = await db.prepare("SELECT id FROM invoices WHERE quote_id = ? AND status != 'cancelled' AND deleted_at IS NULL").bind(qid).all();
         if (existingInv && existingInv.length > 0) {
-          return jsonRes({ title: 'Quotation already fully invoiced', status: 422, code: 'QUOTE_ALREADY_INVOICED', message: 'Quotation already fully invoiced' }, 422);
+          return jsonRes({ title: 'Quotation already has a sales order or invoice', status: 422, code: 'QUOTE_ALREADY_INVOICED', message: 'Quotation already has a sales order or invoice' }, 422);
+        }
+        const { results: existingOrd } = await db.prepare("SELECT id FROM orders WHERE quote_id = ? AND status != 'cancelled' AND deleted_at IS NULL").bind(qid).all();
+        if (existingOrd && existingOrd.length > 0) {
+          return jsonRes({ title: 'Quotation already has a sales order or invoice', status: 422, code: 'QUOTE_ALREADY_ORDERED', message: 'Quotation already has a sales order or invoice' }, 422);
         }
       } catch (e) {}
     }
@@ -2890,10 +2922,149 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         { id: 'not_relevant', key: 'not_relevant', label: 'Out of scope / Irrelevant service' },
       ],
       messageTemplates: [
-        { id: 'tpl-1', key: 'invoice', label: 'Invoice Notification', channel: 'whatsapp', data: { channel: 'whatsapp', body: 'Dear {{name}}, invoice {{doc_no}} for ₹{{amount}} is ready: {{link}}' }, body: 'Dear {{name}}, invoice {{doc_no}} for ₹{{amount}} is ready: {{link}}' },
-        { id: 'tpl-2', key: 'quote', label: 'Quotation Shared', channel: 'whatsapp', data: { channel: 'whatsapp', body: 'Dear {{name}}, quotation {{doc_no}} is ready: {{link}}' }, body: 'Dear {{name}}, quotation {{doc_no}} is ready: {{link}}' },
-        { id: 'tpl-3', key: 'intro', label: 'Introductory Message', channel: 'whatsapp', data: { channel: 'whatsapp', body: 'Hi {{name}}, great connecting with you from {{company}}! HopEpitome Strategics builds enterprise digital systems. Let me know when we can discuss.' }, body: 'Hi {{name}}, great connecting with you from {{company}}! HopEpitome Strategics builds enterprise digital systems. Let me know when we can discuss.' },
-        { id: 'tpl-4', key: 'email_intro', label: 'Proposal Introduction', channel: 'email', data: { channel: 'email', subject: 'HopEpitome Strategics - Digital Systems Proposal', body: 'Dear {{name}},\n\nThank you for connecting with HopEpitome Strategics. We look forward to assisting {{company}}.\n\nBest regards,\nHopEpitome Team' }, subject: 'HopEpitome Strategics - Digital Systems Proposal', body: 'Dear {{name}},\n\nThank you for connecting with HopEpitome Strategics. We look forward to assisting {{company}}.\n\nBest regards,\nHopEpitome Team' },
+        // General templates for leads & customers
+        {
+          id: 'tpl-intro',
+          key: 'greeting',
+          category: 'general',
+          label: 'Introduction & Greeting',
+          channel: 'whatsapp',
+          data: {
+            channel: 'whatsapp',
+            category: 'general',
+            body: 'Hi {name}, great connecting with you from {company}! HopEpitome Strategics builds enterprise digital systems. Let me know when we can discuss your requirements.',
+          },
+          body: 'Hi {name}, great connecting with you from {company}! HopEpitome Strategics builds enterprise digital systems. Let me know when we can discuss your requirements.',
+        },
+        {
+          id: 'tpl-followup',
+          key: 'followup',
+          category: 'general',
+          label: 'Follow-up Catch-up',
+          channel: 'whatsapp',
+          data: {
+            channel: 'whatsapp',
+            category: 'general',
+            body: 'Hello {name}, following up on our recent conversation regarding {company}\'s project. When would be a convenient time for a quick catch-up?',
+          },
+          body: 'Hello {name}, following up on our recent conversation regarding {company}\'s project. When would be a convenient time for a quick catch-up?',
+        },
+        {
+          id: 'tpl-meeting',
+          key: 'meeting_reminder',
+          category: 'general',
+          label: 'Meeting Reminder',
+          channel: 'whatsapp',
+          data: {
+            channel: 'whatsapp',
+            category: 'general',
+            body: 'Hi {name}, friendly reminder for our scheduled meeting today. Looking forward to speaking with you and the team at {company}!',
+          },
+          body: 'Hi {name}, friendly reminder for our scheduled meeting today. Looking forward to speaking with you and the team at {company}!',
+        },
+        {
+          id: 'tpl-email-intro',
+          key: 'email_intro',
+          category: 'general',
+          label: 'Introductory Proposal',
+          channel: 'email',
+          data: {
+            channel: 'email',
+            category: 'general',
+            subject: 'HopEpitome Strategics - Digital Systems Proposal for {company}',
+            body: 'Dear {name},\n\nThank you for connecting with HopEpitome Strategics. We look forward to exploring how we can support {company} with our enterprise digital systems.\n\nPlease let us know when you might have 15 minutes for a brief discussion.\n\nWarm regards,\nHopEpitome Team',
+          },
+          subject: 'HopEpitome Strategics - Digital Systems Proposal for {company}',
+          body: 'Dear {name},\n\nThank you for connecting with HopEpitome Strategics. We look forward to exploring how we can support {company} with our enterprise digital systems.\n\nPlease let us know when you might have 15 minutes for a brief discussion.\n\nWarm regards,\nHopEpitome Team',
+        },
+        {
+          id: 'tpl-email-followup',
+          key: 'email_followup',
+          category: 'general',
+          label: 'Discussion Follow-up',
+          channel: 'email',
+          data: {
+            channel: 'email',
+            category: 'general',
+            subject: 'Following up on our discussion - {company} & HopEpitome',
+            body: 'Dear {name},\n\nI hope this email finds you well.\n\nI am writing to follow up on our previous discussion regarding {company}\'s requirements. We would love to answer any questions or share relevant case studies.\n\nBest regards,\nHopEpitome Team',
+          },
+          subject: 'Following up on our discussion - {company} & HopEpitome',
+          body: 'Dear {name},\n\nI hope this email finds you well.\n\nI am writing to follow up on our previous discussion regarding {company}\'s requirements. We would love to answer any questions or share relevant case studies.\n\nBest regards,\nHopEpitome Team',
+        },
+        {
+          id: 'tpl-email-meeting',
+          key: 'email_meeting',
+          category: 'general',
+          label: 'Meeting Reminder',
+          channel: 'email',
+          data: {
+            channel: 'email',
+            category: 'general',
+            subject: 'Meeting Reminder: HopEpitome Strategics & {company}',
+            body: 'Dear {name},\n\nThis is a quick reminder for our upcoming meeting. We look forward to connecting with you and the team at {company}.\n\nBest regards,\nHopEpitome Team',
+          },
+          subject: 'Meeting Reminder: HopEpitome Strategics & {company}',
+          body: 'Dear {name},\n\nThis is a quick reminder for our upcoming meeting. We look forward to connecting with you and the team at {company}.\n\nBest regards,\nHopEpitome Team',
+        },
+
+        // Document-only templates (quote / invoice)
+        {
+          id: 'tpl-inv',
+          key: 'invoice',
+          category: 'document',
+          label: 'Invoice Notification',
+          channel: 'whatsapp',
+          data: {
+            channel: 'whatsapp',
+            category: 'document',
+            body: 'Dear {name}, tax invoice {doc_no} for ₹{amount} from HopEpitome Strategics is ready: {link}',
+          },
+          body: 'Dear {name}, tax invoice {doc_no} for ₹{amount} from HopEpitome Strategics is ready: {link}',
+        },
+        {
+          id: 'tpl-qt',
+          key: 'quote',
+          category: 'document',
+          label: 'Quotation Shared',
+          channel: 'whatsapp',
+          data: {
+            channel: 'whatsapp',
+            category: 'document',
+            body: 'Dear {name}, quotation {doc_no} for ₹{amount} from HopEpitome Strategics is ready: {link}',
+          },
+          body: 'Dear {name}, quotation {doc_no} for ₹{amount} from HopEpitome Strategics is ready: {link}',
+        },
+        {
+          id: 'tpl-email-inv',
+          key: 'email_invoice',
+          category: 'document',
+          label: 'Invoice Document',
+          channel: 'email',
+          data: {
+            channel: 'email',
+            category: 'document',
+            subject: 'Tax Invoice {doc_no} from HopEpitome Strategics',
+            body: 'Dear {name},\n\nPlease find tax invoice {doc_no} for ₹{amount} from HopEpitome Strategics.\n\nYou may view and download the official document here: {link}\n\nWarm regards,\nHopEpitome Team',
+          },
+          subject: 'Tax Invoice {doc_no} from HopEpitome Strategics',
+          body: 'Dear {name},\n\nPlease find tax invoice {doc_no} for ₹{amount} from HopEpitome Strategics.\n\nYou may view and download the official document here: {link}\n\nWarm regards,\nHopEpitome Team',
+        },
+        {
+          id: 'tpl-email-qt',
+          key: 'email_quote',
+          category: 'document',
+          label: 'Quotation Document',
+          channel: 'email',
+          data: {
+            channel: 'email',
+            category: 'document',
+            subject: 'Quotation {doc_no} from HopEpitome Strategics',
+            body: 'Dear {name},\n\nPlease find quotation {doc_no} for ₹{amount} from HopEpitome Strategics.\n\nYou may review and accept the quotation here: {link}\n\nWarm regards,\nHopEpitome Team',
+          },
+          subject: 'Quotation {doc_no} from HopEpitome Strategics',
+          body: 'Dear {name},\n\nPlease find quotation {doc_no} for ₹{amount} from HopEpitome Strategics.\n\nYou may review and accept the quotation here: {link}\n\nWarm regards,\nHopEpitome Team',
+        },
       ],
     };
     const rawItems = optionsMap[mType] || [];
@@ -3540,6 +3711,34 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     return jsonRes({ data: {} });
   }
 
+  function formatISTDate(iso: string): string {
+    try {
+      let s = String(iso).trim();
+      if (!s.endsWith('Z') && !s.includes('+')) {
+        s = s.includes('T') ? s + 'Z' : s.replace(' ', 'T') + 'Z';
+      }
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return iso;
+      return new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      }).format(d);
+    } catch {
+      return iso;
+    }
+  }
+
+  const formatIsoUtc = (ts: string) => {
+    if (!ts) return new Date().toISOString();
+    if (ts.endsWith('Z') || ts.includes('+')) return ts;
+    return ts.includes('T') ? ts + 'Z' : ts.replace(' ', 'T') + 'Z';
+  };
+
   // 22. /timeline/:type/:id
   const timelineMatch = path.match(/^\/timeline\/([^/?]+)\/([^/?]+)/);
   if (timelineMatch) {
@@ -3567,7 +3766,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             summary: r.summary,
             outcomeLabel: r.details && ['Connected', 'No answer', 'Busy', 'Wrong number', 'Call back later'].includes(r.details) ? r.details : null,
             userName: r.user_name || 'Owner Admin',
-            occurredAt: r.created_at,
+            occurredAt: formatIsoUtc(r.created_at),
           }));
         }
       } catch (e) {
@@ -3624,7 +3823,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           await db.prepare(`
             INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
             VALUES (?, ?, ?, 'system', ?, ?, 'Owner Admin', CURRENT_TIMESTAMP)
-          `).bind('act-' + Date.now(), recType, recId, `Follow-up scheduled for ${followUp.dueAt}`, note || null).run();
+          `).bind('act-' + Date.now(), recType, recId, `Follow-up scheduled for ${formatISTDate(followUp.dueAt)}`, note || null).run();
         }
 
         // Update or insert timeline entry with call outcome
@@ -3765,7 +3964,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           await db.prepare(`
             INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
             VALUES (?, ?, ?, 'system', ?, ?, 'Owner Admin', CURRENT_TIMESTAMP)
-          `).bind('act-' + Date.now(), recordType, recordId, `Follow-up scheduled for ${dueAt}`, note || null).run();
+          `).bind('act-' + Date.now(), recordType, recordId, `Follow-up scheduled for ${formatISTDate(dueAt)}`, note || null).run();
         } catch (e) {
           console.error('D1 follow-up insert error:', e);
         }

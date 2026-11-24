@@ -64,7 +64,10 @@ export default function LeadDetail() {
   useEffect(() => setConvert(params.get('convert') === '1'), [params]);
   const reopen = useAction(() => post(`/leads/${id}/reopen`), [['lead', id], ['timeline', id]], () => toast('Lead reopened'));
   const fuQ = useQuery({ queryKey: ['follow-ups', 'lead', id], queryFn: () => get<{ items: any[] }>(`/follow-ups?recordType=lead&recordId=${id}&status=pending`), enabled: Boolean(id) });
-  const nextFu = fuQ.data?.items?.[0];
+  const pendingFus = (fuQ.data?.items ?? [])
+    .filter((f: any) => f.status === 'pending')
+    .sort((a: any, b: any) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
+  const nextFu = pendingFus[0];
 
   if (q.isLoading) return <Skeleton rows={6} />;
   const is404 = !q.data || (q.error as any)?.status === 404 || (q.error as any)?.code === 'NOT_FOUND';
@@ -161,6 +164,8 @@ export default function LeadDetail() {
                   setDeleting(true);
                   try {
                     await del(`/leads/${l.id}`);
+                    void qc.invalidateQueries({ queryKey: ['follow-ups'] });
+                    void qc.invalidateQueries({ queryKey: ['leads'] });
                     toast('Lead deleted successfully');
                     nav('/leads', { replace: true });
                   } catch (e) {

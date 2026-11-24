@@ -155,7 +155,13 @@ function CallOutcomeSheet({ rec, activityId, showNumber, onClose }: { rec: Recor
 
 function WhatsAppComposer({ rec, onClose }: { rec: RecordRef; onClose(): void }) {
   const templates = useOptions('messageTemplates');
-  const wa = (templates.data ?? []).filter((t: any) => (t?.data?.channel || t?.channel) === 'whatsapp');
+  const isDocument = rec.recordType === 'quote' || rec.recordType === 'invoice';
+  const wa = (templates.data ?? []).filter((t: any) => {
+    const isWa = (t?.data?.channel || t?.channel) === 'whatsapp';
+    if (!isWa) return false;
+    const isDocTpl = (t?.data?.category || t?.category) === 'document' || t?.key === 'invoice' || t?.key === 'quote';
+    return isDocument ? isDocTpl : !isDocTpl;
+  });
   const [templateId, setTemplateId] = useState('');
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -164,8 +170,11 @@ function WhatsAppComposer({ rec, onClose }: { rec: RecordRef; onClose(): void })
     if (t) {
       const raw = String(t.data?.body || t.body || '');
       const filled = raw
-        .replace(/\{\{\s*name\s*\}\}|\{\s*name\s*\}/gi, rec.name)
-        .replace(/\{\{\s*company\s*\}\}|\{\s*company\s*\}/gi, (rec as any).company || rec.name);
+        .replace(/\{\{\s*name\s*\}\}|\{\s*name\s*\}/gi, rec.name || 'Valued Customer')
+        .replace(/\{\{\s*company\s*\}\}|\{\s*company\s*\}/gi, (rec as any).company || rec.name || 'your company')
+        .replace(/\{\{\s*doc_no\s*\}\}|\{\s*doc_no\s*\}/gi, (rec as any).docNo || (rec as any).number || '')
+        .replace(/\{\{\s*amount\s*\}\}|\{\s*amount\s*\}/gi, (rec as any).amount || '')
+        .replace(/\{\{\s*link\s*\}\}|\{\s*link\s*\}/gi, (rec as any).link || '');
       setText(filled);
     }
   }, [templateId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -193,7 +202,13 @@ function WhatsAppComposer({ rec, onClose }: { rec: RecordRef; onClose(): void })
 
 function EmailComposer({ rec, onClose }: { rec: RecordRef; onClose(): void }) {
   const templates = useOptions('messageTemplates');
-  const emailTemplates = (templates.data ?? []).filter((t: any) => (t?.data?.channel || t?.channel) === 'email');
+  const isDocument = rec.recordType === 'quote' || rec.recordType === 'invoice';
+  const emailTemplates = (templates.data ?? []).filter((t: any) => {
+    const isEmail = (t?.data?.channel || t?.channel) === 'email';
+    if (!isEmail) return false;
+    const isDocTpl = (t?.data?.category || t?.category) === 'document' || t?.key === 'email_invoice' || t?.key === 'email_quote';
+    return isDocument ? isDocTpl : !isDocTpl;
+  });
   const [templateId, setTemplateId] = useState('');
   const [to, setTo] = useState(rec.email ?? '');
   const [subject, setSubject] = useState('');
@@ -206,8 +221,15 @@ function EmailComposer({ rec, onClose }: { rec: RecordRef; onClose(): void }) {
     if (t) {
       const rawSubject = String(t.data?.subject || t.subject || 'Proposal from HopEpitome Strategics');
       const rawBody = String(t.data?.body || t.body || '');
-      setSubject(rawSubject.replace(/\{\{\s*name\s*\}\}|\{\s*name\s*\}/gi, rec.name));
-      setBody(rawBody.replace(/\{\{\s*name\s*\}\}|\{\s*name\s*\}/gi, rec.name).replace(/\{\{\s*company\s*\}\}|\{\s*company\s*\}/gi, (rec as any).company || rec.name));
+      const fill = (str: string) => str
+        .replace(/\{\{\s*name\s*\}\}|\{\s*name\s*\}/gi, rec.name || 'Valued Customer')
+        .replace(/\{\{\s*company\s*\}\}|\{\s*company\s*\}/gi, (rec as any).company || rec.name || 'your company')
+        .replace(/\{\{\s*doc_no\s*\}\}|\{\s*doc_no\s*\}/gi, (rec as any).docNo || (rec as any).number || '')
+        .replace(/\{\{\s*amount\s*\}\}|\{\s*amount\s*\}/gi, (rec as any).amount || '')
+        .replace(/\{\{\s*link\s*\}\}|\{\s*link\s*\}/gi, (rec as any).link || '');
+
+      setSubject(fill(rawSubject));
+      setBody(fill(rawBody));
     }
   }, [templateId]);
 

@@ -134,6 +134,8 @@ export default function Customer360() {
                   setDeleting(true);
                   try {
                     await del(`/customers/${customer.id}`);
+                    void qc.invalidateQueries({ queryKey: ['follow-ups'] });
+                    void qc.invalidateQueries({ queryKey: ['customers'] });
                     toast('Customer deleted successfully');
                     nav('/customers', { replace: true });
                   } catch (e) {

@@ -22,10 +22,21 @@ export const date = (d: string | null | undefined) => {
 export function dateTime(iso: string | null | undefined) {
   if (!iso) return '—';
   try {
-    const d = new Date(iso);
+    let s = String(iso).trim();
+    if (!s.endsWith('Z') && !s.includes('+')) {
+      s = s.includes('T') ? s + 'Z' : s.replace(' ', 'T') + 'Z';
+    }
+    const d = new Date(s);
     if (isNaN(d.getTime())) return String(iso).slice(0, 16);
-    const t = new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
-    return `${displayDate(istDate(d))} ${t}`;
+    return new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).format(d);
   } catch {
     return String(iso).slice(0, 16) || '—';
   }
