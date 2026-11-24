@@ -2927,14 +2927,14 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           id: 'tpl-intro',
           key: 'greeting',
           category: 'general',
-          label: 'Introduction & Greeting',
+          label: 'Introductory Message',
           channel: 'whatsapp',
           data: {
             channel: 'whatsapp',
             category: 'general',
-            body: 'Hi {name}, great connecting with you from {company}! HopEpitome Strategics builds enterprise digital systems. Let me know when we can discuss your requirements.',
+            body: 'Hi {name}, great connecting with you from {company}! {sender_company} builds enterprise digital systems. Let me know when we can discuss your requirements.',
           },
-          body: 'Hi {name}, great connecting with you from {company}! HopEpitome Strategics builds enterprise digital systems. Let me know when we can discuss your requirements.',
+          body: 'Hi {name}, great connecting with you from {company}! {sender_company} builds enterprise digital systems. Let me know when we can discuss your requirements.',
         },
         {
           id: 'tpl-followup',

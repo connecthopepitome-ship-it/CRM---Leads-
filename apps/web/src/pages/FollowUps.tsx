@@ -175,6 +175,19 @@ export default function FollowUps() {
   // Selected Day tasks
   const selectedDayTasks = tasksByDate[selectedDateKey] || [];
 
+  const openRescheduleModal = (t: FollowUpItem) => {
+    setReschedulingItem(t);
+    if (t.dueAt) {
+      const d = new Date(t.dueAt);
+      const localIso = !isNaN(d.getTime())
+        ? new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+        : '';
+      setNewDueAt(localIso);
+    } else {
+      setNewDueAt('');
+    }
+  };
+
   // Actions
   const toggleTask = async (id: string, currentCompleted: boolean) => {
     try {
@@ -396,10 +409,10 @@ export default function FollowUps() {
 
       {/* 2. CALENDAR WORKSPACE */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* MAIN CALENDAR CARD (8 cols in Month/Week view, 12 in Day view) */}
+        {/* MAIN CALENDAR CARD (8 cols in Month view, 12 in Week/Day view) */}
         <div
           className={`rounded-2xl border border-[#DCE7D9] bg-white p-5 shadow-2xs space-y-4 ${
-            calendarView === 'day' ? 'lg:col-span-12' : 'lg:col-span-8'
+            calendarView === 'month' ? 'lg:col-span-8' : 'lg:col-span-12'
           }`}
         >
           {/* Calendar Controls */}
@@ -545,7 +558,7 @@ export default function FollowUps() {
 
           {/* VIEW: WEEK */}
           {calendarView === 'week' && (
-            <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
               {weekDays.map((wd) => {
                 const dayTasks = tasksByDate[wd.dateKey] || [];
                 const isSelected = wd.dateKey === selectedDateKey;
@@ -574,7 +587,7 @@ export default function FollowUps() {
                       </p>
                     </div>
 
-                    <div className="space-y-2 mt-2 flex-1 overflow-y-auto max-h-[420px]">
+                    <div className="space-y-2 mt-2 flex-1 overflow-y-auto max-h-[460px]">
                       {dayTasks.length === 0 ? (
                         <div className="text-center py-6 text-[11px] text-[#778477]/60">No tasks</div>
                       ) : (
@@ -584,10 +597,7 @@ export default function FollowUps() {
                             item={t}
                             compact
                             onToggle={() => void toggleTask(t.id, t.completed)}
-                            onReschedule={() => {
-                              setReschedulingItem(t);
-                              setNewDueAt(t.dueAt.slice(0, 16));
-                            }}
+                            onReschedule={() => openRescheduleModal(t)}
                             onDelete={() => void handleDeleteTask(t.id)}
                           />
                         ))
@@ -629,10 +639,7 @@ export default function FollowUps() {
                       key={t.id}
                       item={t}
                       onToggle={() => void toggleTask(t.id, t.completed)}
-                      onReschedule={() => {
-                        setReschedulingItem(t);
-                        setNewDueAt(t.dueAt.slice(0, 16));
-                      }}
+                      onReschedule={() => openRescheduleModal(t)}
                       onDelete={() => void handleDeleteTask(t.id)}
                     />
                   ))}
@@ -643,7 +650,7 @@ export default function FollowUps() {
         </div>
 
         {/* RIGHT: Tasks on Selected Date Panel (Dark Forest Green, 4 cols) */}
-        {calendarView !== 'day' && (
+        {calendarView === 'month' && (
           <div className="rounded-2xl border border-[#2E4E36] bg-[#203923] text-white p-5 shadow-lg space-y-4 lg:col-span-4">
             <div className="flex items-center justify-between border-b border-[#2E4E36] pb-3">
               <div>
@@ -689,7 +696,8 @@ export default function FollowUps() {
                         <button
                           type="button"
                           onClick={() => void toggleTask(t.id, t.completed)}
-                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border mt-0.5 transition-colors ${
+                          aria-label="Mark completed"
+                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border mt-0.5 transition-colors ${
                             t.completed
                               ? 'border-emerald-400 bg-emerald-500 text-white'
                               : t.isOverdue
@@ -736,10 +744,7 @@ export default function FollowUps() {
                           <div className="mt-2 flex items-center justify-end gap-2 border-t border-[#2E4E36]/60 pt-1.5">
                             <button
                               type="button"
-                              onClick={() => {
-                                setReschedulingItem(t);
-                                setNewDueAt(t.dueAt.slice(0, 16));
-                              }}
+                              onClick={() => openRescheduleModal(t)}
                               className="text-[10px] text-emerald-300 hover:text-white flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-[#2E4E36]"
                               title="Reschedule follow-up"
                             >
@@ -934,67 +939,82 @@ function FollowUpCard({
         <div className="flex items-start gap-2">
           <button
             type="button"
-            onClick={onToggle}
-            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border mt-0.5 transition-colors ${
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle();
+            }}
+            aria-label="Mark completed"
+            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border mt-0.5 transition-colors ${
               item.completed
                 ? 'border-emerald-500 bg-emerald-500 text-white'
                 : item.isOverdue
                 ? 'border-red-400 bg-transparent hover:border-red-500'
                 : 'border-[#778477] bg-transparent hover:border-[#202820]'
             }`}
+            title={item.completed ? 'Mark pending' : 'Mark completed'}
           >
             {item.completed && <Check size={11} strokeWidth={3} />}
           </button>
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-1">
-              <span className="text-[10px] font-semibold text-[#778477] uppercase flex items-center gap-1">
+              <span className="text-[10px] font-semibold text-[#778477] uppercase flex items-center gap-1 shrink-0">
                 <IconComp size={10} />
                 {item.type}
               </span>
-              <span className="text-[10px] font-mono text-[#778477]">{item.istTime}</span>
+              <span className="text-[10px] font-mono text-[#778477] shrink-0">{item.istTime}</span>
             </div>
             <p
-              className={`text-xs font-semibold mt-0.5 line-clamp-2 ${
+              className={`text-xs font-semibold mt-0.5 line-clamp-2 break-words ${
                 item.completed ? 'line-through text-[#778477]' : 'text-[#202820]'
               }`}
+              title={item.title}
             >
               {item.title}
             </p>
           </div>
         </div>
 
-        <div className="mt-2 flex items-center justify-between text-xs">
+        <div className="mt-2 flex items-center justify-between gap-1 text-xs">
           <Link
             to={partyLink}
-            className="text-xs font-semibold text-[#3D7952] hover:underline flex items-center gap-1 truncate max-w-[150px]"
+            className="text-xs font-semibold text-[#3D7952] hover:underline flex items-center gap-1 min-w-0 flex-1 truncate"
+            title={item.partyName}
           >
             <span className="truncate">{item.partyName}</span>
-            <ExternalLink size={10} className="shrink-0" />
+            <ExternalLink size={10} className="shrink-0 text-[#3D7952]/70" />
           </Link>
           {item.isOverdue && !item.completed && (
-            <span className="rounded bg-red-100 text-red-700 px-1.5 py-0.2 text-[9px] font-bold uppercase">
+            <span className="shrink-0 rounded bg-red-100 text-red-700 px-1.5 py-0.2 text-[9px] font-bold uppercase">
               Overdue
             </span>
           )}
         </div>
       </div>
 
-      <div className="mt-2.5 pt-1.5 border-t border-[#DCE7D9]/60 flex items-center justify-end gap-1.5">
+      <div className="mt-2.5 pt-1.5 border-t border-[#DCE7D9]/60 flex items-center justify-between gap-1 flex-wrap">
         <button
           type="button"
-          onClick={onReschedule}
-          className="text-[11px] font-medium text-[#778477] hover:text-[#202820] px-1.5 py-0.5 rounded hover:bg-[#F5F9F2] transition-colors"
-          title="Reschedule"
+          onClick={(e) => {
+            e.stopPropagation();
+            onReschedule();
+          }}
+          className="text-[11px] font-medium text-[#3D7952] hover:text-[#233D2D] hover:bg-[#EAF2E8] px-1.5 py-0.5 rounded transition-colors flex items-center gap-1 shrink-0"
+          title="Reschedule follow-up"
         >
-          Reschedule
+          <CalendarClock size={11} className="shrink-0" />
+          <span>Reschedule</span>
         </button>
         <button
           type="button"
-          onClick={onDelete}
-          className="text-[11px] font-medium text-red-600 hover:text-red-700 px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors"
-          title="Delete"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          className="text-[11px] font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-1.5 py-0.5 rounded transition-colors flex items-center gap-1 shrink-0"
+          title="Delete follow-up"
         >
-          Delete
+          <Trash2 size={11} className="shrink-0" />
+          <span>Delete</span>
         </button>
       </div>
     </div>

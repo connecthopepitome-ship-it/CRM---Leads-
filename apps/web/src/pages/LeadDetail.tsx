@@ -113,7 +113,7 @@ export default function LeadDetail() {
         </div>
       )}
       {l.customerId && <div className="mb-3"><Banner tone="success" action={<LinkButton to={`/customers/${l.customerId}`} variant="ghost">Open customer</LinkButton>}>{l.stage === 'won' ? 'Converted to a customer.' : 'This person is an existing customer.'}</Banner></div>}
-      <div className="mb-4"><ActionBar rec={{ recordType: 'lead', recordId: l.id, name: l.name, phone: l.phone || null, email: l.email, address: l.city }} /></div>
+      <div className="mb-4"><ActionBar rec={{ recordType: 'lead', recordId: l.id, name: l.name, company: l.company || null, phone: l.phone || null, email: l.email, address: l.city }} /></div>
       <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
         <Timeline recordType="lead" recordId={l.id} />
         <div className="flex flex-col gap-4">

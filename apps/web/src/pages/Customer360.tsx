@@ -61,7 +61,7 @@ export default function Customer360() {
         {can('payment', 'create') && <LinkButton to={`/sales/payments/new?customerId=${customer.id}`}>Record payment</LinkButton>}
         <Button variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => setConfirmDelete(true)}>Delete</Button>
       </>} />
-      <div className="mb-4"><ActionBar rec={{ recordType: 'customer', recordId: customer.id, name: primary?.name ?? customer.displayName, phone: primaryPhone, email: primaryEmail, address: detail.data?.addresses?.[0] ? `${detail.data.addresses[0].line1}, ${detail.data.addresses[0].city}` : null }} /></div>
+      <div className="mb-4"><ActionBar rec={{ recordType: 'customer', recordId: customer.id, name: primary?.name ?? customer.displayName, company: customer.legalName || customer.displayName || null, phone: primaryPhone, email: primaryEmail, address: detail.data?.addresses?.[0] ? `${detail.data.addresses[0].line1}, ${detail.data.addresses[0].city}` : null }} /></div>
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         {ageing ? <>
           <StatTile label="Outstanding" value={money(kpis.outstanding)} />
