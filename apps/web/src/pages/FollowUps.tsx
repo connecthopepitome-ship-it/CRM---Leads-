@@ -120,10 +120,12 @@ export default function FollowUps() {
     queryFn: () => get<{ items: any[] }>('/customers'),
   });
 
-  // Reschedule state
+  // Reschedule & Delete state
   const [reschedulingItem, setReschedulingItem] = useState<FollowUpItem | null>(null);
   const [newDueAt, setNewDueAt] = useState('');
   const [rescheduleBusy, setRescheduleBusy] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   // Add Task form state
   const [isAddingTask, setIsAddingTask] = useState(false);
@@ -188,12 +190,19 @@ export default function FollowUps() {
     }
   };
 
+  const invalidateAll = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['follow-ups'], refetchType: 'all' }),
+      qc.invalidateQueries({ queryKey: ['leads'], refetchType: 'all' }),
+      qc.invalidateQueries({ queryKey: ['notifications'], refetchType: 'all' }),
+    ]);
+  };
+
   // Actions
   const toggleTask = async (id: string, currentCompleted: boolean) => {
     try {
       await patch(`/follow-ups/${id}`, { status: currentCompleted ? 'pending' : 'completed' });
-      await qc.invalidateQueries({ queryKey: ['follow-ups'] });
-      await qc.invalidateQueries({ queryKey: ['leads'] });
+      await invalidateAll();
       toast(currentCompleted ? 'Follow-up marked as pending' : 'Follow-up marked as completed', 'success');
     } catch {
       toast('Failed to update follow-up', 'error');
@@ -206,8 +215,7 @@ export default function FollowUps() {
     try {
       const isoDue = new Date(newDueAt).toISOString();
       await patch(`/follow-ups/${reschedulingItem.id}`, { dueAt: isoDue, status: 'pending' });
-      await qc.invalidateQueries({ queryKey: ['follow-ups'] });
-      await qc.invalidateQueries({ queryKey: ['leads'] });
+      await invalidateAll();
       toast('Follow-up rescheduled', 'success');
       setReschedulingItem(null);
     } catch {
@@ -217,15 +225,22 @@ export default function FollowUps() {
     }
   };
 
-  const handleDeleteTask = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this follow-up?')) return;
+  const handleDeleteTask = (id: string) => {
+    setDeletingId(id);
+  };
+
+  const confirmDeleteTask = async () => {
+    if (!deletingId) return;
+    setDeleteBusy(true);
     try {
-      await del(`/follow-ups/${id}`);
-      await qc.invalidateQueries({ queryKey: ['follow-ups'] });
-      await qc.invalidateQueries({ queryKey: ['leads'] });
+      await del(`/follow-ups/${deletingId}`);
+      await invalidateAll();
       toast('Follow-up deleted', 'success');
+      setDeletingId(null);
     } catch {
       toast('Failed to delete follow-up', 'error');
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -650,7 +665,10 @@ export default function FollowUps() {
         </div>
 
         {/* RIGHT: Tasks on Selected Date Panel (Dark Forest Green, 4 cols) */}
-        {calendarView === 'month' && (
+        {calendarView === 'month' && (() => {
+          const pendingCount = selectedDayTasks.filter((t) => !t.completed).length;
+          const doneCount = selectedDayTasks.filter((t) => t.completed).length;
+          return (
           <div className="rounded-2xl border border-[#2E4E36] bg-[#203923] text-white p-5 shadow-lg space-y-4 lg:col-span-4">
             <div className="flex items-center justify-between border-b border-[#2E4E36] pb-3">
               <div>
@@ -658,11 +676,11 @@ export default function FollowUps() {
                   Tasks on {formatISTHeaderDate(selectedDateKey)}
                 </h2>
                 <p className="text-[11px] text-emerald-300/70">
-                  {selectedDayTasks.length} scheduled follow-ups
+                  {pendingCount} pending · {doneCount} done
                 </p>
               </div>
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#2E4E36] text-[11px] text-emerald-200 font-bold">
-                {selectedDayTasks.length}
+                {pendingCount}
               </span>
             </div>
 
@@ -863,7 +881,8 @@ export default function FollowUps() {
               </button>
             )}
           </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* RESCHEDULE MODAL DIALOG */}
@@ -903,6 +922,27 @@ export default function FollowUps() {
               />
             </div>
           </div>
+        </Dialog>
+      )}
+      {deletingId && (
+        <Dialog
+          open
+          onClose={() => setDeletingId(null)}
+          title="Delete Follow-up"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setDeletingId(null)}>
+                Cancel
+              </Button>
+              <Button variant="danger" busy={deleteBusy} onClick={() => void confirmDeleteTask()}>
+                Delete
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-[#202820]">
+            Are you sure you want to delete this follow-up?
+          </p>
         </Dialog>
       )}
     </div>
@@ -1017,6 +1057,27 @@ function FollowUpCard({
           <span>Delete</span>
         </button>
       </div>
+      {deletingId && (
+        <Dialog
+          open
+          onClose={() => setDeletingId(null)}
+          title="Delete Follow-up"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setDeletingId(null)}>
+                Cancel
+              </Button>
+              <Button variant="danger" busy={deleteBusy} onClick={() => void confirmDeleteTask()}>
+                Delete
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-[#202820]">
+            Are you sure you want to delete this follow-up?
+          </p>
+        </Dialog>
+      )}
     </div>
   );
 }

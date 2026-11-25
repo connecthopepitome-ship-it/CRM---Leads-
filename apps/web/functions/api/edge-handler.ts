@@ -2966,13 +2966,73 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     return jsonRes(pay);
   }
 
-  // 10. /notifications (Requirement 4)
+  // 10. /notifications & /notifications/read (backed by D1 + auto follow-up alerts)
+  if (path === '/notifications/read' && method === 'POST') {
+    const body = (await request.json().catch(() => ({}))) as any;
+    if (db) {
+      if (body.all) {
+        await db.prepare('UPDATE notifications SET is_read = 1').run();
+      } else if (Array.isArray(body.ids) && body.ids.length > 0) {
+        for (const nid of body.ids) {
+          await db.prepare('UPDATE notifications SET is_read = 1 WHERE id = ?').bind(nid).run();
+        }
+      }
+    }
+    return jsonRes({ success: true });
+  }
+
   if (path === '/notifications' || path === '/notifications/') {
+    if (db) {
+      try {
+        // Sync notifications for pending follow-ups due in 15 mins or newly overdue
+        const { results: fuRows } = await db.prepare("SELECT * FROM follow_ups WHERE status = 'pending'").all();
+        const nowMs = Date.now();
+        for (const fu of (fuRows || []) as any[]) {
+          const dueMs = new Date(fu.due_at).getTime();
+          if (isNaN(dueMs)) continue;
+          const link = `/${fu.record_type === 'customer' ? 'customers' : 'leads'}/${fu.record_id}`;
+          const party = fu.party_name || 'Client';
+          if (dueMs < nowMs) {
+            const nid = `notif-fu-overdue-${fu.id}`;
+            const title = `Overdue follow-up: ${party} (due ${formatISTDate(fu.due_at)})`;
+            await db
+              .prepare('INSERT OR IGNORE INTO notifications (id, title, message, is_read, link, created_at) VALUES (?, ?, ?, 0, ?, ?)')
+              .bind(nid, title, fu.note || title, link, fu.due_at)
+              .run();
+          } else if (dueMs - nowMs <= 15 * 60 * 1000) {
+            const nid = `notif-fu-soon-${fu.id}`;
+            const title = `Follow-up due in 15 mins: ${party} (${formatISTDate(fu.due_at)})`;
+            await db
+              .prepare('INSERT OR IGNORE INTO notifications (id, title, message, is_read, link, created_at) VALUES (?, ?, ?, 0, ?, ?)')
+              .bind(nid, title, fu.note || title, link, new Date().toISOString())
+              .run();
+          }
+        }
+
+        const unreadOnly = url.searchParams.get('unread') === '1';
+        const limit = Math.min(Number(url.searchParams.get('limit') || 50), 100);
+        const { results } = await db
+          .prepare(`SELECT * FROM notifications ${unreadOnly ? 'WHERE is_read = 0' : ''} ORDER BY created_at DESC LIMIT ?`)
+          .bind(limit)
+          .all();
+        const unreadRow: any = await db.prepare('SELECT COUNT(*) AS cnt FROM notifications WHERE is_read = 0').first();
+        const items = (results || []).map((r: any) => ({
+          id: r.id,
+          title: r.title,
+          message: r.message,
+          link: r.link || '/follow-ups',
+          read: Boolean(r.is_read),
+          readAt: r.is_read ? r.created_at : null,
+          createdAt: r.created_at,
+        }));
+        return jsonRes({ items, unreadCount: Number(unreadRow?.cnt ?? 0) });
+      } catch (e) {
+        console.error('D1 notifications error:', e);
+      }
+    }
     const unreadOnly = url.searchParams.get('unread') === '1';
     let notifs = memoryStore.notifications;
-    if (unreadOnly) {
-      notifs = notifs.filter((n) => !n.read);
-    }
+    if (unreadOnly) notifs = notifs.filter((n) => !n.read);
     return jsonRes({ items: notifs, unreadCount: memoryStore.notifications.filter((n) => !n.read).length });
   }
 
@@ -4092,6 +4152,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       const { status, dueAt, note } = body;
       if (db) {
         try {
+          const existing: any = await db.prepare('SELECT * FROM follow_ups WHERE id = ?').bind(fuId).first();
           const completedAt = status === 'completed' ? new Date().toISOString() : null;
           await db.prepare(`
             UPDATE follow_ups
@@ -4103,15 +4164,28 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             WHERE id = ?
           `).bind(status || null, dueAt || null, note !== undefined ? note : null, completedAt, fuId).run();
 
-          // If completed, add timeline entry
-          if (status === 'completed') {
-            const { results } = await db.prepare('SELECT record_type, record_id, party_name, type FROM follow_ups WHERE id = ?').bind(fuId).all();
-            if (results?.[0]) {
-              const fu = results[0];
+          if (existing) {
+            if (dueAt && dueAt !== existing.due_at) {
               await db.prepare(`
                 INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
                 VALUES (?, ?, ?, 'system', ?, ?, 'Owner Admin', CURRENT_TIMESTAMP)
-              `).bind('act-' + Date.now(), fu.record_type, fu.record_id, `Follow-up completed (${fu.type})`, null).run();
+              `).bind(
+                'act-' + Date.now(),
+                existing.record_type,
+                existing.record_id,
+                `Follow-up rescheduled from ${formatISTDate(existing.due_at)} to ${formatISTDate(dueAt)}`,
+                null,
+              ).run();
+              // Clear old follow-up notifications so new due time can trigger fresh ones
+              await db.prepare('DELETE FROM notifications WHERE id IN (?, ?)').bind(`notif-fu-soon-${fuId}`, `notif-fu-overdue-${fuId}`).run();
+            }
+
+            if (status === 'completed') {
+              await db.prepare(`
+                INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
+                VALUES (?, ?, ?, 'system', ?, ?, 'Owner Admin', CURRENT_TIMESTAMP)
+              `).bind('act-' + (Date.now() + 1), existing.record_type, existing.record_id, `Follow-up completed (${existing.type})`, null).run();
+              await db.prepare('UPDATE notifications SET is_read = 1 WHERE id IN (?, ?)').bind(`notif-fu-soon-${fuId}`, `notif-fu-overdue-${fuId}`).run();
             }
           }
         } catch (e) {
@@ -4124,6 +4198,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       if (db) {
         try {
           await db.prepare('DELETE FROM follow_ups WHERE id = ?').bind(fuId).run();
+          await db.prepare('DELETE FROM notifications WHERE id IN (?, ?)').bind(`notif-fu-soon-${fuId}`, `notif-fu-overdue-${fuId}`).run();
         } catch (e) {
           console.error('D1 follow-up delete error:', e);
         }

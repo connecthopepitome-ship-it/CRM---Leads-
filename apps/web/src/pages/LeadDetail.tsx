@@ -88,13 +88,25 @@ export default function LeadDetail() {
         <Button variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => setConfirmDelete(true)}>Delete</Button>
       </>} />
       {offline && <div className="mb-3"><Banner tone="warning">Offline — showing this lead as last synced.</Banner></div>}
-      {nextFu && (
-        <div className="mb-3">
-          <Banner tone="info">
-            <b>Next follow-up:</b> {String(nextFu.type).toUpperCase()} on {dateTime(nextFu.dueAt)} {nextFu.note && `— ${nextFu.note}`}
-          </Banner>
-        </div>
-      )}
+      {nextFu && (() => {
+        const isOverdue = new Date(nextFu.dueAt).getTime() < Date.now();
+        return (
+          <div className="mb-3">
+            <Banner tone={isOverdue ? 'danger' : 'info'}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span>
+                  <b>Next follow-up:</b> {String(nextFu.type).toUpperCase()} on {dateTime(nextFu.dueAt)} {nextFu.note && `— ${nextFu.note}`}
+                </span>
+                {isOverdue && (
+                  <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">
+                    Overdue
+                  </span>
+                )}
+              </div>
+            </Banner>
+          </div>
+        );
+      })()}
       {l.customerId && <div className="mb-3"><Banner tone="success" action={<LinkButton to={`/customers/${l.customerId}`} variant="ghost">Open customer</LinkButton>}>{l.stage === 'won' ? 'Converted to a customer.' : 'This person is an existing customer.'}</Banner></div>}
       <div className="mb-4"><ActionBar rec={{ recordType: 'lead', recordId: l.id, name: l.name, company: l.company || null, phone: l.phone || null, email: l.email, address: l.city }} /></div>
       <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">

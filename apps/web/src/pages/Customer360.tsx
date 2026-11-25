@@ -4,10 +4,10 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { del, get, post, waitForJob, download } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { date, label, money, today } from '../lib/format';
+import { date, dateTime, label, money, today } from '../lib/format';
 import { ActionBar, Timeline } from '../features/engagement';
 import { Files } from '../features/Files';
-import { Badge, Button, Card, Dialog, EmptyState, ErrorState, LinkButton, PageHeader, Skeleton, StatTile, Table, Tabs, TextField, cx, toast } from '../ui';
+import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, LinkButton, PageHeader, Skeleton, StatTile, Table, Tabs, TextField, cx, toast } from '../ui';
 import { errorToast } from '../ui/toast';
 
 interface C360 {
@@ -37,6 +37,7 @@ export default function Customer360() {
   const [deleting, setDeleting] = useState(false);
   const q = useQuery({ queryKey: ['c360', id], queryFn: () => get<C360>(`/customers/${id}/360`), enabled: Boolean(id && id !== 'undefined') });
   const detail = useQuery({ queryKey: ['customer', id], queryFn: () => get<C360['customer'] & { contacts: Contact[]; addresses: { line1: string; city: string }[] }>(`/customers/${id}`), enabled: Boolean(id && id !== 'undefined') });
+  const followUpsQ = useQuery({ queryKey: ['follow-ups'], queryFn: () => get<{ items: any[] }>('/follow-ups'), enabled: Boolean(id && id !== 'undefined') });
   if (q.isLoading) return <Skeleton rows={6} />;
   const is404 = !q.data || !q.data.customer || (q.error as any)?.status === 404 || (q.error as any)?.code === 'NOT_FOUND';
   if (is404) {
@@ -54,6 +55,10 @@ export default function Customer360() {
   const primary = contacts.find((c) => c.isPrimary) ?? contacts[0];
   const primaryPhone = primary?.phone ?? (detail.data as any)?.phone ?? (customer as any)?.phone ?? null;
   const primaryEmail = primary?.email ?? (detail.data as any)?.email ?? (customer as any)?.email ?? null;
+  const nextFu = (followUpsQ.data?.items ?? [])
+    .filter((f: any) => f.recordType === 'customer' && f.recordId === customer.id && f.status !== 'completed' && !f.completed && f.dueAt)
+    .sort((a: any, b: any) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())[0];
+  const nextFuOverdue = nextFu && new Date(nextFu.dueAt).getTime() < Date.now();
   return (
     <>
       <PageHeader back="/customers" title={customer.displayName} subtitle={`${customer.code}${customer.gstin ? ` · GSTIN ${customer.gstin}` : ''}`} actions={<>
@@ -61,6 +66,22 @@ export default function Customer360() {
         {can('payment', 'create') && <LinkButton to={`/sales/payments/new?customerId=${customer.id}`}>Record payment</LinkButton>}
         <Button variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => setConfirmDelete(true)}>Delete</Button>
       </>} />
+      {nextFu && (
+        <div className="mb-3">
+          <Banner tone={nextFuOverdue ? 'danger' : 'info'}>
+            <div className="flex flex-wrap items-center gap-2">
+              <span>
+                <b>Next follow-up:</b> {String(nextFu.type).toUpperCase()} on {dateTime(nextFu.dueAt)} {nextFu.note && `— ${nextFu.note}`}
+              </span>
+              {nextFuOverdue && (
+                <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">
+                  Overdue
+                </span>
+              )}
+            </div>
+          </Banner>
+        </div>
+      )}
       <div className="mb-4"><ActionBar rec={{ recordType: 'customer', recordId: customer.id, name: primary?.name ?? customer.displayName, company: customer.legalName || customer.displayName || null, phone: primaryPhone, email: primaryEmail, address: detail.data?.addresses?.[0] ? `${detail.data.addresses[0].line1}, ${detail.data.addresses[0].city}` : null }} /></div>
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         {ageing ? <>

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Calendar,
   ChevronDown,
@@ -25,57 +25,85 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { get } from '../lib/api';
+import { get, patch } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { money } from '../lib/format';
+import { dateTime, money } from '../lib/format';
 import { toast } from '../ui';
-
-interface FollowUpItem {
-  id: string;
-  name: string;
-  task: string;
-  time: string;
-  completed: boolean;
-}
 
 export default function Home() {
   const { user } = useAuth();
   const nav = useNavigate();
+  const qc = useQueryClient();
 
   const [timeFilter, setTimeFilter] = useState('This Month');
   const [activeDonutSlice, setActiveDonutSlice] = useState<number | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Follow-ups state matching Grovia Screen 1
-  const [followUps, setFollowUps] = useState<FollowUpItem[]>([
-    {
-      id: 'fu-1',
-      name: 'Fatima Khan',
-      task: 'Quotation follow-up',
-      time: '10:00 AM',
-      completed: false,
-    },
-    {
-      id: 'fu-2',
-      name: 'Mohan Das',
-      task: 'Requirement confirmation',
-      time: '11:30 AM',
-      completed: false,
-    },
-    {
-      id: 'fu-3',
-      name: 'Deepa Reddy',
-      task: 'Proposal discussion',
-      time: '04:00 PM',
-      completed: false,
-    },
-  ]);
+  const followUpsQ = useQuery({
+    queryKey: ['follow-ups'],
+    queryFn: () => get<{ items: any[] }>('/follow-ups'),
+    refetchInterval: 60_000,
+  });
 
-  const toggleFollowUp = (id: string) => {
-    setFollowUps((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, completed: !f.completed } : f))
-    );
-    toast('Follow-up status updated');
+  const todayIST = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+
+  const followUps = useMemo(() => {
+    const nowMs = Date.now();
+    return (followUpsQ.data?.items ?? [])
+      .filter((fu: any) => {
+        if (fu.status === 'completed' || fu.completed) return false;
+        if (!fu.dueAt) return false;
+        const d = new Date(fu.dueAt);
+        if (isNaN(d.getTime())) return false;
+        const fuDateIST = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Kolkata',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(d);
+        return fuDateIST <= todayIST;
+      })
+      .sort((a: any, b: any) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
+      .map((fu: any) => {
+        const d = new Date(fu.dueAt);
+        const isOverdue = d.getTime() < nowMs;
+        const istTime = new Intl.DateTimeFormat('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        }).format(d);
+        return {
+          id: fu.id,
+          recordType: fu.recordType || 'lead',
+          recordId: fu.recordId || '',
+          name: fu.partyName || fu.customer || 'Client',
+          type: String(fu.type || 'call').toUpperCase(),
+          task: fu.note || fu.title || 'Scheduled follow-up',
+          time: isOverdue ? dateTime(fu.dueAt) : istTime,
+          isOverdue,
+          completed: false,
+        };
+      });
+  }, [followUpsQ.data?.items, todayIST]);
+
+  const toggleFollowUp = async (id: string) => {
+    try {
+      await patch(`/follow-ups/${id}`, { status: 'completed' });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['follow-ups'], refetchType: 'all' }),
+        qc.invalidateQueries({ queryKey: ['leads'], refetchType: 'all' }),
+        qc.invalidateQueries({ queryKey: ['notifications'], refetchType: 'all' }),
+      ]);
+      toast('Follow-up marked completed', 'success');
+    } catch {
+      toast('Failed to update follow-up', 'error');
+    }
   };
 
   const handleRefresh = () => {
@@ -383,35 +411,56 @@ export default function Home() {
             </div>
 
             <div className="mt-3 divide-y divide-[#DCE7D9]/50">
-              {followUps.map((f) => (
-                <div key={f.id} className="flex items-center justify-between py-3 interactive-tile rounded-xl px-2 hover:bg-white/80">
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => toggleFollowUp(f.id)}
-                      className={`flex h-4 w-4 items-center justify-center rounded-sm border transition-all btn-spring ${
-                        f.completed
-                          ? 'border-[#3D7952] bg-[#3D7952] text-white'
-                          : 'border-[#DCE7D9] bg-white hover:border-[#3D7952]'
-                      }`}
-                    >
-                      {f.completed && <Check size={11} strokeWidth={3} />}
-                    </button>
-                    <div>
-                      <p
-                        className={`text-xs font-semibold ${
-                          f.completed ? 'line-through text-[#778477]' : 'text-[#202820]'
+              {followUps.length === 0 ? (
+                <div className="py-6 text-center text-xs text-[#778477]">
+                  All caught up for today!
+                </div>
+              ) : (
+                followUps.map((f) => {
+                  const partyLink = f.recordType === 'customer' ? `/customers/${f.recordId}` : `/leads/${f.recordId}`;
+                  return (
+                    <div key={f.id} className="flex items-center justify-between gap-2 py-3 interactive-tile rounded-xl px-2 hover:bg-white/80">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <button
+                          type="button"
+                          onClick={() => void toggleFollowUp(f.id)}
+                          aria-label="Mark completed"
+                          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-all btn-spring ${
+                            f.isOverdue
+                              ? 'border-red-400 bg-white hover:border-red-600'
+                              : 'border-[#DCE7D9] bg-white hover:border-[#3D7952]'
+                          }`}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Link to={partyLink} className="text-xs font-semibold text-[#233D2D] hover:underline truncate">
+                              {f.name}
+                            </Link>
+                            <span className="rounded bg-[#E3EFDF] px-1.5 py-0.2 text-[9px] font-bold text-[#233D2D] uppercase">
+                              {f.type}
+                            </span>
+                            {f.isOverdue && (
+                              <span className="rounded bg-red-100 text-red-700 px-1.5 py-0.2 text-[9px] font-bold uppercase">
+                                Overdue
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-[#778477] truncate mt-0.5">{f.task}</p>
+                        </div>
+                      </div>
+                      <span
+                        className={`shrink-0 text-[11px] font-mono px-2 py-0.5 rounded-md border glass-badge ${
+                          f.isOverdue
+                            ? 'text-red-700 bg-red-50 border-red-200'
+                            : 'text-[#778477] bg-[#F5F9F2]/90 border-[#DCE7D9]'
                         }`}
                       >
-                        <span className="hover-text-slide">{f.name}</span> <span className="font-normal text-[#778477]">— {f.task}</span>
-                      </p>
+                        {f.time}
+                      </span>
                     </div>
-                  </div>
-                  <span className="text-[11px] font-mono text-[#778477] bg-[#F5F9F2]/90 px-2 py-0.5 rounded-md border border-[#DCE7D9] glass-badge">
-                    {f.time}
-                  </span>
-                </div>
-              ))}
+                  );
+                })
+              )}
             </div>
           </div>
         </div>

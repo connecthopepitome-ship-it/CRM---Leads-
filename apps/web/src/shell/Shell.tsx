@@ -57,6 +57,44 @@ export function Shell() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  const followUpsQ = useQuery({
+    queryKey: ['follow-ups'],
+    queryFn: () => get<{ items: any[] }>('/follow-ups'),
+    refetchInterval: 60_000,
+  });
+
+  const notifsQ = useQuery({
+    queryKey: ['notifications'],
+    queryFn: () => get<{ items: any[]; unreadCount?: number }>('/notifications?limit=20'),
+    refetchInterval: 60_000,
+  });
+
+  const todayIST = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+
+  const nowMs = Date.now();
+  const pendingDueTodayOrOverdue = (followUpsQ.data?.items ?? []).filter((fu: any) => {
+    if (fu.status === 'completed' || fu.completed) return false;
+    if (!fu.dueAt) return false;
+    const d = new Date(fu.dueAt);
+    if (isNaN(d.getTime())) return false;
+    const fuDateIST = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+    return fuDateIST <= todayIST;
+  });
+
+  const tasksBadgeCount = pendingDueTodayOrOverdue.length;
+  const hasOverdueTasks = pendingDueTodayOrOverdue.some((fu: any) => new Date(fu.dueAt).getTime() < nowMs);
+  const unreadNotifCount = notifsQ.data?.unreadCount ?? (notifsQ.data?.items ?? []).filter((n: any) => !n.read && !n.readAt).length;
+
   // Right-side Tasks drawer state (persisted, defaults to closed on mobile)
   const [taskDrawerOpen, setTaskDrawerOpen] = useState<boolean>(() => {
     try {
@@ -229,8 +267,13 @@ export function Shell() {
           >
             <CheckSquare size={15} />
             <span className="hidden sm:inline hover-text-lift">Tasks</span>
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#3D7952] text-[9px] text-white font-bold">
-              3
+            <span
+              data-testid="header-tasks-badge"
+              className={`flex min-w-[16px] h-4 px-1 items-center justify-center rounded-full text-[9px] text-white font-bold ${
+                hasOverdueTasks ? 'bg-red-600' : 'bg-[#3D7952]'
+              }`}
+            >
+              {tasksBadgeCount}
             </span>
           </button>
 
@@ -241,7 +284,14 @@ export function Shell() {
             aria-label="Notifications"
           >
             <Bell size={16} />
-            <span className="absolute right-1.5 top-1.5 sm:right-2 sm:top-2 h-2 w-2 rounded-full bg-[#D66B68] ring-2 ring-white" />
+            {unreadNotifCount > 0 && (
+              <span
+                data-testid="notifications-badge"
+                className="absolute -right-1 -top-1 flex min-w-[16px] h-4 px-1 items-center justify-center rounded-full bg-[#D66B68] text-[9px] font-bold text-white ring-2 ring-white"
+              >
+                {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+              </span>
+            )}
           </Link>
 
           {/* Desktop-only Quick-Create (+) Dropdown */}
@@ -462,8 +512,12 @@ export function Shell() {
         >
           <div className="relative">
             <CheckSquare size={19} />
-            <span className="absolute -top-1 -right-2 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#3D7952] text-[8px] text-white font-bold">
-              3
+            <span
+              className={`absolute -top-1 -right-2 flex min-w-[14px] h-3.5 px-0.5 items-center justify-center rounded-full text-[8px] text-white font-bold ${
+                hasOverdueTasks ? 'bg-red-600' : 'bg-[#3D7952]'
+              }`}
+            >
+              {tasksBadgeCount}
             </span>
           </div>
           <span className="mt-0.5">Tasks</span>

@@ -632,7 +632,20 @@ export default function Leads() {
 
                           {/* Next Follow-up */}
                           <td className="px-4 py-3.5 text-xs text-[#778477]">
-                            {lead.nextFollowUpAt ? dateTime(String(lead.nextFollowUpAt)) : '—'}
+                            {lead.nextFollowUpAt ? (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={new Date(String(lead.nextFollowUpAt)).getTime() < Date.now() ? 'text-red-700 font-semibold' : ''}>
+                                  {dateTime(String(lead.nextFollowUpAt))}
+                                </span>
+                                {new Date(String(lead.nextFollowUpAt)).getTime() < Date.now() && (
+                                  <span className="rounded bg-red-100 text-red-700 px-1.5 py-0.2 text-[9px] font-bold uppercase">
+                                    Overdue
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              '—'
+                            )}
                           </td>
 
                           {/* Action Menu button */}
