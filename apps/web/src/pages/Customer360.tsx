@@ -2,12 +2,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { del, get, post, waitForJob, download } from '../lib/api';
+import { del, get, post, patch, waitForJob, download } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { date, dateTime, label, money, today } from '../lib/format';
 import { ActionBar, Timeline } from '../features/engagement';
+import { useAction } from '../features/hooks';
 import { Files } from '../features/Files';
-import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, LinkButton, PageHeader, Skeleton, StatTile, Table, Tabs, TextField, cx, toast } from '../ui';
+import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, KeyValue, LinkButton, PageHeader, Skeleton, StatTile, Table, Tabs, TextField, cx, toast } from '../ui';
 import { errorToast } from '../ui/toast';
 
 interface C360 {
@@ -32,9 +33,22 @@ export default function Customer360() {
   const nav = useNavigate();
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') ?? 'overview';
-  const { can } = useAuth();
+  const { can, perm, mode } = useAuth();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const usersQ = useQuery({
+    queryKey: ['users'],
+    queryFn: () => get<any>('/admin/users').then((r) => (Array.isArray(r) ? r : r?.items || [])),
+    enabled: mode === 'team',
+  });
+  const reassign = useAction(
+    (userId: string) => {
+      const u = (usersQ.data || []).find((x: any) => x.id === userId);
+      return patch(`/customers/${id}`, { assignedUserId: userId || null, assignedTo: u?.fullName || u?.name || null });
+    },
+    [['customer', id], ['c360', id], ['customers'], ['notifications']],
+    () => toast('Customer reassigned successfully')
+  );
   const q = useQuery({ queryKey: ['c360', id], queryFn: () => get<C360>(`/customers/${id}/360`), enabled: Boolean(id && id !== 'undefined') });
   const detail = useQuery({ queryKey: ['customer', id], queryFn: () => get<C360['customer'] & { contacts: Contact[]; addresses: { line1: string; city: string }[] }>(`/customers/${id}`), enabled: Boolean(id && id !== 'undefined') });
   const followUpsQ = useQuery({ queryKey: ['follow-ups'], queryFn: () => get<{ items: any[] }>('/follow-ups'), enabled: Boolean(id && id !== 'undefined') });
@@ -99,15 +113,49 @@ export default function Customer360() {
       {tab === 'overview' && (
         <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
           <Timeline recordType="customer" recordId={customer.id} />
-          {ageing && (
-            <Card title="Ageing">
-              <ul className="text-sm">
-                {Object.entries({ not_due: 'Not yet due', d1_30: '1–30 days', d31_60: '31–60 days', d61_90: '61–90 days', d90_plus: '90+ days' }).map(([k, l]) => (
-                  <li key={k} className="flex justify-between border-b border-border py-1"><span>{l}</span><span className="tabular-nums">{money(ageing[k])}</span></li>
-                ))}
-              </ul>
+          <div className="flex flex-col gap-4">
+            <Card title="Details">
+              <KeyValue columns={1} items={([
+                mode === 'team'
+                  ? [
+                      'Assigned to',
+                      perm('customer:assign') ? (
+                        <select
+                          value={(detail.data as any)?.assignedUserId || (customer as any)?.assignedUserId || ''}
+                          onChange={(e) => reassign.mutate(e.target.value)}
+                          className="text-xs p-1 rounded border border-[#DCE7D9] bg-white font-medium max-w-[150px] truncate"
+                        >
+                          <option value="">Unassigned</option>
+                          {(usersQ.data || [])
+                            .filter((u: any) => u.status === 'active')
+                            .map((u: any) => (
+                              <option key={u.id} value={u.id}>
+                                {u.fullName || u.name}
+                              </option>
+                            ))}
+                        </select>
+                      ) : (
+                        (detail.data as any)?.assignedTo || (customer as any)?.assignedTo || 'Unassigned'
+                      ),
+                    ]
+                  : null,
+                ['Code', customer.code],
+                ['Phone', primaryPhone],
+                ['Email', primaryEmail],
+                ['GSTIN', customer.gstin || null],
+                ['Created', dateTime(customer.createdAt)],
+              ] as any[]).filter(Boolean)} />
             </Card>
-          )}
+            {ageing && (
+              <Card title="Ageing">
+                <ul className="text-sm">
+                  {Object.entries({ not_due: 'Not yet due', d1_30: '1–30 days', d31_60: '31–60 days', d61_90: '61–90 days', d90_plus: '90+ days' }).map(([k, l]) => (
+                    <li key={k} className="flex justify-between border-b border-border py-1"><span>{l}</span><span className="tabular-nums">{money(ageing[k])}</span></li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+          </div>
         </div>
       )}
       {tab === 'activities' && <Timeline recordType="customer" recordId={customer.id} />}

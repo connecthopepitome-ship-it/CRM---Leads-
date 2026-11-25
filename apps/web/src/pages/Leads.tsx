@@ -111,7 +111,7 @@ export default function Leads() {
   const term = useTerm();
   const [params, setParams] = useSearchParams();
   const nav = useNavigate();
-  const { perm } = useAuth();
+  const { perm, can, mode } = useAuth();
   const view = params.get('view') ?? 'list';
   const stages = useOptions('pipelineStages');
   const sources = useOptions('leadSources');
@@ -261,6 +261,46 @@ export default function Leads() {
       {/* 2. FILTER & SEARCH TOOLBAR (Mobile Responsive) */}
       {/* ============================================================== */}
       <div className="rounded-2xl border border-[#DCE7D9] bg-white p-3 shadow-2xs space-y-2.5">
+        {mode === 'team' && (
+          <div className="flex items-center gap-2 pb-2 border-b border-[#DCE7D9]/60">
+            <span className="text-xs font-semibold text-[#778477]">View:</span>
+            <div className="inline-flex rounded-full bg-[#E3EFDF]/70 p-0.5 border border-[#DCE7D9]">
+              <button
+                type="button"
+                onClick={() => set('scope', '')}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                  !params.get('scope')
+                    ? 'bg-[#233D2D] text-white shadow-xs'
+                    : 'text-[#778477] hover:text-[#202820]'
+                }`}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => set('scope', 'my')}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                  params.get('scope') === 'my'
+                    ? 'bg-[#233D2D] text-white shadow-xs'
+                    : 'text-[#778477] hover:text-[#202820]'
+                }`}
+              >
+                My Leads
+              </button>
+              <button
+                type="button"
+                onClick={() => set('scope', 'team')}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                  params.get('scope') === 'team'
+                    ? 'bg-[#233D2D] text-white shadow-xs'
+                    : 'text-[#778477] hover:text-[#202820]'
+                }`}
+              >
+                Team
+              </button>
+            </div>
+          </div>
+        )}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           {/* Full-width Search on Mobile */}
           <div className="relative flex-1">
@@ -492,6 +532,11 @@ export default function Leads() {
                       </div>
                       <Badge status={lead.stage}>{stageLabel(lead.stage)}</Badge>
                     </div>
+                    {mode === 'team' && (
+                      <div className="text-[11px] text-[#778477]">
+                        Assigned to: <span className="font-semibold text-[#202820]">{(lead as any).assignedTo || 'Unassigned'}</span>
+                      </div>
+                    )}
 
                     {/* CONTACT ROW: Phone & Quick Action */}
                     <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#F5F9F2]">
@@ -563,6 +608,7 @@ export default function Leads() {
                       </th>
                       <th className="px-4 py-3">Name</th>
                       <th className="px-4 py-3">Phone</th>
+                      {mode === 'team' && <th className="px-4 py-3">Assigned to</th>}
                       <th className="px-4 py-3">Stage</th>
                       <th className="px-4 py-3">SLA</th>
                       <th className="px-4 py-3">Next Follow-up</th>
@@ -615,6 +661,15 @@ export default function Leads() {
                           <td className="px-4 py-3.5 text-xs text-[#202820] font-mono">
                             {lead.phone ?? lead.phoneRaw ?? lead.email ?? '—'}
                           </td>
+
+                          {/* Assigned to (Team Mode) */}
+                          {mode === 'team' && (
+                            <td className="px-4 py-3.5 text-xs text-[#202820]">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#E3EFDF] text-[#233D2D] font-medium text-[11px]">
+                                {(lead as any).assignedTo || 'Unassigned'}
+                              </span>
+                            </td>
+                          )}
 
                           {/* Stage Pill */}
                           <td className="px-4 py-3.5">

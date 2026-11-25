@@ -105,7 +105,7 @@ export default function Customers() {
   const term = useTerm();
   const [params, setParams] = useSearchParams();
   const nav = useNavigate();
-  const { can } = useAuth();
+  const { can, mode } = useAuth();
 
   const [search, setSearch] = useState('');
   const [territoryFilter, setTerritoryFilter] = useState('');
@@ -117,13 +117,21 @@ export default function Customers() {
   const [selectedId, setSelectedId] = useState<string>('cust-1');
   const [profileTab, setProfileTab] = useState<'overview' | 'activity' | 'quotations' | 'invoices' | 'followups'>('overview');
 
+  const set = (k: string, v: string) => {
+    const n = new URLSearchParams(params);
+    if (v) n.set(k, v);
+    else n.delete(k);
+    setParams(n, { replace: true });
+  };
+
   const isDemo = import.meta.env.VITE_DEMO_MODE === 'true';
   const q = params.get('q') ?? '';
+  const scope = params.get('scope') ?? '';
   const list = useInfiniteQuery({
-    queryKey: ['customers', q],
+    queryKey: ['customers', q, scope],
     queryFn: ({ pageParam }) =>
       get<{ items: CustomerItem[]; nextCursor: string | null }>(
-        `/customers?limit=50${q ? `&q=${encodeURIComponent(q)}` : ''}${pageParam ? `&cursor=${pageParam}` : ''}`
+        `/customers?limit=50${q ? `&q=${encodeURIComponent(q)}` : ''}${scope ? `&scope=${encodeURIComponent(scope)}` : ''}${pageParam ? `&cursor=${pageParam}` : ''}`
       ).catch((err) => {
         if (isDemo) return { items: SAMPLE_CUSTOMERS_FALLBACK, nextCursor: null };
         throw err;
@@ -170,6 +178,48 @@ export default function Customers() {
           </LinkButton>
         )}
       </div>
+
+      {/* Scope Selector in Team Mode */}
+      {mode === 'team' && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-[#778477]">View:</span>
+          <div className="inline-flex rounded-full bg-[#E3EFDF]/70 p-0.5 border border-[#DCE7D9]">
+            <button
+              type="button"
+              onClick={() => set('scope', '')}
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                !scope
+                  ? 'bg-[#233D2D] text-white shadow-xs'
+                  : 'text-[#778477] hover:text-[#202820]'
+              }`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => set('scope', 'my')}
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                scope === 'my'
+                  ? 'bg-[#233D2D] text-white shadow-xs'
+                  : 'text-[#778477] hover:text-[#202820]'
+              }`}
+            >
+              My Customers
+            </button>
+            <button
+              type="button"
+              onClick={() => set('scope', 'team')}
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                scope === 'team'
+                  ? 'bg-[#233D2D] text-white shadow-xs'
+                  : 'text-[#778477] hover:text-[#202820]'
+              }`}
+            >
+              Team
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#DCE7D9] bg-white p-3 shadow-2xs">
@@ -274,7 +324,7 @@ export default function Customers() {
                           {c.displayName}
                         </h3>
                         <span className="text-[10px] text-[#778477] font-mono block">
-                          {c.code || 'C-0001'} {c.city ? `• ${c.city}` : ''}
+                          {c.code || 'C-0001'} {c.city ? `• ${c.city}` : ''} {mode === 'team' && (c as any).assignedTo ? `• Assigned: ${(c as any).assignedTo}` : ''}
                         </span>
                       </div>
                     </div>
@@ -385,7 +435,7 @@ export default function Customers() {
                         {c.displayName}
                       </span>
                       <span className="text-[10px] text-[#778477] block font-mono">
-                        {c.code || 'C-0001'}
+                        {c.code || 'C-0001'} {mode === 'team' && (c as any).assignedTo ? `· ${(c as any).assignedTo}` : ''}
                       </span>
                     </div>
                   </div>
