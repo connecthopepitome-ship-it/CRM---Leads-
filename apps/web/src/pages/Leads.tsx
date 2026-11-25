@@ -115,6 +115,8 @@ export default function Leads() {
   const view = params.get('view') ?? 'list';
   const stages = useOptions('pipelineStages');
   const sources = useOptions('leadSources');
+  const territories = useOptions('territories');
+  const tagsOpts = useOptions('tags');
   const users = useUsers(perm('lead:assign'));
 
   const isDemo = import.meta.env.VITE_DEMO_MODE === 'true';
@@ -309,7 +311,7 @@ export default function Leads() {
           </div>
 
           {/* Desktop Filter Dropdowns */}
-          <div className="hidden md:flex items-center gap-2">
+          <div className="hidden md:flex items-center gap-2 flex-wrap">
             {/* Stage Filter */}
             <select
               value={params.get('stage') ?? ''}
@@ -317,13 +319,11 @@ export default function Leads() {
               className="rounded-full border border-[#DCE7D9] bg-[#F5F9F2] px-3.5 py-1.5 text-xs font-medium text-[#202820] hover:border-[#CFE5CB] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/20 cursor-pointer"
             >
               <option value="">All Stages</option>
-              <option value="new">New</option>
-              <option value="contacted">Contacted</option>
-              <option value="interested">Interested</option>
-              <option value="quotation_sent">Quotation Sent</option>
-              <option value="negotiation">Negotiation</option>
-              <option value="won">Won</option>
-              <option value="lost">Lost</option>
+              {(stages.data ?? []).map((s) => (
+                <option key={s.id} value={String(s.key || s.id)}>
+                  {s.label}
+                </option>
+              ))}
             </select>
 
             {/* Source Filter */}
@@ -336,6 +336,34 @@ export default function Leads() {
               {sources.data?.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.label}
+                </option>
+              ))}
+            </select>
+
+            {/* Territory Filter */}
+            <select
+              value={params.get('territoryId') ?? ''}
+              onChange={(e) => set('territoryId', e.target.value)}
+              className="rounded-full border border-[#DCE7D9] bg-[#F5F9F2] px-3.5 py-1.5 text-xs font-medium text-[#202820] hover:border-[#CFE5CB] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/20 cursor-pointer"
+            >
+              <option value="">All Territories</option>
+              {territories.data?.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+
+            {/* Tag Filter */}
+            <select
+              value={params.get('tag') ?? ''}
+              onChange={(e) => set('tag', e.target.value)}
+              className="rounded-full border border-[#DCE7D9] bg-[#F5F9F2] px-3.5 py-1.5 text-xs font-medium text-[#202820] hover:border-[#CFE5CB] focus:outline-none focus:ring-2 focus:ring-[#3D7952]/20 cursor-pointer"
+            >
+              <option value="">All Tags</option>
+              {tagsOpts.data?.map((t) => (
+                <option key={t.id} value={t.label}>
+                  {t.label}
                 </option>
               ))}
             </select>

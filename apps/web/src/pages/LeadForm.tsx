@@ -79,6 +79,8 @@ export default function LeadForm() {
   const { mode, user } = useAuth();
   const sources = useOptions('leadSources');
   const products = useOptions('products');
+  const territories = useOptions('territories');
+  const tagsOpts = useOptions('tags');
   const existing = useQuery({ queryKey: ['lead', id], queryFn: () => get<Lead>(`/leads/${id}`), enabled: !!id });
 
   const [f, setF] = useState({
@@ -88,12 +90,14 @@ export default function LeadForm() {
     company: '',
     city: '',
     pincode: '',
+    territoryId: '',
     sourceId: '',
     interestProductId: '',
     expectedValue: '',
     notes: '',
     assignAuto: false,
   });
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -111,12 +115,14 @@ export default function LeadForm() {
         company: l.company ?? '',
         city: l.city ?? '',
         pincode: l.pincode ?? '',
+        territoryId: (l as any).territoryId ?? '',
         sourceId: l.sourceId ?? (l as any).source ?? '',
         interestProductId: (l as any).interestProductId ?? (l as any).productId ?? '',
         expectedValue: l.expectedValue ? String(l.expectedValue / 100) : '',
         notes: l.notes ?? '',
         assignAuto: false,
       });
+      setSelectedTags(Array.isArray(l.tags) ? l.tags : []);
     }
   }, [existing.data]);
 
@@ -156,12 +162,14 @@ export default function LeadForm() {
       company: '',
       city: '',
       pincode: '',
+      territoryId: '',
       sourceId: '',
       interestProductId: '',
       expectedValue: '',
       notes: '',
       assignAuto: false,
     });
+    setSelectedTags([]);
     setErrors({});
     setDups([]);
     toast('Form reset');
@@ -202,6 +210,8 @@ export default function LeadForm() {
       company: f.company || null,
       city: f.city || null,
       pincode: f.pincode || null,
+      territoryId: f.territoryId || null,
+      tags: selectedTags,
       sourceId: f.sourceId || undefined,
       interestProductId: f.interestProductId || null,
       expectedValue: f.expectedValue ? toPaise(f.expectedValue) : null,
@@ -443,7 +453,7 @@ export default function LeadForm() {
             </div>
           </div>
 
-          <div className="grid gap-4 p-5 sm:grid-cols-2">
+          <div className="grid gap-4 p-5 sm:grid-cols-3">
             <TextField
               label="City"
               value={f.city}
@@ -458,6 +468,13 @@ export default function LeadForm() {
               error={errors.pincode}
               placeholder="e.g. 560001"
               maxLength={6}
+            />
+            <SelectField
+              label="Territory"
+              value={f.territoryId}
+              onChange={set('territoryId')}
+              placeholder="Select territory…"
+              options={(territories.data ?? []).map((t) => ({ value: t.id, label: t.label }))}
             />
           </div>
         </div>
@@ -477,20 +494,34 @@ export default function LeadForm() {
           </div>
 
           <div className="space-y-3 p-5">
-            {/* Quick Tag Pills */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-semibold text-slate-500">Quick Tags:</span>
-              {QUICK_TAGS.map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => appendTag(tag)}
-                  className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 transition-all shadow-2xs"
-                >
-                  + {tag}
-                </button>
-              ))}
-            </div>
+            {/* Tags from Masters */}
+            {(tagsOpts.data ?? []).length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-semibold text-slate-500">Tags:</span>
+                {(tagsOpts.data ?? []).map((t) => {
+                  const active = selectedTags.includes(t.label);
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() =>
+                        setSelectedTags((prev) =>
+                          prev.includes(t.label) ? prev.filter((x) => x !== t.label) : [...prev, t.label],
+                        )
+                      }
+                      className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-all shadow-2xs ${
+                        active
+                          ? 'border-amber-500 bg-amber-100 text-amber-900 font-semibold'
+                          : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800'
+                      }`}
+                    >
+                      {active ? '✓ ' : '+ '}
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             <Field label="Meeting & Scope Notes">
               {(fid) => (

@@ -524,28 +524,37 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             params = [like, like, like, like];
           }
           const { results } = await db.prepare(query).bind(...params).all();
-          const items = (results || []).map((r: any) => ({
-            id: r.id,
-            name: r.name,
-            company: r.company,
-            phone: r.phone,
-            email: r.email,
-            city: r.city,
-            pincode: r.pincode,
-            sourceId: r.source_id,
-            sourceLabel: getSourceLabel(r.source_id),
-            interestProductId: r.interest_product_id,
-            productLabel: getProductLabel(r.interest_product_id),
-            stage: r.stage,
-            slaStatus: r.sla_status,
-            slaDueAt: r.sla_due_at,
-            nextFollowUpAt: r.next_follow_up_at || null,
-            expectedValue: r.expected_value,
-            notes: r.notes,
-            customerId: r.customer_id,
-            createdAt: r.created_at,
-            version: r.version,
-          }));
+          const { results: masterRows } = await db.prepare("SELECT id, type, name FROM masters WHERE type IN ('leadSources', 'products')").all();
+          const mMap: Record<string, string> = {};
+          for (const m of masterRows || []) mMap[`${(m as any).type}:${(m as any).id}`] = (m as any).name;
+          const items = (results || []).map((r: any) => {
+            let extra: any = {};
+            try { extra = r.data_json ? JSON.parse(r.data_json) : {}; } catch {}
+            return {
+              id: r.id,
+              name: r.name,
+              company: r.company,
+              phone: r.phone,
+              email: r.email,
+              city: r.city,
+              pincode: r.pincode,
+              sourceId: r.source_id,
+              sourceLabel: (r.source_id && mMap[`leadSources:${r.source_id}`]) || getSourceLabel(r.source_id),
+              interestProductId: r.interest_product_id,
+              productLabel: (r.interest_product_id && mMap[`products:${r.interest_product_id}`]) || getProductLabel(r.interest_product_id),
+              stage: r.stage,
+              slaStatus: r.sla_status,
+              slaDueAt: r.sla_due_at,
+              nextFollowUpAt: r.next_follow_up_at || null,
+              expectedValue: r.expected_value,
+              notes: r.notes,
+              territoryId: extra.territoryId || null,
+              tags: Array.isArray(extra.tags) ? extra.tags : [],
+              customerId: r.customer_id,
+              createdAt: r.created_at,
+              version: r.version,
+            };
+          });
           return jsonRes({ items, nextCursor: null });
         } catch (e) {
           console.error('D1 leads fetch error:', e);
@@ -640,7 +649,13 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             newLead.slaDueAt,
             newLead.expectedValue,
             newLead.notes,
-            JSON.stringify({ pincode, sourceId, interestProductId }),
+            JSON.stringify({
+              pincode,
+              sourceId,
+              interestProductId,
+              territoryId: body.territoryId || null,
+              tags: Array.isArray(body.tags) ? body.tags : [],
+            }),
             newLead.createdAt,
             newLead.createdAt,
             newLead.version
@@ -867,7 +882,13 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             newCust.address,
             newCust.city,
             newCust.state,
-            JSON.stringify({ contacts: newCust.contacts, addresses: newCust.addresses }),
+            JSON.stringify({
+              contacts: newCust.contacts,
+              addresses: newCust.addresses,
+              territoryId: body.territoryId || null,
+              customerGroupId: body.customerGroupId || null,
+              tags: Array.isArray(body.tags) ? body.tags : [],
+            }),
             new Date().toISOString(),
             new Date().toISOString()
           ).run();
@@ -937,6 +958,11 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           `).bind(id).all();
           const row: any = leadResults?.[0];
           if (row) {
+            let extra: any = {};
+            try { extra = row.data_json ? JSON.parse(row.data_json) : {}; } catch {}
+            const { results: mRows } = await db.prepare("SELECT id, type, name FROM masters WHERE type IN ('leadSources', 'products', 'territories') AND id IN (?, ?, ?)").bind(row.source_id || '', row.interest_product_id || '', extra.territoryId || '').all();
+            const mMap: Record<string, string> = {};
+            for (const m of mRows || []) mMap[`${(m as any).type}:${(m as any).id}`] = (m as any).name;
             return jsonRes({
               id: row.id,
               name: row.name,
@@ -946,15 +972,18 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               city: row.city,
               pincode: row.pincode,
               sourceId: row.source_id,
-              sourceLabel: getSourceLabel(row.source_id),
+              sourceLabel: (row.source_id && mMap[`leadSources:${row.source_id}`]) || getSourceLabel(row.source_id),
               interestProductId: row.interest_product_id,
-              productLabel: getProductLabel(row.interest_product_id),
+              productLabel: (row.interest_product_id && mMap[`products:${row.interest_product_id}`]) || getProductLabel(row.interest_product_id),
               stage: row.stage,
               slaStatus: row.sla_status,
               slaDueAt: row.sla_due_at,
               nextFollowUpAt: row.next_follow_up_at || null,
               expectedValue: row.expected_value,
               notes: row.notes,
+              territoryId: extra.territoryId || null,
+              territoryLabel: (extra.territoryId && mMap[`territories:${extra.territoryId}`]) || null,
+              tags: Array.isArray(extra.tags) ? extra.tags : [],
               customerId: row.customer_id,
               createdAt: row.created_at,
               version: row.version,
@@ -996,7 +1025,13 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             `).bind(actId, id, `Stage changed from ${stageLabel(row.stage || 'new')} to ${stageLabel(stage)} by Owner Admin`, null).run();
           }
 
-          await db.prepare('UPDATE leads SET name = ?, stage = ?, sla_status = ?, expected_value = ?, pincode = ?, source_id = ?, interest_product_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(name, stage, slaStatus, expectedValue, pincode, sourceId, interestProductId, id).run();
+          let existingData: any = {};
+          try { existingData = row.data_json ? JSON.parse(row.data_json) : {}; } catch {}
+          const territoryId = body.territoryId !== undefined ? body.territoryId : existingData.territoryId ?? null;
+          const tags = body.tags !== undefined ? body.tags : existingData.tags ?? [];
+          const nextDataJson = JSON.stringify({ ...existingData, pincode, sourceId, interestProductId, territoryId, tags });
+
+          await db.prepare('UPDATE leads SET name = ?, stage = ?, sla_status = ?, expected_value = ?, pincode = ?, source_id = ?, interest_product_id = ?, data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(name, stage, slaStatus, expectedValue, pincode, sourceId, interestProductId, nextDataJson, id).run();
         } catch (e) {
           console.error('D1 lead patch error:', e);
         }
@@ -1055,6 +1090,9 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               state: r.state,
               contacts: data.contacts || [],
               addresses: data.addresses || [],
+              territoryId: data.territoryId || null,
+              customerGroupId: data.customerGroupId || null,
+              tags: Array.isArray(data.tags) ? data.tags : [],
             };
           });
           return jsonRes({ items, nextCursor: null });
@@ -1123,7 +1161,13 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             newCust.address,
             newCust.city,
             newCust.state,
-            JSON.stringify({ contacts: newCust.contacts, addresses: newCust.addresses }),
+            JSON.stringify({
+              contacts: newCust.contacts,
+              addresses: newCust.addresses,
+              territoryId: body.territoryId || null,
+              customerGroupId: body.customerGroupId || null,
+              tags: Array.isArray(body.tags) ? body.tags : [],
+            }),
             new Date().toISOString(),
             new Date().toISOString()
           ).run();
@@ -1375,6 +1419,9 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               state: row.state,
               contacts: data.contacts || [],
               addresses: data.addresses || [],
+              territoryId: data.territoryId || null,
+              customerGroupId: data.customerGroupId || null,
+              tags: Array.isArray(data.tags) ? data.tags : [],
             };
           }
         } catch (e) {}
@@ -2873,207 +2920,38 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     return jsonRes({ items: notifs, unreadCount: memoryStore.notifications.filter((n) => !n.read).length });
   }
 
-  // 11. /masters/:type/options (Requirement 4)
+  // 11. /masters/:type/options — single source of truth from active D1 masters records
   const masterOptionsMatch = path.match(/^\/masters\/([^/]+)\/options/);
   if (masterOptionsMatch) {
-    const mType = masterOptionsMatch[1];
-    const optionsMap: Record<string, any[]> = {
-      pipelineStages: [
-        { id: 'stg-1', key: 'new', label: 'New', probabilityPct: 10 },
-        { id: 'stg-2', key: 'contacted', label: 'Contacted', probabilityPct: 25 },
-        { id: 'stg-3', key: 'interested', label: 'Interested', probabilityPct: 50 },
-        { id: 'stg-4', key: 'quotation_sent', label: 'Quotation Sent', probabilityPct: 70 },
-        { id: 'stg-5', key: 'negotiation', label: 'Negotiation', probabilityPct: 85 },
-        { id: 'stg-6', key: 'won', label: 'Won', probabilityPct: 100 },
-        { id: 'stg-7', key: 'lost', label: 'Lost', probabilityPct: 0 },
-      ],
-      leadSources: [
-        { id: 'src-1', key: 'src-1', label: 'Website Inbound', value: 'src-1' },
-        { id: 'src-2', key: 'src-2', label: 'Referral', value: 'src-2' },
-        { id: 'src-3', key: 'src-3', label: 'Google Ads', value: 'src-3' },
-        { id: 'src-4', key: 'src-4', label: 'Direct Call', value: 'src-4' },
-        { id: 'src-5', key: 'src-5', label: 'LinkedIn', value: 'src-5' },
-      ],
-      products: [
-        { id: 'prod-1', key: 'prod-1', label: 'CRM Enterprise License (Annual)', name: 'CRM Enterprise License (Annual)', value: 'prod-1', ratePaise: 2950000, rate: 29500, unit: 'Year', taxRatePct: 18, hsnSac: '997331', description: 'Enterprise annual subscription including up to 25 active users with custom workflows.' },
-        { id: 'prod-2', key: 'prod-2', label: 'Implementation & Data Migration', name: 'Implementation & Data Migration', value: 'prod-2', ratePaise: 1500000, rate: 15000, unit: 'Job', taxRatePct: 18, hsnSac: '998313', description: 'Complete data onboarding, master schema setup, and user training sessions.' },
-        { id: 'prod-3', key: 'prod-3', label: 'Custom Integration Pack', name: 'Custom Integration Pack', value: 'prod-3', ratePaise: 800000, rate: 8000, unit: 'Pack', taxRatePct: 18, hsnSac: '998314', description: 'Bi-directional webhooks and REST API integration with external accounting ERP.' },
-        { id: 'prod-4', key: 'prod-4', label: 'Dedicated Support Retainer (Monthly)', name: 'Dedicated Support Retainer (Monthly)', value: 'prod-4', ratePaise: 500000, rate: 5000, unit: 'Month', taxRatePct: 18, hsnSac: '998319', description: '24/7 SLA escalation support with dedicated customer success manager.' },
-      ],
-      bankAccounts: [
-        { id: 'bnk-1', key: 'bnk-1', label: 'HDFC Bank - 50200012345678', bankName: 'HDFC Bank', accountNo: '50200012345678', ifsc: 'HDFC0000240', branch: 'Indiranagar' },
-      ],
-      callOutcomes: [
-        { id: 'connected', key: 'connected', label: 'Connected' },
-        { id: 'no_answer', key: 'no_answer', label: 'No answer' },
-        { id: 'busy', key: 'busy', label: 'Busy' },
-        { id: 'wrong_number', key: 'wrong_number', label: 'Wrong number' },
-        { id: 'call_back_later', key: 'call_back_later', label: 'Call back later' },
-      ],
-      lostReasons: [
-        { id: 'price_too_high', key: 'price_too_high', label: 'Competitor / Price too high' },
-        { id: 'no_budget', key: 'no_budget', label: 'No budget allocated' },
-        { id: 'delayed', key: 'delayed', label: 'Project delayed / Postponed' },
-        { id: 'unresponsive', key: 'unresponsive', label: 'Unresponsive after quotation' },
-      ],
-      junkReasons: [
-        { id: 'invalid_contact', key: 'invalid_contact', label: 'Invalid contact details' },
-        { id: 'spam', key: 'spam', label: 'Spam / Fake inquiry' },
-        { id: 'not_relevant', key: 'not_relevant', label: 'Out of scope / Irrelevant service' },
-      ],
-      messageTemplates: [
-        // General templates for leads & customers
-        {
-          id: 'tpl-intro',
-          key: 'greeting',
-          category: 'general',
-          label: 'Introductory Message',
-          channel: 'whatsapp',
-          data: {
-            channel: 'whatsapp',
-            category: 'general',
-            body: 'Hi {name}, great connecting with you from {company}! {sender_company} builds enterprise digital systems. Let me know when we can discuss your requirements.',
-          },
-          body: 'Hi {name}, great connecting with you from {company}! {sender_company} builds enterprise digital systems. Let me know when we can discuss your requirements.',
-        },
-        {
-          id: 'tpl-followup',
-          key: 'followup',
-          category: 'general',
-          label: 'Follow-up Catch-up',
-          channel: 'whatsapp',
-          data: {
-            channel: 'whatsapp',
-            category: 'general',
-            body: 'Hello {name}, following up on our recent conversation regarding {company}\'s project. When would be a convenient time for a quick catch-up?',
-          },
-          body: 'Hello {name}, following up on our recent conversation regarding {company}\'s project. When would be a convenient time for a quick catch-up?',
-        },
-        {
-          id: 'tpl-meeting',
-          key: 'meeting_reminder',
-          category: 'general',
-          label: 'Meeting Reminder',
-          channel: 'whatsapp',
-          data: {
-            channel: 'whatsapp',
-            category: 'general',
-            body: 'Hi {name}, friendly reminder for our scheduled meeting today. Looking forward to speaking with you and the team at {company}!',
-          },
-          body: 'Hi {name}, friendly reminder for our scheduled meeting today. Looking forward to speaking with you and the team at {company}!',
-        },
-        {
-          id: 'tpl-email-intro',
-          key: 'email_intro',
-          category: 'general',
-          label: 'Introductory Proposal',
-          channel: 'email',
-          data: {
-            channel: 'email',
-            category: 'general',
-            subject: 'HopEpitome Strategics - Digital Systems Proposal for {company}',
-            body: 'Dear {name},\n\nThank you for connecting with HopEpitome Strategics. We look forward to exploring how we can support {company} with our enterprise digital systems.\n\nPlease let us know when you might have 15 minutes for a brief discussion.\n\nWarm regards,\nHopEpitome Team',
-          },
-          subject: 'HopEpitome Strategics - Digital Systems Proposal for {company}',
-          body: 'Dear {name},\n\nThank you for connecting with HopEpitome Strategics. We look forward to exploring how we can support {company} with our enterprise digital systems.\n\nPlease let us know when you might have 15 minutes for a brief discussion.\n\nWarm regards,\nHopEpitome Team',
-        },
-        {
-          id: 'tpl-email-followup',
-          key: 'email_followup',
-          category: 'general',
-          label: 'Discussion Follow-up',
-          channel: 'email',
-          data: {
-            channel: 'email',
-            category: 'general',
-            subject: 'Following up on our discussion - {company} & HopEpitome',
-            body: 'Dear {name},\n\nI hope this email finds you well.\n\nI am writing to follow up on our previous discussion regarding {company}\'s requirements. We would love to answer any questions or share relevant case studies.\n\nBest regards,\nHopEpitome Team',
-          },
-          subject: 'Following up on our discussion - {company} & HopEpitome',
-          body: 'Dear {name},\n\nI hope this email finds you well.\n\nI am writing to follow up on our previous discussion regarding {company}\'s requirements. We would love to answer any questions or share relevant case studies.\n\nBest regards,\nHopEpitome Team',
-        },
-        {
-          id: 'tpl-email-meeting',
-          key: 'email_meeting',
-          category: 'general',
-          label: 'Meeting Reminder',
-          channel: 'email',
-          data: {
-            channel: 'email',
-            category: 'general',
-            subject: 'Meeting Reminder: HopEpitome Strategics & {company}',
-            body: 'Dear {name},\n\nThis is a quick reminder for our upcoming meeting. We look forward to connecting with you and the team at {company}.\n\nBest regards,\nHopEpitome Team',
-          },
-          subject: 'Meeting Reminder: HopEpitome Strategics & {company}',
-          body: 'Dear {name},\n\nThis is a quick reminder for our upcoming meeting. We look forward to connecting with you and the team at {company}.\n\nBest regards,\nHopEpitome Team',
-        },
-
-        // Document-only templates (quote / invoice)
-        {
-          id: 'tpl-inv',
-          key: 'invoice',
-          category: 'document',
-          label: 'Invoice Notification',
-          channel: 'whatsapp',
-          data: {
-            channel: 'whatsapp',
-            category: 'document',
-            body: 'Dear {name}, tax invoice {doc_no} for ₹{amount} from HopEpitome Strategics is ready: {link}',
-          },
-          body: 'Dear {name}, tax invoice {doc_no} for ₹{amount} from HopEpitome Strategics is ready: {link}',
-        },
-        {
-          id: 'tpl-qt',
-          key: 'quote',
-          category: 'document',
-          label: 'Quotation Shared',
-          channel: 'whatsapp',
-          data: {
-            channel: 'whatsapp',
-            category: 'document',
-            body: 'Dear {name}, quotation {doc_no} for ₹{amount} from HopEpitome Strategics is ready: {link}',
-          },
-          body: 'Dear {name}, quotation {doc_no} for ₹{amount} from HopEpitome Strategics is ready: {link}',
-        },
-        {
-          id: 'tpl-email-inv',
-          key: 'email_invoice',
-          category: 'document',
-          label: 'Invoice Document',
-          channel: 'email',
-          data: {
-            channel: 'email',
-            category: 'document',
-            subject: 'Tax Invoice {doc_no} from HopEpitome Strategics',
-            body: 'Dear {name},\n\nPlease find tax invoice {doc_no} for ₹{amount} from HopEpitome Strategics.\n\nYou may view and download the official document here: {link}\n\nWarm regards,\nHopEpitome Team',
-          },
-          subject: 'Tax Invoice {doc_no} from HopEpitome Strategics',
-          body: 'Dear {name},\n\nPlease find tax invoice {doc_no} for ₹{amount} from HopEpitome Strategics.\n\nYou may view and download the official document here: {link}\n\nWarm regards,\nHopEpitome Team',
-        },
-        {
-          id: 'tpl-email-qt',
-          key: 'email_quote',
-          category: 'document',
-          label: 'Quotation Document',
-          channel: 'email',
-          data: {
-            channel: 'email',
-            category: 'document',
-            subject: 'Quotation {doc_no} from HopEpitome Strategics',
-            body: 'Dear {name},\n\nPlease find quotation {doc_no} for ₹{amount} from HopEpitome Strategics.\n\nYou may review and accept the quotation here: {link}\n\nWarm regards,\nHopEpitome Team',
-          },
-          subject: 'Quotation {doc_no} from HopEpitome Strategics',
-          body: 'Dear {name},\n\nPlease find quotation {doc_no} for ₹{amount} from HopEpitome Strategics.\n\nYou may review and accept the quotation here: {link}\n\nWarm regards,\nHopEpitome Team',
-        },
-      ],
-    };
-    const rawItems = optionsMap[mType] || [];
-    const items = rawItems.map((it: any) => ({
-      ...it,
-      label: it.label || it.name || it.displayName || it.key,
-      value: it.value || it.id || it.key,
-    }));
-    return jsonRes({ items });
+    const mType = decodeURIComponent(masterOptionsMatch[1]);
+    if (!db) return jsonRes({ items: [] });
+    try {
+      const { results } = await db
+        .prepare("SELECT * FROM masters WHERE type = ? AND status = 'active' ORDER BY is_default DESC, sort_order ASC, name ASC")
+        .bind(mType)
+        .all();
+      const items = (results || []).map((r: any) => {
+        let d: any = {};
+        try {
+          d = r.data_json ? JSON.parse(r.data_json) : {};
+        } catch {}
+        return {
+          id: r.id,
+          key: r.key || r.id,
+          label: r.name,
+          name: r.name,
+          value: r.id,
+          isDefault: Boolean(r.is_default),
+          sortOrder: Number(r.sort_order ?? 0),
+          data: d,
+          ...d,
+          ...(mType === 'products' ? { rate: d.ratePaise ? Math.round(Number(d.ratePaise) / 100) : 0 } : {}),
+        };
+      });
+      return jsonRes({ items });
+    } catch (e: any) {
+      return jsonRes({ items: [], error: e.message }, 500);
+    }
   }
 
   // Helper to parse share token
@@ -3440,21 +3318,61 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           inWords: amountInWords(grandTotal),
         },
         refs,
-        payment: {
-          balance: balanceDue,
-          paid: Math.max(0, grandTotal - balanceDue),
-          vpa: DEFAULT_HOPEPITOME_COMPANY.upiId || 'service@hopepitome',
-          payeeName: DEFAULT_HOPEPITOME_COMPANY.legalName,
-          showQr: balanceDue > 0,
-          bank: {
+        payment: await (async () => {
+          let vpa = DEFAULT_HOPEPITOME_COMPANY.upiId || 'service@hopepitome';
+          let payeeName = DEFAULT_HOPEPITOME_COMPANY.legalName;
+          let bank = {
             name: DEFAULT_HOPEPITOME_COMPANY.bankName || 'HDFC Bank Ltd',
             accountNo: DEFAULT_HOPEPITOME_COMPANY.bankAccount || '50200088991122',
             ifsc: DEFAULT_HOPEPITOME_COMPANY.bankIfsc || 'HDFC0001234',
             branch: DEFAULT_HOPEPITOME_COMPANY.bankBranch || 'Outer Ring Road, Bengaluru',
-          },
-        },
-        terms: '1. Payment is strictly due by the due date specified on this tax invoice.\n2. Please mention invoice number when remitting payments via NEFT/RTGS or UPI.\n3. Remittances payable to "HopEpitome Strategics".\n4. Late payments subject to interest @ 18% p.a. in terms of the MSMED Act.',
-        notes: 'Thank you for your business. HopEpitome Strategics — Elevating Enterprise Excellence.',
+          };
+          if (db) {
+            try {
+              const upiRow: any = await db.prepare("SELECT * FROM masters WHERE type = 'upiIds' AND status = 'active' ORDER BY is_default DESC, sort_order ASC LIMIT 1").first();
+              if (upiRow?.data_json) {
+                const u = JSON.parse(upiRow.data_json);
+                if (u.vpa) vpa = u.vpa;
+                if (u.payeeName) payeeName = u.payeeName;
+              }
+              const bankRow: any = await db.prepare("SELECT * FROM masters WHERE type = 'bankAccounts' AND status = 'active' ORDER BY is_default DESC, sort_order ASC LIMIT 1").first();
+              if (bankRow?.data_json) {
+                const b = JSON.parse(bankRow.data_json);
+                bank = {
+                  name: b.bankName || bankRow.name || bank.name,
+                  accountNo: b.accountNo || bank.accountNo,
+                  ifsc: b.ifsc || bank.ifsc,
+                  branch: b.branch || bank.branch,
+                };
+              }
+            } catch {}
+          }
+          return {
+            balance: balanceDue,
+            paid: Math.max(0, grandTotal - balanceDue),
+            vpa,
+            payeeName,
+            showQr: balanceDue > 0,
+            bank,
+          };
+        })(),
+        terms: await (async () => {
+          if (invData.terms || invData.termsText) return invData.terms || invData.termsText;
+          if (db) {
+            try {
+              const { results } = await db.prepare("SELECT * FROM masters WHERE type = 'termsTemplates' AND status = 'active' ORDER BY is_default DESC, sort_order ASC").all();
+              const match = (results || []).find((r: any) => {
+                try { return JSON.parse(r.data_json || '{}').docType === 'invoice'; } catch { return false; }
+              }) || (results || [])[0];
+              if (match?.data_json) {
+                const t = JSON.parse(match.data_json);
+                if (t.text) return t.text;
+              }
+            } catch {}
+          }
+          return '1. Payment is strictly due by the due date specified on this tax invoice.\n2. Please mention invoice number when remitting payments via NEFT/RTGS or UPI.\n3. Remittances payable to "HopEpitome Strategics".\n4. Late payments subject to interest @ 18% p.a. in terms of the MSMED Act.';
+        })(),
+        notes: invData.notes || 'Thank you for your business. HopEpitome Strategics — Elevating Enterprise Excellence.',
       };
       return docInput;
     }
@@ -3544,7 +3462,9 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
 
     const html = await renderDocumentHtml(docInput);
     const grandTotalPaise = docInput.totals.grandTotal;
-    const upiUri = `upi://pay?pa=${encodeURIComponent(DEFAULT_HOPEPITOME_COMPANY.upiId || 'service@hopepitome')}&pn=${encodeURIComponent(DEFAULT_HOPEPITOME_COMPANY.legalName)}&am=${(grandTotalPaise / 100).toFixed(2)}&cu=INR`;
+    const upiVpa = docInput.payment?.vpa || DEFAULT_HOPEPITOME_COMPANY.upiId || 'service@hopepitome';
+    const upiPayee = docInput.payment?.payeeName || DEFAULT_HOPEPITOME_COMPANY.legalName;
+    const upiUri = `upi://pay?pa=${encodeURIComponent(upiVpa)}&pn=${encodeURIComponent(upiPayee)}&am=${(grandTotalPaise / 100).toFixed(2)}&cu=INR`;
     let qrSvg = '';
     try {
       qrSvg = await upiQrSvg(upiUri);
@@ -3567,7 +3487,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         uri: upiUri,
         amount: grandTotalPaise,
         qrSvg,
-        vpa: DEFAULT_HOPEPITOME_COMPANY.upiId || 'service@hopepitome',
+        vpa: upiVpa,
       },
     });
   }
@@ -3585,18 +3505,204 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     }
   }
 
-  // 14. /admin/masters/:type (Requirement 4)
+  // 14. /admin/masters/:type — Full D1 CRUD
   if (path.startsWith('/admin/masters/')) {
-    const mType = path.replace(/^\/admin\/masters\//, '').split('/')[0].split('?')[0];
-    if (mType === 'products') {
-      return jsonRes({
-        items: [
-          { id: 'prod-1', name: 'Enterprise CRM Implementation', key: 'CRM-ENT', status: 'active', isDefault: false, data: { ratePaise: 2500000, taxRatePct: 18, unit: 'service', type: 'service' }, version: 1 },
-          { id: 'prod-2', name: 'Annual Software Support', key: 'CRM-SUP', status: 'active', isDefault: false, data: { ratePaise: 500000, taxRatePct: 18, unit: 'year', type: 'service' }, version: 1 },
-        ],
-      });
+    const errRes = (status: number, code: string, message: string) =>
+      jsonRes({ title: message, status, code, message }, status);
+    const parseBody = async (req: Request) => await req.json().catch(() => ({}));
+    if (!db) return errRes(500, 'DB_ERROR', 'Database not configured');
+    const subParts = path.replace(/^\/admin\/masters\//, '').split('?')[0].split('/').filter(Boolean);
+    const mType = decodeURIComponent(subParts[0] || '');
+    const mId = subParts[1] ? decodeURIComponent(subParts[1]) : null;
+    const mAction = subParts[2] ? decodeURIComponent(subParts[2]) : null;
+
+    if (!mType) return errRes(400, 'BAD_REQUEST', 'Master type is required');
+
+    const mapMasterRow = (r: any) => {
+      let data: any = {};
+      try {
+        data = r.data_json ? JSON.parse(r.data_json) : {};
+      } catch {}
+      return {
+        id: r.id,
+        type: r.type,
+        name: r.name,
+        key: r.key ?? null,
+        status: r.status || 'active',
+        isDefault: Boolean(r.is_default),
+        sortOrder: Number(r.sort_order ?? 0),
+        data,
+        version: Number(r.version ?? 1),
+      };
+    };
+
+    // GET /admin/masters/:type
+    if (method === 'GET' && !mId) {
+      const { results } = await db
+        .prepare('SELECT * FROM masters WHERE type = ? ORDER BY is_default DESC, sort_order ASC, name ASC')
+        .bind(mType)
+        .all();
+      return jsonRes({ items: (results || []).map(mapMasterRow) });
     }
-    return jsonRes({ items: [] });
+
+    // POST /admin/masters/:type/:id/activate | deactivate | set-default
+    if (method === 'POST' && mId && mAction) {
+      const existing: any = await db.prepare('SELECT * FROM masters WHERE id = ? AND type = ?').bind(mId, mType).first();
+      if (!existing) return errRes(404, 'NOT_FOUND', 'Master item not found');
+
+      if (mAction === 'activate' || mAction === 'deactivate') {
+        const nextStatus = mAction === 'activate' ? 'active' : 'inactive';
+        await db.prepare('UPDATE masters SET status = ?, version = version + 1 WHERE id = ? AND type = ?').bind(nextStatus, mId, mType).run();
+        const updated: any = await db.prepare('SELECT * FROM masters WHERE id = ? AND type = ?').bind(mId, mType).first();
+        return jsonRes(mapMasterRow(updated));
+      }
+      if (mAction === 'set-default') {
+        await db.prepare('UPDATE masters SET is_default = 0 WHERE type = ?').bind(mType).run();
+        await db.prepare('UPDATE masters SET is_default = 1, version = version + 1 WHERE id = ? AND type = ?').bind(mId, mType).run();
+        const updated: any = await db.prepare('SELECT * FROM masters WHERE id = ? AND type = ?').bind(mId, mType).first();
+        return jsonRes(mapMasterRow(updated));
+      }
+      return errRes(404, 'NOT_FOUND', 'Unknown master action');
+    }
+
+    // POST /admin/masters/:type (Create)
+    if (method === 'POST' && !mId) {
+      const body = (await parseBody(request)) as any;
+      const name = String(body.name || '').trim();
+      if (!name) return errRes(422, 'VALIDATION_ERROR', 'Name is required');
+
+      const rawKey = body.key !== undefined && body.key !== null ? String(body.key).trim() : '';
+      const key = rawKey || null;
+      if (key) {
+        const dup: any = await db
+          .prepare('SELECT id FROM masters WHERE type = ? AND LOWER(key) = LOWER(?)')
+          .bind(mType, key)
+          .first();
+        if (dup) return errRes(422, 'DUPLICATE_KEY', `Code/Key "${key}" already exists in ${mType}`);
+      }
+
+      const data = body.data && typeof body.data === 'object' ? { ...body.data } : {};
+      if (mType === 'products') {
+        const ratePaise = Number(data.ratePaise ?? 0);
+        if (!Number.isFinite(ratePaise) || ratePaise <= 0) {
+          return errRes(422, 'VALIDATION_ERROR', 'Product rate must be greater than 0');
+        }
+        if (data.hsnSac && !/^\d{4,8}$/.test(String(data.hsnSac).trim())) {
+          return errRes(422, 'VALIDATION_ERROR', 'HSN/SAC must be 4 to 8 digits');
+        }
+      }
+
+      const isDefault = body.isDefault ? 1 : 0;
+      if (isDefault) {
+        await db.prepare('UPDATE masters SET is_default = 0 WHERE type = ?').bind(mType).run();
+      }
+
+      const maxRow: any = await db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS mx FROM masters WHERE type = ?').bind(mType).first();
+      const sortOrder = body.sortOrder !== undefined ? Number(body.sortOrder) : Number(maxRow?.mx ?? 0) + 1;
+      const prefix = mType.slice(0, 4).toLowerCase();
+      const newId = `${prefix}-${Date.now()}`;
+
+      await db
+        .prepare('INSERT INTO masters (id, type, name, key, status, is_default, data_json, sort_order, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)')
+        .bind(newId, mType, name, key, 'active', isDefault, JSON.stringify(data), sortOrder)
+        .run();
+
+      const created: any = await db.prepare('SELECT * FROM masters WHERE id = ?').bind(newId).first();
+      return jsonRes(mapMasterRow(created), 201);
+    }
+
+    // PATCH /admin/masters/:type/:id (Update)
+    if (method === 'PATCH' && mId) {
+      const existing: any = await db.prepare('SELECT * FROM masters WHERE id = ? AND type = ?').bind(mId, mType).first();
+      if (!existing) return errRes(404, 'NOT_FOUND', 'Master item not found');
+
+      const body = (await parseBody(request)) as any;
+      const name = body.name !== undefined ? String(body.name).trim() : existing.name;
+      if (!name) return errRes(422, 'VALIDATION_ERROR', 'Name is required');
+
+      const key = body.key !== undefined ? (String(body.key || '').trim() || null) : existing.key;
+      if (key) {
+        const dup: any = await db
+          .prepare('SELECT id FROM masters WHERE type = ? AND LOWER(key) = LOWER(?) AND id != ?')
+          .bind(mType, key, mId)
+          .first();
+        if (dup) return errRes(422, 'DUPLICATE_KEY', `Code/Key "${key}" already exists in ${mType}`);
+      }
+
+      let existingData: any = {};
+      try {
+        existingData = existing.data_json ? JSON.parse(existing.data_json) : {};
+      } catch {}
+      const data = body.data !== undefined && typeof body.data === 'object' ? { ...existingData, ...body.data } : existingData;
+
+      if (mType === 'products') {
+        const ratePaise = Number(data.ratePaise ?? 0);
+        if (!Number.isFinite(ratePaise) || ratePaise <= 0) {
+          return errRes(422, 'VALIDATION_ERROR', 'Product rate must be greater than 0');
+        }
+        if (data.hsnSac && !/^\d{4,8}$/.test(String(data.hsnSac).trim())) {
+          return errRes(422, 'VALIDATION_ERROR', 'HSN/SAC must be 4 to 8 digits');
+        }
+      }
+
+      const isDefault = body.isDefault !== undefined ? (body.isDefault ? 1 : 0) : existing.is_default;
+      if (isDefault) {
+        await db.prepare('UPDATE masters SET is_default = 0 WHERE type = ?').bind(mType).run();
+      }
+      const sortOrder = body.sortOrder !== undefined ? Number(body.sortOrder) : Number(existing.sort_order ?? 0);
+
+      await db
+        .prepare('UPDATE masters SET name = ?, key = ?, is_default = ?, data_json = ?, sort_order = ?, version = version + 1 WHERE id = ? AND type = ?')
+        .bind(name, key, isDefault, JSON.stringify(data), sortOrder, mId, mType)
+        .run();
+
+      const updated: any = await db.prepare('SELECT * FROM masters WHERE id = ? AND type = ?').bind(mId, mType).first();
+      return jsonRes(mapMasterRow(updated));
+    }
+
+    // DELETE /admin/masters/:type/:id (Block if used)
+    if (method === 'DELETE' && mId) {
+      const existing: any = await db.prepare('SELECT * FROM masters WHERE id = ? AND type = ?').bind(mId, mType).first();
+      if (!existing) return errRes(404, 'NOT_FOUND', 'Master item not found');
+
+      let isUsed = false;
+      const keyVal = existing.key || mId;
+      const likeId = `%${mId}%`;
+      const likeName = `%${existing.name}%`;
+
+      if (mType === 'products') {
+        const lRef: any = await db.prepare('SELECT id FROM leads WHERE deleted_at IS NULL AND (interest_product_id = ? OR data_json LIKE ?) LIMIT 1').bind(mId, likeId).first();
+        const qRef: any = await db.prepare('SELECT id FROM quotes WHERE deleted_at IS NULL AND data_json LIKE ? LIMIT 1').bind(likeId).first();
+        const oRef: any = await db.prepare('SELECT id FROM orders WHERE deleted_at IS NULL AND data_json LIKE ? LIMIT 1').bind(likeId).first();
+        const iRef: any = await db.prepare('SELECT id FROM invoices WHERE deleted_at IS NULL AND data_json LIKE ? LIMIT 1').bind(likeId).first();
+        if (lRef || qRef || oRef || iRef) isUsed = true;
+      } else if (mType === 'leadSources') {
+        const lRef: any = await db.prepare('SELECT id FROM leads WHERE deleted_at IS NULL AND (source_id = ? OR source = ? OR data_json LIKE ?) LIMIT 1').bind(mId, keyVal, likeId).first();
+        if (lRef) isUsed = true;
+      } else if (mType === 'pipelineStages') {
+        const lRef: any = await db.prepare('SELECT id FROM leads WHERE deleted_at IS NULL AND LOWER(stage) = LOWER(?) LIMIT 1').bind(keyVal).first();
+        if (lRef) isUsed = true;
+      } else if (mType === 'bankAccounts') {
+        const pRef: any = await db.prepare('SELECT id FROM payments WHERE deleted_at IS NULL AND data_json LIKE ? LIMIT 1').bind(likeId).first();
+        if (pRef) isUsed = true;
+      } else if (mType === 'units') {
+        const pRef: any = await db.prepare("SELECT id FROM masters WHERE type = 'products' AND data_json LIKE ? LIMIT 1").bind(likeName).first();
+        if (pRef) isUsed = true;
+      } else if (mType === 'territories' || mType === 'tags' || mType === 'customerGroups') {
+        const lRef: any = await db.prepare('SELECT id FROM leads WHERE deleted_at IS NULL AND data_json LIKE ? LIMIT 1').bind(likeId).first();
+        const cRef: any = await db.prepare('SELECT id FROM customers WHERE deleted_at IS NULL AND data_json LIKE ? LIMIT 1').bind(likeId).first();
+        if (lRef || cRef) isUsed = true;
+      }
+
+      if (isUsed) {
+        return errRes(422, 'MASTER_IN_USE', 'This item is used by existing records and cannot be deleted. Deactivate it instead.');
+      }
+
+      await db.prepare('DELETE FROM masters WHERE id = ? AND type = ?').bind(mId, mType).run();
+      return jsonRes({ success: true, id: mId });
+    }
+
+    return errRes(405, 'METHOD_NOT_ALLOWED', 'Method not allowed');
   }
 
   // 15. /admin/google (Requirement 4)

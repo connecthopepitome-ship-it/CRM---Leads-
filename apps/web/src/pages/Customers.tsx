@@ -5,6 +5,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { get } from '../lib/api';
 import { useTerm } from '../lib/appConfig';
 import { useAuth } from '../lib/auth';
+import { useOptions } from '../features/hooks';
 import { money } from '../lib/format';
 import { Badge, Button, EmptyState, ErrorState, Input, LinkButton, Skeleton } from '../ui';
 import { 
@@ -107,6 +108,12 @@ export default function Customers() {
   const { can } = useAuth();
 
   const [search, setSearch] = useState('');
+  const [territoryFilter, setTerritoryFilter] = useState('');
+  const [groupFilter, setGroupFilter] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
+  const territories = useOptions('territories');
+  const customerGroups = useOptions('customerGroups');
+  const tagsOpts = useOptions('tags');
   const [selectedId, setSelectedId] = useState<string>('cust-1');
   const [profileTab, setProfileTab] = useState<'overview' | 'activity' | 'quotations' | 'invoices' | 'followups'>('overview');
 
@@ -128,10 +135,15 @@ export default function Customers() {
   const rawRows = list.data?.pages?.flatMap((p) => p.items ?? []) ?? [];
   const customers = rawRows.length > 0 ? rawRows : (isDemo ? SAMPLE_CUSTOMERS_FALLBACK : []);
 
-  const filteredCustomers = customers.filter((c) =>
-    (c.displayName || '').toLowerCase().includes(search.toLowerCase()) ||
-    (c.code || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredCustomers = customers.filter((c: any) => {
+    const matchText =
+      (c.displayName || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.code || '').toLowerCase().includes(search.toLowerCase());
+    const matchTerritory = !territoryFilter || c.territoryId === territoryFilter;
+    const matchGroup = !groupFilter || c.customerGroupId === groupFilter;
+    const matchTag = !tagFilter || (Array.isArray(c.tags) && c.tags.includes(tagFilter));
+    return matchText && matchTerritory && matchGroup && matchTag;
+  });
 
   const selectedCustomer =
     customers.find((c) => c.id === selectedId) ||
@@ -157,6 +169,50 @@ export default function Customers() {
             <span>New Customer</span>
           </LinkButton>
         )}
+      </div>
+
+      {/* Filter Bar */}
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#DCE7D9] bg-white p-3 shadow-2xs">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#778477]" />
+          <input
+            type="text"
+            placeholder="Search customers..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-full border border-[#DCE7D9] bg-[#F5F9F2] pl-9 pr-3.5 py-1.5 text-xs text-[#202820] placeholder-[#778477] focus:bg-white focus:border-[#3D7952] focus:outline-none"
+          />
+        </div>
+        <select
+          value={groupFilter}
+          onChange={(e) => setGroupFilter(e.target.value)}
+          className="rounded-full border border-[#DCE7D9] bg-[#F5F9F2] px-3 py-1.5 text-xs font-medium text-[#202820] cursor-pointer"
+        >
+          <option value="">All Groups</option>
+          {(customerGroups.data ?? []).map((g) => (
+            <option key={g.id} value={g.id}>{g.label}</option>
+          ))}
+        </select>
+        <select
+          value={territoryFilter}
+          onChange={(e) => setTerritoryFilter(e.target.value)}
+          className="rounded-full border border-[#DCE7D9] bg-[#F5F9F2] px-3 py-1.5 text-xs font-medium text-[#202820] cursor-pointer"
+        >
+          <option value="">All Territories</option>
+          {(territories.data ?? []).map((t) => (
+            <option key={t.id} value={t.id}>{t.label}</option>
+          ))}
+        </select>
+        <select
+          value={tagFilter}
+          onChange={(e) => setTagFilter(e.target.value)}
+          className="rounded-full border border-[#DCE7D9] bg-[#F5F9F2] px-3 py-1.5 text-xs font-medium text-[#202820] cursor-pointer"
+        >
+          <option value="">All Tags</option>
+          {(tagsOpts.data ?? []).map((t) => (
+            <option key={t.id} value={t.label}>{t.label}</option>
+          ))}
+        </select>
       </div>
 
       {/* ============================================================== */}

@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GST_STATES } from '@ss/domain';
 import { ApiError, post } from '../lib/api';
+import { useOptions } from '../features/hooks';
 import { Banner, Button, Field, PageHeader, SelectField, TextField, toast } from '../ui';
 import { errorToast } from '../ui/toast';
 import { 
@@ -76,6 +77,10 @@ const PRESET_CUSTOMERS: Record<string, PresetCustomer> = {
 
 export default function CustomerForm() {
   const nav = useNavigate();
+  const territories = useOptions('territories');
+  const customerGroups = useOptions('customerGroups');
+  const tagsOpts = useOptions('tags');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [f, setF] = useState({
     displayName: '',
     legalName: '',
@@ -89,6 +94,8 @@ export default function CustomerForm() {
     stateCode: '29',
     pincode: '',
     creditDays: '',
+    territoryId: '',
+    customerGroupId: '',
   });
 
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +126,8 @@ export default function CustomerForm() {
       stateCode: p.stateCode,
       pincode: p.pincode,
       creditDays: p.creditDays,
+      territoryId: territories.data?.[0]?.id || '',
+      customerGroupId: customerGroups.data?.[0]?.id || '',
     });
     setDup(false);
     setError(null);
@@ -140,7 +149,10 @@ export default function CustomerForm() {
       stateCode: '29',
       pincode: '',
       creditDays: '',
+      territoryId: '',
+      customerGroupId: '',
     });
+    setSelectedTags([]);
     setDup(false);
     setError(null);
     toast('Form reset');
@@ -157,6 +169,9 @@ export default function CustomerForm() {
         type: f.type,
         gstin: f.gstin || null,
         creditDays: f.creditDays ? Number(f.creditDays) : undefined,
+        territoryId: f.territoryId || null,
+        customerGroupId: f.customerGroupId || null,
+        tags: selectedTags,
         confirmDuplicate,
         contact: f.contactName ? { name: f.contactName, phone: f.phone || null, email: f.email || null } : undefined,
         billing: f.line1 ? { line1: f.line1, city: f.city, stateCode: f.stateCode, pincode: f.pincode || null } : undefined,
@@ -383,6 +398,47 @@ export default function CustomerForm() {
               placeholder="e.g. 30"
               hint="Payment due date is calculated automatically from this value."
             />
+            <SelectField
+              label="Customer Group"
+              value={f.customerGroupId}
+              onChange={set('customerGroupId')}
+              placeholder="Select customer group…"
+              options={(customerGroups.data ?? []).map((g) => ({ value: g.id, label: g.label }))}
+            />
+            <SelectField
+              label="Territory"
+              value={f.territoryId}
+              onChange={set('territoryId')}
+              placeholder="Select territory…"
+              options={(territories.data ?? []).map((t) => ({ value: t.id, label: t.label }))}
+            />
+            {(tagsOpts.data ?? []).length > 0 && (
+              <div className="sm:col-span-2 flex flex-wrap items-center gap-2 pt-1">
+                <span className="text-xs font-semibold text-slate-600">Tags:</span>
+                {(tagsOpts.data ?? []).map((t) => {
+                  const active = selectedTags.includes(t.label);
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() =>
+                        setSelectedTags((prev) =>
+                          prev.includes(t.label) ? prev.filter((x) => x !== t.label) : [...prev, t.label],
+                        )
+                      }
+                      className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition-all ${
+                        active
+                          ? 'border-emerald-600 bg-emerald-100 text-emerald-900 font-semibold'
+                          : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-emerald-300'
+                      }`}
+                    >
+                      {active ? '✓ ' : '+ '}
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 

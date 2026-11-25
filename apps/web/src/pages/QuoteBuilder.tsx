@@ -24,13 +24,6 @@ interface Line {
   hsnSac: string;
 }
 
-const DEFAULT_PRODUCTS = [
-  { id: 'prod-1', label: 'CRM Enterprise License (Annual)', ratePaise: 2950000, taxRatePct: 18, hsnSac: '997331', unit: 'Year', description: 'Enterprise annual subscription including up to 25 active users with custom workflows.' },
-  { id: 'prod-2', label: 'Implementation & Data Migration', ratePaise: 1500000, taxRatePct: 18, hsnSac: '998313', unit: 'Job', description: 'Complete data onboarding, master schema setup, and user training sessions.' },
-  { id: 'prod-3', label: 'Custom Integration Pack', ratePaise: 800000, taxRatePct: 18, hsnSac: '998314', unit: 'Pack', description: 'Bi-directional webhooks and REST API integration with external accounting ERP.' },
-  { id: 'prod-4', label: 'Dedicated Support Retainer (Monthly)', ratePaise: 500000, taxRatePct: 18, hsnSac: '998319', unit: 'Month', description: '24/7 SLA escalation support with dedicated customer success manager.' },
-];
-
 const SAMPLE_PRESETS: Record<string, { label: string; lines: Line[]; partyId: string; pos: string }> = {
   enterprise: {
     label: 'Enterprise Suite (₹1,01,539)',
@@ -107,6 +100,9 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
   const isQuote = !isOrder && !isInvoice;
 
   const productsQuery = useOptions('products');
+  const unitsQuery = useOptions('units');
+  const termsQuery = useOptions('termsTemplates');
+  const paymentTermsQuery = useOptions('paymentTerms');
   const company = useQuery({ queryKey: ['company'], queryFn: () => get<{ gstRegistered: boolean; stateCode: string } | null>('/admin/company').catch(() => null) });
   const existing = useQuery({ queryKey: ['quote', id], queryFn: () => get<Record<string, unknown>>(`/quotes/${id}`), enabled: !!id && isQuote });
 
@@ -142,23 +138,19 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
   }, [parties.data]);
 
   const availableProducts = useMemo(() => {
-    const list = [...DEFAULT_PRODUCTS];
     const serverItems = productsQuery.data ?? [];
-    for (const item of serverItems) {
-      if (!list.some((p) => p.id === item.id)) {
-        const d = (item.data as { ratePaise?: number; taxRatePct?: number; hsnSac?: string; unit?: string; description?: string }) || {};
-        list.push({
-          id: item.id,
-          label: item.label,
-          ratePaise: d.ratePaise ?? 0,
-          taxRatePct: d.taxRatePct ?? 18,
-          hsnSac: d.hsnSac ?? '',
-          unit: d.unit ?? 'Nos',
-          description: d.description ?? item.label,
-        });
-      }
-    }
-    return list;
+    return serverItems.map((item) => {
+      const d = (item.data as { ratePaise?: number; taxRatePct?: number; hsnSac?: string; unit?: string; description?: string }) || {};
+      return {
+        id: item.id,
+        label: item.label || item.name || item.id,
+        ratePaise: Number(d.ratePaise ?? (item as any).ratePaise ?? 0),
+        taxRatePct: Number(d.taxRatePct ?? (item as any).taxRatePct ?? 18),
+        hsnSac: String(d.hsnSac ?? (item as any).hsnSac ?? ''),
+        unit: String(d.unit ?? (item as any).unit ?? 'Nos'),
+        description: String(d.description ?? (item as any).description ?? item.label),
+      };
+    });
   }, [productsQuery.data]);
 
   useEffect(() => {
@@ -658,7 +650,7 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
 
                   {/* Pricing & Tax Grid */}
                   {l.kind !== 'heading' && (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 pt-1 text-xs w-full max-w-full min-w-0">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-1 text-xs w-full max-w-full min-w-0">
                       <div>
                         <label className="block text-[10px] font-semibold text-slate-500 mb-1">Quantity</label>
                         <input
@@ -668,6 +660,24 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
                           onChange={(e) => upd(i, 'qty', e.target.value)}
                           className="w-full min-h-[36px] rounded-xl border border-slate-200 px-2.5 py-1 text-xs text-slate-800 text-center font-bold focus:outline-none focus:border-emerald-500 shadow-2xs"
                         />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">Unit</label>
+                        <select
+                          value={l.unit}
+                          onChange={(e) => upd(i, 'unit', e.target.value)}
+                          className="w-full min-h-[36px] rounded-xl border border-slate-200 px-2 py-1 text-xs text-slate-800 focus:outline-none focus:border-emerald-500 shadow-2xs cursor-pointer font-medium"
+                        >
+                          {l.unit && !(unitsQuery.data ?? []).some((u) => (u.name || u.label) === l.unit) && (
+                            <option value={l.unit}>{l.unit}</option>
+                          )}
+                          {(unitsQuery.data ?? []).map((u) => (
+                            <option key={u.id} value={u.name || u.label}>
+                              {u.label}
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       <div>
@@ -784,9 +794,29 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
               </div>
             </div>
 
-            <div className="grid gap-3 grid-cols-1 sm:grid-cols-3 text-xs w-full max-w-full">
+            <div className="grid gap-3 grid-cols-1 sm:grid-cols-4 text-xs w-full max-w-full">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Validity Period (Days)</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Payment Terms</label>
+                <select
+                  onChange={(e) => {
+                    const pt = (paymentTermsQuery.data ?? []).find((x) => x.id === e.target.value);
+                    const days = (pt?.data as any)?.days ?? (pt as any)?.days;
+                    if (days !== undefined) setValidDays(String(days));
+                  }}
+                  defaultValue=""
+                  className="w-full max-w-full min-h-[42px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 shadow-2xs cursor-pointer font-medium"
+                >
+                  <option value="">Custom ({validDays} days)</option>
+                  {(paymentTermsQuery.data ?? []).map((pt) => (
+                    <option key={pt.id} value={pt.id}>
+                      {pt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">{isInvoice ? 'Due Days' : 'Validity Period (Days)'}</label>
                 <input
                   type="number"
                   value={validDays}
@@ -824,7 +854,27 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
 
             <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 text-xs pt-1 w-full max-w-full">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Terms & Conditions</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">Terms & Conditions</label>
+                  {(termsQuery.data ?? []).length > 0 && (
+                    <select
+                      defaultValue=""
+                      onChange={(e) => {
+                        const t = (termsQuery.data ?? []).find((x) => x.id === e.target.value);
+                        const txt = (t?.data as any)?.text ?? (t as any)?.text;
+                        if (txt) setTerms(String(txt));
+                      }}
+                      className="rounded-lg border border-purple-200 bg-purple-50/60 px-2 py-0.5 text-[11px] font-medium text-purple-800 cursor-pointer"
+                    >
+                      <option value="">Load template...</option>
+                      {(termsQuery.data ?? []).map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
                 <textarea
                   rows={3}
                   value={terms}
