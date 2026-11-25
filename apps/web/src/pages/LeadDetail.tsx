@@ -16,11 +16,27 @@ export default function LeadDetail() {
   const { id = '' } = useParams();
   const nav = useNavigate();
   const [params] = useSearchParams();
-  const { perm, can } = useAuth();
+  const { perm, can, mode } = useAuth();
+  const qc = useQueryClient();
   const stages = useOptions('pipelineStages');
   const sources = useOptions('leadSources');
   const products = useOptions('products');
   const [offline, setOffline] = useState(false);
+
+  const usersQ = useQuery({
+    queryKey: ['users'],
+    queryFn: () => get<any>('/admin/users').then((r) => (Array.isArray(r) ? r : r?.items || [])),
+    enabled: mode === 'team',
+  });
+
+  const reassign = useAction(
+    (userId: string) => {
+      const u = (usersQ.data || []).find((x: any) => x.id === userId);
+      return patch(`/leads/${id}`, { assignedUserId: userId || null, assignedTo: u?.fullName || u?.name || null });
+    },
+    [['lead', id], ['leads'], ['notifications']],
+    () => toast('Lead reassigned successfully')
+  );
   const q = useQuery({
     queryKey: ['lead', id],
     queryFn: async () => {
@@ -76,7 +92,10 @@ export default function LeadDetail() {
     { id: 'stg-6', key: 'won', label: 'Won' },
     { id: 'stg-7', key: 'lost', label: 'Lost' },
   ];
-  const sla = formatSla(l.slaStatus, l.slaDueAt);
+  const isContactedOrClosed = (l.stage && l.stage !== 'new') || l.slaStatus === 'met';
+  const sla = isContactedOrClosed
+    ? { text: 'Met SLA', tone: 'success' as const }
+    : formatSla(l.slaStatus, l.slaDueAt);
 
   return (
     <>
@@ -124,19 +143,42 @@ export default function LeadDetail() {
                 )}
               </div>
             </div>
-            <KeyValue columns={1} items={[
+            <KeyValue columns={1} items={([
+              mode === 'team'
+                ? [
+                    'Assigned to',
+                    perm('lead:assign') ? (
+                      <select
+                        value={(l as any).assignedUserId || ''}
+                        onChange={(e) => reassign.mutate(e.target.value)}
+                        className="text-xs p-1 rounded border border-[#DCE7D9] bg-white font-medium max-w-[150px] truncate"
+                      >
+                        <option value="">Unassigned</option>
+                        {(usersQ.data || [])
+                          .filter((u: any) => u.status === 'active')
+                          .map((u: any) => (
+                            <option key={u.id} value={u.id}>
+                              {u.fullName || u.name}
+                            </option>
+                          ))}
+                      </select>
+                    ) : (
+                      (l as any).assignedTo || 'Unassigned'
+                    ),
+                  ]
+                : null,
               ['Phone', l.phone ?? (l.phoneRaw ? <span>{l.phoneRaw} <Badge tone="warning">Check number</Badge></span> : null)],
               ['Email', l.email],
               ['Location', [l.city, l.pincode].filter(Boolean).join(' - ') || null],
               ['Lead Source', (l as any).sourceLabel || sources.data?.find((s) => s.id === (l as any).sourceId || s.key === (l as any).sourceId)?.label || (l as any).sourceId || null],
               ['Product Interest', (l as any).productLabel || products.data?.find((p) => p.id === (l as any).interestProductId)?.label || (l as any).interestProductId || null],
               ['Territory', (l as any).territoryLabel || null],
-              ['First-contact SLA', <Badge key="s" status={l.slaStatus}>{sla.text}</Badge>],
+              ['First-contact SLA', <Badge key="s" status={isContactedOrClosed ? 'met' : l.slaStatus}>{sla.text}</Badge>],
               ['Next follow-up', nextFu ? `${String(nextFu.type).toUpperCase()} on ${dateTime(nextFu.dueAt)}` : (l.nextFollowUpAt ? dateTime(l.nextFollowUpAt) : null)],
               ['Expected value', l.expectedValue ? money(l.expectedValue) : null],
               ['Consent', label(l.consentBasis)],
               ['Created', dateTime(l.createdAt)],
-            ]} />
+            ] as any[]).filter(Boolean)} />
             {!!l.tags?.length && <div className="mt-3 flex flex-wrap gap-1">{l.tags.map((t) => <Badge key={t}>{t}</Badge>)}</div>}
             {l.notes && <p className="mt-3 whitespace-pre-wrap text-sm">{l.notes}</p>}
           </Card>
