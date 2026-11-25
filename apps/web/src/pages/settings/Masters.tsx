@@ -118,10 +118,10 @@ export function Masters() {
   });
 
   const invalidate = () => {
-    void qc.invalidateQueries({ queryKey: ['masters', type] });
-    void qc.invalidateQueries({ queryKey: ['options', type] });
-    void qc.invalidateQueries({ queryKey: ['options'] });
-    void qc.invalidateQueries({ queryKey: ['leads'] });
+    void qc.invalidateQueries({ queryKey: ['masters', type], refetchType: 'all' });
+    void qc.invalidateQueries({ queryKey: ['options', type], refetchType: 'all' });
+    void qc.invalidateQueries({ queryKey: ['options'], refetchType: 'all' });
+    void qc.invalidateQueries({ queryKey: ['leads'], refetchType: 'all' });
   };
 
   const toggle = useMutation({

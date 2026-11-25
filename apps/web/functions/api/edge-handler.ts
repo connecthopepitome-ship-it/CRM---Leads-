@@ -2764,6 +2764,62 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     }
   }
 
+  // /invoices/:id/upi
+  const invoiceUpiMatch = path.match(/^\/invoices\/([^/?]+)\/upi\/?$/);
+  if (invoiceUpiMatch && method === 'GET') {
+    const invId = invoiceUpiMatch[1];
+    let inv: any = null;
+    if (db) {
+      inv = await db.prepare('SELECT * FROM invoices WHERE id = ? AND deleted_at IS NULL').bind(invId).first();
+    }
+    if (!inv) inv = memoryStore.invoices.find((i) => i.id === invId);
+    if (!inv) return jsonRes({ title: 'Invoice not found', status: 404, code: 'NOT_FOUND' }, 404);
+
+    const balanceDue = Number(inv.balance_due ?? inv.balanceDue ?? 0);
+    const grandTotal = Number(inv.grand_total ?? inv.grandTotal ?? 0);
+    const status = inv.status || 'issued';
+    const paid = status === 'paid' || (balanceDue <= 0 && grandTotal > 0);
+    const amount = paid ? grandTotal : balanceDue;
+
+    let vpa = DEFAULT_HOPEPITOME_COMPANY.upiId || 'service@hopepitome';
+    let payeeName = DEFAULT_HOPEPITOME_COMPANY.legalName;
+    let bank = {
+      bankName: DEFAULT_HOPEPITOME_COMPANY.bankName || 'HDFC Bank Ltd',
+      accountNo: DEFAULT_HOPEPITOME_COMPANY.bankAccount || '50200088991122',
+      ifsc: DEFAULT_HOPEPITOME_COMPANY.bankIfsc || 'HDFC0001234',
+      branch: DEFAULT_HOPEPITOME_COMPANY.bankBranch || 'Outer Ring Road, Bengaluru',
+    };
+
+    if (db) {
+      try {
+        const upiRow: any = await db.prepare("SELECT * FROM masters WHERE type = 'upiIds' AND status = 'active' ORDER BY is_default DESC, sort_order ASC LIMIT 1").first();
+        if (upiRow?.data_json) {
+          const u = JSON.parse(upiRow.data_json);
+          if (u.vpa) vpa = u.vpa;
+          if (u.payeeName) payeeName = u.payeeName;
+        }
+        const bankRow: any = await db.prepare("SELECT * FROM masters WHERE type = 'bankAccounts' AND status = 'active' ORDER BY is_default DESC, sort_order ASC LIMIT 1").first();
+        if (bankRow?.data_json) {
+          const b = JSON.parse(bankRow.data_json);
+          bank = {
+            bankName: b.bankName || bankRow.name || bank.bankName,
+            accountNo: b.accountNo || bank.accountNo,
+            ifsc: b.ifsc || bank.ifsc,
+            branch: b.branch || bank.branch,
+          };
+        }
+      } catch {}
+    }
+
+    const uri = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}&am=${(amount / 100).toFixed(2)}&cu=INR&tn=${encodeURIComponent(inv.number || '')}`;
+    let qrSvg: string | null = null;
+    try {
+      qrSvg = await upiQrSvg(uri);
+    } catch {}
+
+    return jsonRes({ uri, vpa, payeeName, amount, qrSvg, paid, bank });
+  }
+
   // /invoices/:id
   const invoiceItemMatch = path.match(/^\/invoices\/([^/?]+)/);
   if (invoiceItemMatch) {
@@ -3599,7 +3655,24 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
 
       const maxRow: any = await db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS mx FROM masters WHERE type = ?').bind(mType).first();
       const sortOrder = body.sortOrder !== undefined ? Number(body.sortOrder) : Number(maxRow?.mx ?? 0) + 1;
-      const prefix = mType.slice(0, 4).toLowerCase();
+      const MASTER_PREFIX: Record<string, string> = {
+        products: 'prod',
+        upiIds: 'upi',
+        bankAccounts: 'bank',
+        paymentTerms: 'pt',
+        leadSources: 'src',
+        pipelineStages: 'stg',
+        lostReasons: 'lost',
+        junkReasons: 'junk',
+        callOutcomes: 'call',
+        messageTemplates: 'tpl',
+        termsTemplates: 'term',
+        territories: 'terr',
+        units: 'unit',
+        tags: 'tag',
+        customerGroups: 'grp',
+      };
+      const prefix = MASTER_PREFIX[mType] || mType.slice(0, 4).toLowerCase();
       const newId = `${prefix}-${Date.now()}`;
 
       await db
@@ -3651,9 +3724,20 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       }
       const sortOrder = body.sortOrder !== undefined ? Number(body.sortOrder) : Number(existing.sort_order ?? 0);
 
+      let nextStatus = existing.status || 'active';
+      if (body.status !== undefined) {
+        const s = String(body.status).trim().toLowerCase();
+        if (s !== 'active' && s !== 'inactive') {
+          return errRes(422, 'VALIDATION_ERROR', 'Status must be "active" or "inactive"');
+        }
+        nextStatus = s;
+      } else if (body.isActive !== undefined) {
+        nextStatus = body.isActive ? 'active' : 'inactive';
+      }
+
       await db
-        .prepare('UPDATE masters SET name = ?, key = ?, is_default = ?, data_json = ?, sort_order = ?, version = version + 1 WHERE id = ? AND type = ?')
-        .bind(name, key, isDefault, JSON.stringify(data), sortOrder, mId, mType)
+        .prepare('UPDATE masters SET name = ?, key = ?, status = ?, is_default = ?, data_json = ?, sort_order = ?, version = version + 1 WHERE id = ? AND type = ?')
+        .bind(name, key, nextStatus, isDefault, JSON.stringify(data), sortOrder, mId, mType)
         .run();
 
       const updated: any = await db.prepare('SELECT * FROM masters WHERE id = ? AND type = ?').bind(mId, mType).first();
@@ -3665,37 +3749,42 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       const existing: any = await db.prepare('SELECT * FROM masters WHERE id = ? AND type = ?').bind(mId, mType).first();
       if (!existing) return errRes(404, 'NOT_FOUND', 'Master item not found');
 
-      let isUsed = false;
+      let useCount = 0;
+      let useEntity = 'records';
       const keyVal = existing.key || mId;
       const likeId = `%${mId}%`;
       const likeName = `%${existing.name}%`;
 
       if (mType === 'products') {
-        const lRef: any = await db.prepare('SELECT id FROM leads WHERE deleted_at IS NULL AND (interest_product_id = ? OR data_json LIKE ?) LIMIT 1').bind(mId, likeId).first();
-        const qRef: any = await db.prepare('SELECT id FROM quotes WHERE deleted_at IS NULL AND data_json LIKE ? LIMIT 1').bind(likeId).first();
-        const oRef: any = await db.prepare('SELECT id FROM orders WHERE deleted_at IS NULL AND data_json LIKE ? LIMIT 1').bind(likeId).first();
-        const iRef: any = await db.prepare('SELECT id FROM invoices WHERE deleted_at IS NULL AND data_json LIKE ? LIMIT 1').bind(likeId).first();
-        if (lRef || qRef || oRef || iRef) isUsed = true;
+        const lRef: any = await db.prepare('SELECT COUNT(*) AS cnt FROM leads WHERE deleted_at IS NULL AND (interest_product_id = ? OR data_json LIKE ?)').bind(mId, likeId).first();
+        const qRef: any = await db.prepare('SELECT COUNT(*) AS cnt FROM quotes WHERE deleted_at IS NULL AND data_json LIKE ?').bind(likeId).first();
+        const oRef: any = await db.prepare('SELECT COUNT(*) AS cnt FROM orders WHERE deleted_at IS NULL AND data_json LIKE ?').bind(likeId).first();
+        const iRef: any = await db.prepare('SELECT COUNT(*) AS cnt FROM invoices WHERE deleted_at IS NULL AND data_json LIKE ?').bind(likeId).first();
+        useCount = Number(lRef?.cnt ?? 0) + Number(qRef?.cnt ?? 0) + Number(oRef?.cnt ?? 0) + Number(iRef?.cnt ?? 0);
       } else if (mType === 'leadSources') {
-        const lRef: any = await db.prepare('SELECT id FROM leads WHERE deleted_at IS NULL AND (source_id = ? OR source = ? OR data_json LIKE ?) LIMIT 1').bind(mId, keyVal, likeId).first();
-        if (lRef) isUsed = true;
+        const lRef: any = await db.prepare('SELECT COUNT(*) AS cnt FROM leads WHERE deleted_at IS NULL AND (source_id = ? OR data_json LIKE ?)').bind(mId, likeId).first();
+        useCount = Number(lRef?.cnt ?? 0);
+        useEntity = useCount === 1 ? 'lead' : 'leads';
       } else if (mType === 'pipelineStages') {
-        const lRef: any = await db.prepare('SELECT id FROM leads WHERE deleted_at IS NULL AND LOWER(stage) = LOWER(?) LIMIT 1').bind(keyVal).first();
-        if (lRef) isUsed = true;
+        const lRef: any = await db.prepare('SELECT COUNT(*) AS cnt FROM leads WHERE deleted_at IS NULL AND LOWER(stage) = LOWER(?)').bind(keyVal).first();
+        useCount = Number(lRef?.cnt ?? 0);
+        useEntity = useCount === 1 ? 'lead' : 'leads';
       } else if (mType === 'bankAccounts') {
-        const pRef: any = await db.prepare('SELECT id FROM payments WHERE deleted_at IS NULL AND data_json LIKE ? LIMIT 1').bind(likeId).first();
-        if (pRef) isUsed = true;
+        const pRef: any = await db.prepare('SELECT COUNT(*) AS cnt FROM payments WHERE deleted_at IS NULL AND data_json LIKE ?').bind(likeId).first();
+        useCount = Number(pRef?.cnt ?? 0);
+        useEntity = useCount === 1 ? 'payment' : 'payments';
       } else if (mType === 'units') {
-        const pRef: any = await db.prepare("SELECT id FROM masters WHERE type = 'products' AND data_json LIKE ? LIMIT 1").bind(likeName).first();
-        if (pRef) isUsed = true;
+        const pRef: any = await db.prepare("SELECT COUNT(*) AS cnt FROM masters WHERE type = 'products' AND data_json LIKE ?").bind(likeName).first();
+        useCount = Number(pRef?.cnt ?? 0);
+        useEntity = useCount === 1 ? 'product' : 'products';
       } else if (mType === 'territories' || mType === 'tags' || mType === 'customerGroups') {
-        const lRef: any = await db.prepare('SELECT id FROM leads WHERE deleted_at IS NULL AND data_json LIKE ? LIMIT 1').bind(likeId).first();
-        const cRef: any = await db.prepare('SELECT id FROM customers WHERE deleted_at IS NULL AND data_json LIKE ? LIMIT 1').bind(likeId).first();
-        if (lRef || cRef) isUsed = true;
+        const lRef: any = await db.prepare('SELECT COUNT(*) AS cnt FROM leads WHERE deleted_at IS NULL AND data_json LIKE ?').bind(likeId).first();
+        const cRef: any = await db.prepare('SELECT COUNT(*) AS cnt FROM customers WHERE deleted_at IS NULL AND data_json LIKE ?').bind(likeId).first();
+        useCount = Number(lRef?.cnt ?? 0) + Number(cRef?.cnt ?? 0);
       }
 
-      if (isUsed) {
-        return errRes(422, 'MASTER_IN_USE', 'This item is used by existing records and cannot be deleted. Deactivate it instead.');
+      if (useCount > 0) {
+        return errRes(422, 'MASTER_IN_USE', `In use by ${useCount} ${useEntity}. Deactivate it instead.`);
       }
 
       await db.prepare('DELETE FROM masters WHERE id = ? AND type = ?').bind(mId, mType).run();

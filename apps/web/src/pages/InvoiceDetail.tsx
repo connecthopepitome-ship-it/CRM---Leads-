@@ -68,7 +68,20 @@ export default function InvoiceDetail() {
   const nav = useNavigate();
   const { perm, can } = useAuth();
   const q = useQuery({ queryKey: ['invoice', id], queryFn: () => get<Invoice>(`/invoices/${id}`), enabled: Boolean(id && id !== 'undefined') });
-  const upi = useQuery({ queryKey: ['upi', id, q.data?.balanceDue], queryFn: () => get<{ uri: string | null; amount: number; qrSvg: string | null; paid: boolean }>(`/invoices/${id}/upi`), enabled: !!q.data && q.data.status !== 'draft' });
+  const upi = useQuery({
+    queryKey: ['upi', id, q.data?.balanceDue],
+    queryFn: () =>
+      get<{
+        uri: string | null;
+        vpa?: string;
+        payeeName?: string;
+        amount: number;
+        qrSvg: string | null;
+        paid: boolean;
+        bank?: { bankName: string; accountNo: string; ifsc: string; branch: string };
+      }>(`/invoices/${id}/upi`),
+    enabled: !!q.data && q.data.status !== 'draft',
+  });
   const cust = useQuery({ queryKey: ['customer', q.data?.customerId], queryFn: () => get<any>(`/customers/${q.data!.customerId}`), enabled: !!q.data?.customerId });
   const templates = useOptions('messageTemplates');
   const [cn, setCn] = useState(false);
@@ -558,17 +571,52 @@ export default function InvoiceDetail() {
           </Card>
 
           {upi.data && (
-            <Card title="UPI Payment">
-              {upi.data.paid ? (
-                <Badge tone="success">PAID VIA UPI</Badge>
-              ) : upi.data.qrSvg ? (
-                <div className="flex flex-col items-center gap-2 text-xs">
-                  <div className="w-36 rounded-xl bg-white p-2 border border-[#DCE7D9]" dangerouslySetInnerHTML={{ __html: upi.data.qrSvg }} role="img" aria-label={`UPI QR code for ${money(upi.data.amount)}`} />
-                  <span className="font-mono font-bold text-[#202820]">{money(upi.data.amount)}</span>
+            <Card title="Payment & Bank Details">
+              <div className="space-y-4">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-[#778477] mb-2">UPI Payment</div>
+                  {upi.data.paid ? (
+                    <div className="flex items-center justify-between gap-2">
+                      <Badge tone="success">PAID VIA UPI</Badge>
+                      {upi.data.vpa && <span className="font-mono text-xs text-[#202820]">{upi.data.vpa}</span>}
+                    </div>
+                  ) : upi.data.qrSvg ? (
+                    <div className="flex flex-col items-center gap-2 text-xs">
+                      <div className="w-36 rounded-xl bg-white p-2 border border-[#DCE7D9]" dangerouslySetInnerHTML={{ __html: upi.data.qrSvg }} role="img" aria-label={`UPI QR code for ${money(upi.data.amount)}`} />
+                      <span className="font-mono font-bold text-[#202820]">{money(upi.data.amount)}</span>
+                      {upi.data.vpa && <span className="font-mono text-[11px] text-[#778477]">{upi.data.vpa}</span>}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-[#778477]">Add a UPI ID in Settings &gt; Masters to show QR payments.</p>
+                  )}
                 </div>
-              ) : (
-                <p className="text-xs text-[#778477]">Add a UPI ID in Settings to show QR payments.</p>
-              )}
+
+                {upi.data.bank && (
+                  <div className="border-t border-[#DCE7D9]/60 pt-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-[#778477] mb-2">Bank Transfer (NEFT / RTGS)</div>
+                    <dl className="space-y-1 text-xs">
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-[#778477]">Bank</dt>
+                        <dd className="font-semibold text-[#202820] text-right">{upi.data.bank.bankName}</dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-[#778477]">A/c No.</dt>
+                        <dd className="font-mono font-semibold text-[#202820] text-right">{upi.data.bank.accountNo}</dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-[#778477]">IFSC</dt>
+                        <dd className="font-mono font-semibold text-[#202820] text-right">{upi.data.bank.ifsc}</dd>
+                      </div>
+                      {upi.data.bank.branch && (
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-[#778477]">Branch</dt>
+                          <dd className="text-[#202820] text-right">{upi.data.bank.branch}</dd>
+                        </div>
+                      )}
+                    </dl>
+                  </div>
+                )}
+              </div>
             </Card>
           )}
 

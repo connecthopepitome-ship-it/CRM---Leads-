@@ -10,7 +10,7 @@ export interface Option {
   data: Record<string, unknown>;
 }
 
-/** API-051 lookups, cached 5 minutes. */
+/** API-051 lookups, cached at most 60 s and refreshed on mount / window focus. */
 export function useOptions(type: string) {
   return useQuery({
     queryKey: ['options', type],
@@ -23,7 +23,9 @@ export function useOptions(type: string) {
           label: item.label || item.name || item.displayName || item.bankName || item.key || String(item.id ?? ''),
         })) as Option[];
       }),
-    staleTime: 300_000,
+    staleTime: 60_000,
+    refetchOnWindowFocus: 'always',
+    refetchOnMount: 'always',
   });
 }
 
