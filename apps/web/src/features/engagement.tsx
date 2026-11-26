@@ -75,23 +75,23 @@ export function ActionBar({ rec }: { rec: RecordRef }) {
   return (
     <>
       <div
-        className="rounded-2xl border border-[#DCE7D9] bg-white p-1.5 sm:p-2.5 shadow-2xs transition-all"
+        className="rounded-2xl border border-[#DCE7D9] bg-white p-1 sm:p-2 shadow-2xs transition-all"
         role="toolbar"
         aria-label="Lead Actions"
       >
-        <div className="grid grid-cols-6 gap-1 sm:gap-2">
+        <div className="grid grid-cols-6 gap-0.5 sm:gap-2">
           {/* CALL */}
           <button
             type="button"
             onClick={() => void call()}
             disabled={!rec.phone}
             title={rec.phone ? `Call ${rec.phone}` : 'No phone number available'}
-            className="group flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            className="group flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-1.5 px-0.5 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
-            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-2xs transition-transform duration-200 group-hover:scale-110 group-hover:bg-emerald-100">
-              <Phone size={17} strokeWidth={2.2} />
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-2xs transition-transform duration-200 group-hover:scale-105 group-hover:bg-emerald-100">
+              <Phone size={16} strokeWidth={2.2} />
             </div>
-            <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center group-hover:text-emerald-900">
+            <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center sm:text-left group-hover:text-emerald-900">
               Call
             </span>
           </button>
@@ -101,12 +101,12 @@ export function ActionBar({ rec }: { rec: RecordRef }) {
             type="button"
             onClick={() => setSheet('whatsapp')}
             title="Send WhatsApp message"
-            className="group flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96]"
+            className="group flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-1.5 px-0.5 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96]"
           >
-            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-[#EAF8EE] text-[#128C7E] border border-[#25D366]/30 shadow-2xs transition-transform duration-200 group-hover:scale-110 group-hover:bg-[#DCF4E3]">
-              <MessageCircle size={17} strokeWidth={2.2} />
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-[#EAF8EE] text-[#128C7E] border border-[#25D366]/30 shadow-2xs transition-transform duration-200 group-hover:scale-105 group-hover:bg-[#DCF4E3]">
+              <MessageCircle size={16} strokeWidth={2.2} />
             </div>
-            <span className="text-[9px] sm:text-xs font-semibold text-[#202820] tracking-tight sm:tracking-normal text-center group-hover:text-[#128C7E] whitespace-nowrap">
+            <span className="text-[9.5px] sm:text-xs font-semibold text-[#202820] tracking-tight sm:tracking-normal text-center sm:text-left group-hover:text-[#128C7E] whitespace-nowrap">
               WhatsApp
             </span>
           </button>
@@ -117,12 +117,12 @@ export function ActionBar({ rec }: { rec: RecordRef }) {
             onClick={() => setSheet('email')}
             disabled={!rec.email}
             title={rec.email ? `Email ${rec.email}` : 'No email address available'}
-            className="group flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            className="group flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 py-1.5 px-0.5 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
-            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-sky-50 text-sky-700 border border-sky-200/60 shadow-2xs transition-transform duration-200 group-hover:scale-110 group-hover:bg-sky-100">
-              <Mail size={17} strokeWidth={2.2} />
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-700 border border-sky-200/60 shadow-2xs transition-transform duration-200 group-hover:scale-105 group-hover:bg-sky-100">
+              <Mail size={16} strokeWidth={2.2} />
             </div>
-            <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center group-hover:text-sky-900">
+            <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center sm:text-left group-hover:text-sky-900">
               Email
             </span>
           </button>
@@ -134,12 +134,12 @@ export function ActionBar({ rec }: { rec: RecordRef }) {
               target="_blank"
               rel="noreferrer"
               title={`Directions to ${rec.address}`}
-              className="group flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96]"
+              className="group flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-1.5 px-0.5 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96]"
             >
-              <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-amber-50 text-amber-700 border border-amber-200/60 shadow-2xs transition-transform duration-200 group-hover:scale-110 group-hover:bg-amber-100">
-                <MapPin size={17} strokeWidth={2.2} />
+              <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-700 border border-amber-200/60 shadow-2xs transition-transform duration-200 group-hover:scale-105 group-hover:bg-amber-100">
+                <MapPin size={16} strokeWidth={2.2} />
               </div>
-              <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center group-hover:text-amber-900">
+              <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center sm:text-left group-hover:text-amber-900">
                 <span className="hidden sm:inline">Directions</span>
                 <span className="sm:hidden">Map</span>
               </span>
@@ -149,12 +149,12 @@ export function ActionBar({ rec }: { rec: RecordRef }) {
               type="button"
               disabled
               title="No address available"
-              className="group flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 sm:py-2 sm:px-2 rounded-xl opacity-40 cursor-not-allowed"
+              className="group flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-1.5 px-0.5 sm:py-2 sm:px-2 rounded-xl opacity-40 cursor-not-allowed"
             >
-              <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-amber-50 text-amber-700 border border-amber-200/60 shadow-2xs">
-                <MapPin size={17} strokeWidth={2.2} />
+              <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-700 border border-amber-200/60 shadow-2xs">
+                <MapPin size={16} strokeWidth={2.2} />
               </div>
-              <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center">
+              <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center sm:text-left">
                 <span className="hidden sm:inline">Directions</span>
                 <span className="sm:hidden">Map</span>
               </span>
@@ -166,12 +166,12 @@ export function ActionBar({ rec }: { rec: RecordRef }) {
             type="button"
             onClick={() => setSheet('note')}
             title="Add note to timeline"
-            className="group flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96]"
+            className="group flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-1.5 px-0.5 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96]"
           >
-            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-purple-50 text-purple-700 border border-purple-200/60 shadow-2xs transition-transform duration-200 group-hover:scale-110 group-hover:bg-purple-100">
-              <StickyNote size={17} strokeWidth={2.2} />
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-purple-50 text-purple-700 border border-purple-200/60 shadow-2xs transition-transform duration-200 group-hover:scale-105 group-hover:bg-purple-100">
+              <StickyNote size={16} strokeWidth={2.2} />
             </div>
-            <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center group-hover:text-purple-900">
+            <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center sm:text-left group-hover:text-purple-900">
               Note
             </span>
           </button>
@@ -181,12 +181,12 @@ export function ActionBar({ rec }: { rec: RecordRef }) {
             type="button"
             onClick={() => setSheet('followup')}
             title="Schedule follow-up"
-            className="group flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96]"
+            className="group flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-1.5 px-0.5 sm:py-2 sm:px-2 rounded-xl transition-all duration-150 hover:bg-[#F5F9F2] active:scale-[0.96]"
           >
-            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-[#E3EFDF] text-[#233D2D] border border-[#2E4E36]/30 shadow-2xs transition-transform duration-200 group-hover:scale-110 group-hover:bg-[#D4E8CE]">
-              <CalendarPlus size={17} strokeWidth={2.2} />
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-[#E3EFDF] text-[#233D2D] border border-[#2E4E36]/30 shadow-2xs transition-transform duration-200 group-hover:scale-105 group-hover:bg-[#D4E8CE]">
+              <CalendarPlus size={16} strokeWidth={2.2} />
             </div>
-            <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center group-hover:text-[#233D2D]">
+            <span className="text-[10px] sm:text-xs font-semibold text-[#202820] tracking-tight truncate max-w-full text-center sm:text-left group-hover:text-[#233D2D]">
               <span className="hidden sm:inline">Follow-up</span>
               <span className="sm:hidden">Task</span>
             </span>

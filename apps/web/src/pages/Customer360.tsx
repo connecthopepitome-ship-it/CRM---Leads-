@@ -141,9 +141,9 @@ export default function Customer360() {
                   : null,
                 ['Code', customer.code],
                 ['Phone', primaryPhone],
-                ['Email', primaryEmail],
+                ['Email', primaryEmail ? <span className="break-all">{primaryEmail}</span> : null],
                 ['GSTIN', customer.gstin || null],
-                ['Created', dateTime(customer.createdAt)],
+                ['Created', <span className="whitespace-nowrap">{dateTime(customer.createdAt)}</span>],
               ] as any[]).filter(Boolean)} />
             </Card>
             {ageing && (

@@ -342,16 +342,16 @@ export function Table<T extends { id?: string }>({ columns, rows = [], onRow, em
   );
 }
 
-export function KeyValue({ items, columns = 2 }: { items: ([string, ReactNode] | { label: string; value: ReactNode })[]; columns?: 1 | 2 }) {
+export function KeyValue({ items, columns = 1 }: { items: ([string, ReactNode] | { label: string; value: ReactNode })[]; columns?: 1 | 2 }) {
   return (
-    <dl className={`grid grid-cols-1 gap-x-6 gap-y-2 text-sm ${columns === 2 ? 'md:grid-cols-2' : ''} w-full min-w-0 max-w-full`}>
+    <dl className={`grid grid-cols-1 gap-x-6 gap-y-1.5 text-sm ${columns === 2 ? 'md:grid-cols-2' : ''} w-full min-w-0 max-w-full`}>
       {items.map((item, idx) => {
         const k = Array.isArray(item) ? item[0] : item?.label;
         const v = Array.isArray(item) ? item[1] : item?.value;
         return (
-          <div key={k ?? idx} className="flex items-center justify-between gap-3 border-b border-[#DCE7D9]/60 py-1.5 min-w-0">
-            <dt className="text-[#778477] font-medium shrink-0 text-xs sm:text-sm">{k}</dt>
-            <dd className="text-right font-semibold text-[#202820] text-xs sm:text-sm break-words min-w-0">{v ?? '—'}</dd>
+          <div key={k ?? idx} className="flex items-start justify-between gap-3 border-b border-[#DCE7D9]/60 py-2 min-w-0">
+            <dt className="text-[#6B7A6B] font-medium shrink-0 text-xs sm:text-sm pt-0.5">{k}</dt>
+            <dd className="text-right font-semibold text-[#202820] text-xs sm:text-sm min-w-0 break-normal [overflow-wrap:anywhere] leading-snug">{v ?? '—'}</dd>
           </div>
         );
       })}

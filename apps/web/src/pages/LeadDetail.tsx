@@ -1,5 +1,5 @@
 /** SCR-004 Lead detail, SCR-009 convert (FR-033, FR-035, FR-036, FR-081 offline cache). */
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { del, get, post } from '../lib/api';
@@ -168,16 +168,16 @@ export default function LeadDetail() {
                   ]
                 : null,
               ['Phone', l.phone ?? (l.phoneRaw ? <span>{l.phoneRaw} <Badge tone="warning">Check number</Badge></span> : null)],
-              ['Email', l.email],
+              ['Email', l.email ? <span className="break-all">{l.email}</span> : null],
               ['Location', [l.city, l.pincode].filter(Boolean).join(' - ') || null],
               ['Lead Source', (l as any).sourceLabel || sources.data?.find((s) => s.id === (l as any).sourceId || s.key === (l as any).sourceId)?.label || (l as any).sourceId || null],
               ['Product Interest', (l as any).productLabel || products.data?.find((p) => p.id === (l as any).interestProductId)?.label || (l as any).interestProductId || null],
               ['Territory', (l as any).territoryLabel || null],
-              ['First-contact SLA', <Badge key="s" status={isContactedOrClosed ? 'met' : l.slaStatus}>{sla.text}</Badge>],
+              ['First-contact SLA', <Badge key="s" tone={isContactedOrClosed ? 'success' : sla.tone} status={isContactedOrClosed ? 'met' : l.slaStatus}>{sla.text}</Badge>],
               ['Next follow-up', nextFu ? `${String(nextFu.type).toUpperCase()} on ${dateTime(nextFu.dueAt)}` : (l.nextFollowUpAt ? dateTime(l.nextFollowUpAt) : null)],
-              ['Expected value', l.expectedValue ? money(l.expectedValue) : null],
+              ['Expected value', l.expectedValue ? <span className="whitespace-nowrap font-mono font-semibold text-[#233D2D]">{money(l.expectedValue)}</span> : null],
               ['Consent', label(l.consentBasis)],
-              ['Created', dateTime(l.createdAt)],
+              ['Created', <span className="whitespace-nowrap">{dateTime(l.createdAt)}</span>],
             ] as any[]).filter(Boolean)} />
             {!!l.tags?.length && <div className="mt-3 flex flex-wrap gap-1">{l.tags.map((t) => <Badge key={t}>{t}</Badge>)}</div>}
             {l.notes && <p className="mt-3 whitespace-pre-wrap text-sm">{l.notes}</p>}
