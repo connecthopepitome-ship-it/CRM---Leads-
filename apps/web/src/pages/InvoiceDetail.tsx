@@ -229,7 +229,7 @@ export default function InvoiceDetail() {
           </Button>
           {!draft && <Button variant="ghost" onClick={() => void share('copy')}>Copy link</Button>}
           {live && i.type !== 'proforma' && can('payment', 'create') && (
-            <LinkButton to={`/sales/payments/new?customerId=${i.customerId}&invoiceId=${i.id}`} variant="primary">
+            <LinkButton to={`/sales/payments/new?customerId=${i.customerId}&invoiceId=${i.id}&amount=${balanceDue}`} variant="primary">
               Record payment
             </LinkButton>
           )}
@@ -287,7 +287,7 @@ export default function InvoiceDetail() {
 
         {live && i.type !== 'proforma' && can('payment', 'create') && (
           <LinkButton
-            to={`/sales/payments/new?customerId=${i.customerId}&invoiceId=${i.id}`}
+            to={`/sales/payments/new?customerId=${i.customerId}&invoiceId=${i.id}&amount=${balanceDue}`}
             variant="primary"
             className="w-full justify-center py-2.5 text-xs font-bold shadow-xs"
           >

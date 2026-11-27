@@ -6093,7 +6093,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
 
     const trendPct = lastMonthLeads > 0
       ? Math.round(((thisMonthLeads - lastMonthLeads) / lastMonthLeads) * 100)
-      : (thisMonthLeads > 0 ? 32 : 0);
+      : (thisMonthLeads > 0 ? 100 : 0);
 
     return jsonRes({
       collected: collectedRupees,

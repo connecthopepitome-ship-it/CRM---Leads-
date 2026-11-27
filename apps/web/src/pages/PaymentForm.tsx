@@ -42,15 +42,29 @@ export default function PaymentForm() {
     enabled: !!customerId,
   });
 
-  const [f, setF] = useState({
-    date: today(),
-    amount: '',
-    mode: 'neft',
-    reference: '',
-    bankAccountId: '',
-    tds: '',
-    tdsSection: '',
-    note: '',
+  const targetInvoiceId = params.get('invoiceId');
+  const targetInvoiceQuery = useQuery({
+    queryKey: ['target-invoice', targetInvoiceId],
+    queryFn: () => get<any>(`/invoices/${targetInvoiceId}`),
+    enabled: !!targetInvoiceId,
+  });
+
+  const [f, setF] = useState(() => {
+    const pAmt = params.get('amount');
+    let amt = '';
+    if (pAmt && !isNaN(Number(pAmt)) && Number(pAmt) > 0) {
+      amt = String(Number(pAmt) / 100);
+    }
+    return {
+      date: today(),
+      amount: amt,
+      mode: 'neft',
+      reference: '',
+      bankAccountId: '',
+      tds: '',
+      tdsSection: '',
+      note: '',
+    };
   });
 
   const [manual, setManual] = useState<Record<string, string> | null>(null);
@@ -81,22 +95,25 @@ export default function PaymentForm() {
     toast('Form reset');
   };
 
+  useEffect(() => {
+    if (targetInvoiceQuery.data && !f.amount) {
+      const bal = targetInvoiceQuery.data.balanceDue ?? (targetInvoiceQuery.data.grandTotal - (targetInvoiceQuery.data.paidAmount || 0));
+      if (bal > 0) {
+        setF((prev) => ({ ...prev, amount: String(bal / 100) }));
+      }
+    }
+  }, [targetInvoiceQuery.data]);
+
   const preview = useQuery({
-    queryKey: ['pay-preview', customerId, f.amount, f.tds],
+    queryKey: ['pay-preview', customerId, f.amount, f.tds, targetInvoiceId],
     queryFn: () =>
       post<{ open: Open[]; plan: { allocations?: { invoiceId: string; amount: number }[]; advance?: number; error?: string } }>(
         '/payments/preview',
-        { customerId, amount: toPaise(f.amount || 0) || 1, tdsAmount: toPaise(f.tds || 0), allocation: { mode: 'auto', preferInvoiceId: params.get('invoiceId') ?? undefined } }
+        { customerId, amount: toPaise(f.amount || 0), tdsAmount: toPaise(f.tds || 0), allocation: { mode: 'auto', preferInvoiceId: targetInvoiceId ?? undefined } }
       ).catch(() => ({
-        open: [
-          { id: 'inv-1', number: 'INV/26-27/0001', dueDate: today(), balance: 2950000 },
-          { id: 'inv-2', number: 'INV/26-27/0002', dueDate: today(), balance: 2000000 },
-        ],
+        open: [],
         plan: {
-          allocations: [
-            { invoiceId: 'inv-1', amount: 2950000 },
-            { invoiceId: 'inv-2', amount: 2000000 },
-          ],
+          allocations: [],
           advance: 0,
         },
       })),
@@ -106,7 +123,7 @@ export default function PaymentForm() {
   useEffect(() => {
     const inv = params.get('invoiceId');
     const o = preview.data?.open?.find((x) => x.id === inv);
-    if (o && !f.amount) setF((x) => ({ ...x, amount: String(o.balance / 100) }));
+    if (o && !f.amount && o.balance > 0) setF((x) => ({ ...x, amount: String(o.balance / 100) }));
   }, [preview.data]);
 
   const checkUtr = async () => {
@@ -431,6 +448,8 @@ export default function PaymentForm() {
                                 value={manual[o.id] ?? ''}
                                 onChange={(e) => setManual({ ...manual, [o.id]: e.target.value })}
                               />
+                            ) : toPaise(f.amount || 0) <= 0 ? (
+                              <span className="font-semibold text-slate-400">₹0.00</span>
                             ) : (
                               <span className="font-semibold text-emerald-700">
                                 {money(plan?.allocations?.find((a) => a.invoiceId === o.id)?.amount ?? 0)}

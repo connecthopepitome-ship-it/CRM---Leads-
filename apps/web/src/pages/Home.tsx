@@ -218,12 +218,14 @@ export default function Home() {
               <UserPlus size={16} />
             </span>
             <span className="flex items-center text-[11px] font-bold text-[#3D7952] bg-[#EAF5E8]/90 px-2 py-0.5 rounded-full border border-[#CFE5CB] glass-badge">
-              <ArrowUpRight size={12} className="mr-0.5" /> +25%
+              <ArrowUpRight size={12} className="mr-0.5" /> {metricsQ.data?.leads?.trendPct !== undefined ? (metricsQ.data.leads.trendPct >= 0 ? `+${metricsQ.data.leads.trendPct}%` : `${metricsQ.data.leads.trendPct}%`) : '+100%'}
             </span>
           </div>
           <div className="mt-3">
             <span className="text-xs font-semibold text-[#778477] transition-colors group-hover:text-[#202820]">New Leads</span>
-            <div className="text-2xl font-extrabold text-[#202820] tracking-tight transition-transform group-hover:scale-105 group-hover:text-[#3D7952] origin-left">12</div>
+            <div className="text-2xl font-extrabold text-[#202820] tracking-tight transition-transform group-hover:scale-105 group-hover:text-[#3D7952] origin-left">
+              {metricsQ.data?.leads?.thisMonth ?? 8}
+            </div>
           </div>
         </Link>
 
@@ -485,9 +487,9 @@ export default function Home() {
               { label: 'W4', amount: 35000, heightPct: 15 },
             ];
             const leadsTrend = metricsQ.data?.leads;
-            const trendPctStr = leadsTrend?.trendPct !== undefined 
-              ? (leadsTrend.trendPct >= 0 ? `+${leadsTrend.trendPct}% vs Last Month` : `${leadsTrend.trendPct}% vs Last Month`)
-              : '+32% vs Last Month';
+            const thisMonthLeadsCount = leadsTrend?.thisMonth ?? 8;
+            const trendPctVal = leadsTrend?.trendPct ?? 100;
+            const trendPctStr = `${trendPctVal >= 0 ? '+' : ''}${trendPctVal}% vs Last Month`;
 
             return (
               <>
@@ -540,10 +542,13 @@ export default function Home() {
                 <div className="rounded-2xl border border-white/80 bg-white/80 backdrop-blur-md p-5 shadow-[0_4px_20px_-2px_rgba(35,61,45,0.04)] interactive-card">
                   <div className="flex items-center justify-between border-b border-[#DCE7D9]/70 pb-3">
                     <div>
-                      <h2 className="text-sm font-bold text-[#202820] hover-text-lift">Leads Trend</h2>
-                      <p className="text-[11px] text-[#778477]">Acquisition volume ({leadsTrend?.thisMonth ?? 8} leads this month)</p>
+                      <div className="flex items-baseline gap-2">
+                        <h2 className="text-sm font-bold text-[#202820] hover-text-lift">Leads Trend</h2>
+                        <span className="text-2xl font-extrabold text-[#202820] tracking-tight">{thisMonthLeadsCount}</span>
+                      </div>
+                      <p className="text-[11px] text-[#778477]">Acquisition volume ({thisMonthLeadsCount} leads this month)</p>
                     </div>
-                    <span className="text-xs font-bold text-[#3D7952]">
+                    <span className="rounded-full bg-[#EDF5EA] px-2.5 py-1 text-xs font-bold text-[#3D7952] border border-[#3D7952]/20">
                       {trendPctStr}
                     </span>
                   </div>
