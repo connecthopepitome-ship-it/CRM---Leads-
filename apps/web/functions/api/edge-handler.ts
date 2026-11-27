@@ -372,10 +372,16 @@ async function getNextCustomerCode(db?: D1DatabaseLike): Promise<string> {
 }
 
 async function getNextDocNumber(db: D1DatabaseLike | undefined, table: string, col: string, prefix: string): Promise<string> {
-  let maxSeq = 1;
+  let maxSeq = 0;
   if (db) {
     try {
-      const { results } = await db.prepare(`SELECT ${col} as num FROM ${table} WHERE ${col} LIKE ? AND deleted_at IS NULL`).bind(`${prefix}%`).all();
+      // 1. Check atomic number_series first
+      const row: any = await db.prepare('SELECT current_seq FROM number_series WHERE prefix = ?').bind(prefix).first();
+      if (row && typeof row.current_seq === 'number') {
+        maxSeq = row.current_seq;
+      }
+      // 2. Also check table records across all rows (do NOT ignore deleted rows; invoice numbers must never be reused)
+      const { results } = await db.prepare(`SELECT ${col} as num FROM ${table} WHERE ${col} LIKE ?`).bind(`${prefix}%`).all();
       for (const r of (results || [])) {
         const m = ((r as any).num || '').match(/(\d+)$/);
         if (m) {
@@ -383,13 +389,20 @@ async function getNextDocNumber(db: D1DatabaseLike | undefined, table: string, c
           if (n > maxSeq) maxSeq = n;
         }
       }
+      const nextSeq = maxSeq + 1;
+      await db.prepare(`
+        INSERT INTO number_series (prefix, current_seq, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(prefix) DO UPDATE SET current_seq = ?, updated_at = ?
+      `).bind(prefix, nextSeq, new Date().toISOString(), nextSeq, new Date().toISOString()).run();
+      return `${prefix}${String(nextSeq).padStart(4, '0')}`;
     } catch (e) {
       console.error(`Error querying max ${prefix}:`, e);
     }
   }
-  const storeItems = table === 'quotes' ? memoryStore.quotes : (table === 'orders' ? memoryStore.orders : memoryStore.invoices);
+  const storeItems = table === 'quotes' ? memoryStore.quotes : (table === 'orders' ? memoryStore.orders : (table === 'payments' ? memoryStore.payments : memoryStore.invoices));
   for (const it of storeItems) {
-    const num = (it as any).displayNumber || (it as any).number || '';
+    const num = (it as any).displayNumber || (it as any).number || (it as any).receiptNo || '';
     if (num.startsWith(prefix)) {
       const m = num.match(/(\d+)$/);
       if (m) {
@@ -1448,6 +1461,17 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       const assignedTo = body.assignedTo || body.assigned_to || authUser?.fullName || null;
       const teamId = body.teamId || body.team_id || authUser?.teamId || null;
 
+      const billing = body.billing || (Array.isArray(body.addresses) ? body.addresses[0] : null);
+      const billingStateCode = billing?.stateCode || (body.gstin && /^\d{2}/.test(body.gstin) ? body.gstin.slice(0, 2) : '29');
+      const STATE_CODE_NAMES: Record<string, string> = {
+        '27': 'Maharashtra', '29': 'Karnataka', '32': 'Kerala', '33': 'Tamil Nadu', '36': 'Telangana',
+        '07': 'Delhi', '24': 'Gujarat', '09': 'Uttar Pradesh', '19': 'West Bengal', '06': 'Haryana',
+        '08': 'Rajasthan', '23': 'Madhya Pradesh', '03': 'Punjab', '37': 'Andhra Pradesh', '21': 'Odisha',
+      };
+      const city = billing?.city || body.city || '';
+      const state = billing?.state || body.state || STATE_CODE_NAMES[billingStateCode] || 'Karnataka';
+      const address = billing?.line1 ? `${billing.line1}${city ? ', ' + city : ''}` : (body.address || '');
+
       const newCust = {
         id,
         code,
@@ -1456,11 +1480,12 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         gstin: (body.gstin || '').trim() || null,
         phone: body.contact?.phone || null,
         email: body.contact?.email || null,
-        address: body.billing?.line1 ? `${body.billing.line1}, ${body.billing.city || ''}` : 'Bengaluru, India',
-        city: body.billing?.city || 'Bengaluru',
-        state: 'Karnataka',
+        address,
+        city,
+        state,
+        stateCode: billingStateCode,
         contacts: body.contact ? [{ id: 'cnt-' + Date.now(), ...body.contact, isPrimary: true }] : [],
-        addresses: body.billing ? [body.billing] : [],
+        addresses: billing ? [billing] : [],
         assignedUserId,
         assignedTo,
         teamId,
@@ -1485,6 +1510,8 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             JSON.stringify({
               contacts: newCust.contacts,
               addresses: newCust.addresses,
+              billing: billing || null,
+              stateCode: billingStateCode,
               territoryId: body.territoryId || null,
               customerGroupId: body.customerGroupId || null,
               tags: Array.isArray(body.tags) ? body.tags : [],
@@ -1674,13 +1701,16 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           const priorDebit = (priorInvs || []).reduce((acc: number, r: any) => acc + Number(r.grand_total || 0), 0);
 
           const { results: priorPays } = await db.prepare("SELECT amount FROM payments WHERE customer_id = ? AND date < ? AND status = 'active' AND deleted_at IS NULL").bind(id, from).all();
-          const priorCredit = (priorPays || []).reduce((acc: number, r: any) => acc + Number(r.amount || 0), 0);
+          const { results: priorCns } = await db.prepare("SELECT amount FROM credit_notes WHERE customer_id = ? AND date < ? AND status = 'active' AND deleted_at IS NULL").bind(id, from).all();
+          const priorCredit = (priorPays || []).reduce((acc: number, r: any) => acc + Number(r.amount || 0), 0) +
+            (priorCns || []).reduce((acc: number, r: any) => acc + Number(r.amount || 0), 0);
 
           opening = Math.max(0, priorDebit - priorCredit);
 
           // Period transactions
           const { results: periodInvs } = await db.prepare('SELECT id, number, date, grand_total FROM invoices WHERE customer_id = ? AND date >= ? AND date <= ? AND deleted_at IS NULL ORDER BY date ASC, created_at ASC').bind(id, from, to).all();
           const { results: periodPays } = await db.prepare("SELECT id, receipt_no, date, amount FROM payments WHERE customer_id = ? AND date >= ? AND date <= ? AND status = 'active' AND deleted_at IS NULL ORDER BY date ASC, created_at ASC").bind(id, from, to).all();
+          const { results: periodCns } = await db.prepare("SELECT id, number, date, amount FROM credit_notes WHERE customer_id = ? AND date >= ? AND date <= ? AND status = 'active' AND deleted_at IS NULL ORDER BY date ASC, created_at ASC").bind(id, from, to).all();
 
           // Merge & sort chronologically
           const txs: any[] = [];
@@ -1700,6 +1730,15 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               docNumber: pay.receipt_no,
               debit: 0,
               credit: Number(pay.amount || 0),
+            });
+          });
+          (periodCns || []).forEach((cn: any) => {
+            txs.push({
+              date: cn.date,
+              kind: 'credit_note',
+              docNumber: cn.number,
+              debit: 0,
+              credit: Number(cn.amount || 0),
             });
           });
 
@@ -1771,7 +1810,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               ...(r.data_json ? JSON.parse(r.data_json) : {}),
             }));
           }
-          const payRows = await db.prepare('SELECT data_json, amount, status FROM payments WHERE customer_id = ? AND deleted_at IS NULL').bind(id).all();
+          const payRows = await db.prepare("SELECT data_json, amount, status FROM payments WHERE customer_id = ? AND status = 'active' AND deleted_at IS NULL").bind(id).all();
           if (payRows?.results?.length) {
             custPayments = payRows.results.map((r: any) => ({
               amount: r.amount,
@@ -1779,12 +1818,17 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               ...(r.data_json ? JSON.parse(r.data_json) : {}),
             }));
           }
+          const cnRows = await db.prepare("SELECT amount, status FROM credit_notes WHERE customer_id = ? AND status = 'active' AND deleted_at IS NULL").bind(id).all();
+          const totalCredits = (cnRows?.results || []).reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
+          (cust as any)._totalCredits = totalCredits;
         } catch (e) {}
       }
-      const totalSales = custInvoices.reduce((sum, inv) => sum + (inv.totals?.grandTotal || 0), 0);
-      const totalReceived = custPayments.reduce((sum, pay) => sum + (pay.amount || 0), 0);
-      const totalOutstanding = Math.max(0, totalSales - totalReceived);
-      const overdue = custInvoices.filter((i) => i.status === 'overdue' || (i.dueDate && new Date(i.dueDate) < new Date() && (i.balanceDue || 0) > 0)).reduce((sum, i) => sum + (i.balanceDue || 0), 0);
+      const totalCredits = (cust as any)._totalCredits || 0;
+      const totalSales = custInvoices.filter((i) => i.status !== 'cancelled').reduce((sum, inv) => sum + (inv.totals?.grandTotal || 0), 0);
+      const totalReceived = custPayments.filter((p) => p.status === 'active').reduce((sum, pay) => sum + (pay.amount || 0), 0);
+      const totalOutstanding = custInvoices.filter((i) => i.status !== 'cancelled').reduce((sum, inv) => sum + (inv.balanceDue || 0), 0);
+      const overdue = custInvoices.filter((i) => i.status !== 'cancelled' && (i.status === 'overdue' || (i.dueDate && new Date(i.dueDate) < new Date() && (i.balanceDue || 0) > 0))).reduce((sum, i) => sum + (i.balanceDue || 0), 0);
+      const advance = Math.max(0, totalReceived + totalCredits - totalSales);
 
       return jsonRes({
         customer: cust,
@@ -1793,7 +1837,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           overdue,
           received: totalReceived,
           lifetimeValue: totalSales,
-          advance: 0,
+          advance,
           activeOrders: memoryStore.orders.filter((o) => o.customerId === id && o.status !== 'closed').length,
           openQuotes: memoryStore.quotes.filter((q) => q.partyId === id && ['draft', 'sent'].includes(q.status)).length,
         },
@@ -1855,12 +1899,25 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
 
           let existingData: any = {};
           try { existingData = row.data_json ? JSON.parse(row.data_json) : {}; } catch {}
+          let address = row.address;
+          let city = row.city;
+          let state = row.state;
           if (body.contacts) existingData.contacts = body.contacts;
-          if (body.billing) existingData.addresses = [body.billing];
+          if (body.billing) {
+            city = body.billing.city || city;
+            state = body.billing.state || state;
+            address = body.billing.line1 ? `${body.billing.line1}${city ? ', ' + city : ''}` : address;
+            existingData.billing = body.billing;
+            existingData.addresses = [body.billing];
+            if (body.billing.stateCode) existingData.stateCode = body.billing.stateCode;
+          }
+          if (body.city) city = body.city;
+          if (body.state) state = body.state;
+          if (body.address) address = body.address;
 
           await db.prepare(`
-            UPDATE customers SET display_name = ?, legal_name = ?, gstin = ?, phone = ?, email = ?, assigned_user_id = ?, assigned_to = ?, team_id = ?, data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
-          `).bind(displayName, legalName, gstin, phone, email, assignedUserId, assignedTo, teamId, JSON.stringify(existingData), id).run();
+            UPDATE customers SET display_name = ?, legal_name = ?, gstin = ?, phone = ?, email = ?, address = ?, city = ?, state = ?, assigned_user_id = ?, assigned_to = ?, team_id = ?, data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+          `).bind(displayName, legalName, gstin, phone, email, address, city, state, assignedUserId, assignedTo, teamId, JSON.stringify(existingData), id).run();
         } catch (e) {
           console.error('D1 customer patch error:', e);
         }
@@ -2981,6 +3038,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
                 version: r.version,
               };
             });
+            return jsonRes({ items: invItems, nextCursor: null });
           }
         } catch (e) {}
       }
@@ -3051,17 +3109,17 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         }, 422);
       }
 
-      if (!totals || !totals.grandTotal) {
-        const computed = calculateLinesAndTotals(validLines, '29');
-        totals = computed.totals;
-      }
-
       // Check customer exists and is active (Requirement 1)
       let validInvCust: any = null;
+      let custStateCode = '29';
       if (db) {
         try {
-          const { results } = await db.prepare('SELECT display_name, legal_name FROM customers WHERE id = ? AND deleted_at IS NULL').bind(customerId).all();
+          const { results } = await db.prepare('SELECT display_name, legal_name, gstin, data_json FROM customers WHERE id = ? AND deleted_at IS NULL').bind(customerId).all();
           validInvCust = results?.[0];
+          if (validInvCust) {
+            const cd = validInvCust.data_json ? JSON.parse(validInvCust.data_json) : {};
+            custStateCode = cd.stateCode || cd.billing?.stateCode || (validInvCust.gstin && /^\d{2}/.test(validInvCust.gstin) ? validInvCust.gstin.slice(0, 2) : '29');
+          }
         } catch (e) {}
       }
       if (!validInvCust) validInvCust = memoryStore.customers.find((cust) => cust.id === customerId);
@@ -3071,6 +3129,10 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       if (!customerName || customerName === 'Customer') {
         customerName = validInvCust.display_name || validInvCust.legal_name || validInvCust.displayName || validInvCust.legalName || 'Customer';
       }
+
+      // Compute GST and totals based on customer's state (Place of Supply)
+      const computed = calculateLinesAndTotals(validLines, custStateCode);
+      totals = computed.totals;
 
       const nextInvNum = await getNextDocNumber(db, 'invoices', 'number', 'INV/26-27/');
       const newInvId = 'inv-' + Date.now();
@@ -3229,6 +3291,19 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           if (results?.[0]) {
             const r: any = results[0];
             const d = r.data_json ? JSON.parse(r.data_json) : {};
+            const { results: cnResults } = await db.prepare('SELECT * FROM credit_notes WHERE invoice_id = ? AND deleted_at IS NULL ORDER BY date DESC, created_at DESC').bind(invId).all();
+            const creditNotes = (cnResults || []).map((cn: any) => ({
+              id: cn.id,
+              number: cn.number,
+              amount: cn.amount,
+              taxable: cn.taxable_amount,
+              cgst: cn.cgst,
+              sgst: cn.sgst,
+              igst: cn.igst,
+              reason: cn.reason,
+              date: cn.date,
+              status: cn.status,
+            }));
             inv = {
               id: r.id,
               number: r.number,
@@ -3248,9 +3323,10 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               totals: d.totals || { grandTotal: r.grand_total },
               lines: d.lines || [],
               pdf: { status: 'ready' },
-              creditNotes: [],
+              creditNotes,
               version: r.version,
             };
+            return jsonRes(inv);
           }
         } catch (e) {}
       }
@@ -3277,56 +3353,581 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     }
   }
 
-  // 9. /payments
-  if (path === '/payments' || path === '/payments/') {
-    if (method === 'GET') {
-      return jsonRes({ items: memoryStore.payments, nextCursor: null });
-    }
-    if (method === 'POST') {
-      const body = (await request.json().catch(() => ({}))) as any;
-      const amount = Number(body.amount) || 2950000;
-      let nextPayNum = 'RCT/26-27/0002';
-      if (db) {
-        try {
-          const pRow: any = await db.prepare("SELECT receipt_no FROM payments WHERE receipt_no LIKE 'RCT/26-27/%' AND deleted_at IS NULL ORDER BY receipt_no DESC LIMIT 1").first();
-          if (pRow?.receipt_no) {
-            const m = pRow.receipt_no.match(/(\d+)$/);
-            const seq = m ? parseInt(m[1], 10) + 1 : 2;
-            nextPayNum = `RCT/26-27/${String(seq).padStart(4, '0')}`;
-          }
-        } catch (e) {}
+  // Credit Notes: POST /invoices/:id/credit-notes
+  const cnMatch = path.match(/^\/invoices\/([^/?]+)\/credit-notes\/?$/);
+  if (cnMatch && method === 'POST') {
+    const invId = cnMatch[1];
+    const body = (await request.json().catch(() => ({}))) as any;
+    if (!db) return jsonRes({ error: 'Database required' }, 500);
+
+    const inv: any = await db.prepare('SELECT * FROM invoices WHERE id = ? AND deleted_at IS NULL').bind(invId).first();
+    if (!inv) return jsonRes({ title: 'Invoice not found', status: 404, code: 'NOT_FOUND' }, 404);
+
+    const mode = body.mode || 'full';
+    const reason = (body.reason || '').trim() || 'Credit Note issued';
+    const balanceDue = Number(inv.balance_due ?? 0);
+    const grandTotal = Number(inv.grand_total ?? 0);
+    const paidAmount = Number(inv.paid_amount ?? 0);
+    const creditedAmount = Number(inv.credited_amount ?? 0);
+
+    let creditAmount = 0;
+    if (mode === 'full') {
+      creditAmount = balanceDue > 0 ? balanceDue : grandTotal;
+    } else {
+      creditAmount = Number(body.amount) || 0;
+      if (creditAmount <= 0) {
+        return jsonRes({ title: 'Credit amount must be greater than zero', status: 422 }, 422);
       }
-      const newPay = {
-        id: 'pay-' + Date.now(),
-        receiptNo: nextPayNum,
-        customerId: body.customerId || 'cust-1',
-        customerName: body.customerName || 'Customer',
-        date: body.date || new Date().toISOString().slice(0, 10),
-        amount,
-        tdsAmount: Number(body.tdsAmount) || 0,
-        mode: body.mode || 'neft',
-        reference: body.reference || 'REF-' + Date.now(),
-        status: 'active',
-        allocations: body.allocations || (body.invoiceId ? [{ invoiceId: body.invoiceId, number: 'INV/26-27/0001', amount }] : []),
-        advance: 0,
-      };
-      memoryStore.payments.unshift(newPay);
-      return jsonRes({ id: newPay.id, ...newPay }, 201);
+      if (creditAmount > balanceDue && balanceDue > 0) {
+        return jsonRes({ title: `Credit amount exceeds balance due (${balanceDue / 100})`, status: 422 }, 422);
+      }
+    }
+
+    const cnNumber = await getNextDocNumber(db, 'credit_notes', 'number', 'CN/26-27/');
+    const cnId = 'cn-' + Date.now();
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    // Calculate GST proportion
+    let taxable = Math.round(creditAmount / 1.18);
+    let gst = creditAmount - taxable;
+    let cgst = 0, sgst = 0, igst = 0;
+    const custRow: any = await db.prepare('SELECT gstin, data_json FROM customers WHERE id = ?').bind(inv.customer_id).first();
+    let isInterstate = false;
+    if (custRow) {
+      const cd = custRow.data_json ? JSON.parse(custRow.data_json) : {};
+      const sc = cd.stateCode || (custRow.gstin && /^\d{2}/.test(custRow.gstin) ? custRow.gstin.slice(0, 2) : '29');
+      if (sc !== '29') isInterstate = true;
+    }
+    if (isInterstate) {
+      igst = gst;
+    } else {
+      cgst = Math.round(gst / 2);
+      sgst = gst - cgst;
+    }
+
+    const newCredited = creditedAmount + creditAmount;
+    const newBalance = Math.max(0, grandTotal - paidAmount - newCredited);
+    const newStatus = (mode === 'full' || newBalance === 0) ? 'cancelled' : (newBalance < grandTotal ? 'partly_paid' : inv.status);
+
+    await db.batch([
+      db.prepare(`
+        INSERT INTO credit_notes (id, number, invoice_id, invoice_number, customer_id, customer_name, date, mode, amount, taxable_amount, cgst, sgst, igst, reason, status, data_json, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
+      `).bind(cnId, cnNumber, inv.id, inv.number, inv.customer_id, inv.customer_name, dateStr, mode, creditAmount, taxable, cgst, sgst, igst, reason, JSON.stringify({ mode }), new Date().toISOString(), new Date().toISOString()),
+
+      db.prepare(`
+        UPDATE invoices SET credited_amount = ?, balance_due = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+      `).bind(newCredited, newBalance, newStatus, inv.id),
+
+      db.prepare(`
+        INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
+        VALUES (?, 'customer', ?, 'credit_note', ?, ?, ?, CURRENT_TIMESTAMP)
+      `).bind('act-' + Date.now(), inv.customer_id, `Credit Note ${cnNumber} issued (₹${(creditAmount / 100).toFixed(2)})`, reason || 'Credit Note', authUser?.fullName || 'Owner Admin'),
+
+      db.prepare(`
+        INSERT INTO audit_log (id, at, user_name, action, record_type, record_id, changes_json)
+        VALUES (?, ?, ?, 'credit_note.create', 'credit_note', ?, ?)
+      `).bind('aud-' + Date.now(), new Date().toISOString(), authUser?.fullName || 'Owner Admin', cnId, JSON.stringify({ number: cnNumber, invoiceId: inv.id, amount: creditAmount, mode, reason })),
+    ]);
+
+    return jsonRes({ id: cnId, number: cnNumber, amount: creditAmount, status: 'active', invoiceStatus: newStatus }, 201);
+  }
+
+  // GET /credit-notes
+  if (path === '/credit-notes' || path === '/credit-notes/') {
+    if (db) {
+      try {
+        const { results } = await db.prepare('SELECT * FROM credit_notes WHERE deleted_at IS NULL ORDER BY date DESC, created_at DESC').all();
+        const items = (results || []).map((r: any) => ({
+          id: r.id,
+          number: r.number,
+          invoiceId: r.invoice_id,
+          invoiceNumber: r.invoice_number,
+          customerId: r.customer_id,
+          customerName: r.customer_name,
+          date: r.date,
+          mode: r.mode,
+          amount: r.amount,
+          taxableAmount: r.taxable_amount,
+          cgst: r.cgst,
+          sgst: r.sgst,
+          igst: r.igst,
+          reason: r.reason,
+          status: r.status,
+          createdAt: r.created_at,
+        }));
+        return jsonRes({ items, nextCursor: null });
+      } catch (e) {
+        console.error('D1 credit_notes error:', e);
+      }
+    }
+    return jsonRes({ items: [], nextCursor: null });
+  }
+
+  // /payments/utr-check
+  if (path.startsWith('/payments/utr-check')) {
+    const ref = url.searchParams.get('ref') || '';
+    if (!ref || !db) return jsonRes({ usedBy: null });
+    try {
+      const row: any = await db.prepare("SELECT receipt_no, customer_name FROM payments WHERE reference = ? AND status = 'active' AND deleted_at IS NULL LIMIT 1").bind(ref.trim()).first();
+      return jsonRes({ usedBy: row?.receipt_no ? `${row.receipt_no} (${row.customer_name})` : null });
+    } catch (e) {
+      return jsonRes({ usedBy: null });
     }
   }
 
-  // /payments/preview (Requirement 4)
+  // /payments/:id/reverse
+  const payRevMatch = path.match(/^\/payments\/([^/?]+)\/reverse\/?$/);
+  if (payRevMatch && method === 'POST') {
+    const pid = payRevMatch[1];
+    const body = (await request.json().catch(() => ({}))) as any;
+    if (!db) return jsonRes({ error: 'Database required' }, 500);
+
+    const pay: any = await db.prepare('SELECT * FROM payments WHERE id = ? AND deleted_at IS NULL').bind(pid).first();
+    if (!pay) return jsonRes({ title: 'Payment not found', status: 404, code: 'NOT_FOUND' }, 404);
+    if (pay.status === 'reversed') return jsonRes({ title: 'Payment is already reversed', status: 400 }, 400);
+
+    const reason = (body.reason || '').trim() || 'Payment reversed';
+    const timestamp = new Date().toISOString();
+    const batchQueries: any[] = [];
+
+    const { results: alcRows } = await db.prepare('SELECT * FROM allocations WHERE payment_id = ?').bind(pid).all();
+
+    for (const alc of (alcRows || []) as any[]) {
+      const inv: any = await db.prepare('SELECT grand_total, paid_amount, credited_amount FROM invoices WHERE id = ?').bind(alc.invoice_id).first();
+      if (inv) {
+        const curPaid = Number(inv.paid_amount || 0);
+        const curCredited = Number(inv.credited_amount || 0);
+        const grandTot = Number(inv.grand_total || 0);
+        const newPaid = Math.max(0, curPaid - Number(alc.amount || 0));
+        const newBalance = Math.max(0, grandTot - newPaid - curCredited);
+        const newStatus = newBalance <= 0 ? 'paid' : (newPaid > 0 ? 'partly_paid' : 'issued');
+
+        batchQueries.push(
+          db.prepare('UPDATE invoices SET paid_amount = ?, balance_due = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+            .bind(newPaid, newBalance, newStatus, alc.invoice_id)
+        );
+
+        batchQueries.push(
+          db.prepare(`
+            INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
+            VALUES (?, 'invoice', ?, 'payment', ?, ?, ?, CURRENT_TIMESTAMP)
+          `).bind('act-inv-rev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6), alc.invoice_id, `Payment reversed: ${pay.receipt_no} (-₹${(alc.amount / 100).toFixed(2)})`, reason || 'Payment reversed', authUser?.fullName || 'Owner Admin')
+        );
+      }
+    }
+
+    batchQueries.push(db.prepare('DELETE FROM allocations WHERE payment_id = ?').bind(pid));
+
+    let payData: any = {};
+    try { payData = pay.data_json ? JSON.parse(pay.data_json) : {}; } catch {}
+    payData.reversal = {
+      reason,
+      byName: authUser?.fullName || 'Owner Admin',
+      at: timestamp,
+    };
+
+    batchQueries.push(
+      db.prepare("UPDATE payments SET status = 'reversed', advance = 0, data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .bind(JSON.stringify(payData), pid)
+    );
+
+    batchQueries.push(
+      db.prepare(`
+        INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
+        VALUES (?, 'customer', ?, 'payment', ?, ?, ?, CURRENT_TIMESTAMP)
+      `).bind('act-cust-rev-' + Date.now(), pay.customer_id, `Payment reversed: ${pay.receipt_no} (Reason: ${reason})`, reason, authUser?.fullName || 'Owner Admin')
+    );
+
+    batchQueries.push(
+      db.prepare(`
+        INSERT INTO audit_log (id, at, user_name, action, record_type, record_id, changes_json)
+        VALUES (?, ?, ?, 'payment.reverse', 'payment', ?, ?)
+      `).bind('aud-' + Date.now(), timestamp, authUser?.fullName || 'Owner Admin', pid, JSON.stringify({ receiptNo: pay.receipt_no, reason }))
+    );
+
+    await db.batch(batchQueries);
+    return jsonRes({ success: true, id: pid, status: 'reversed' });
+  }
+
+  // /payments/preview
   if (path === '/payments/preview' || path.startsWith('/payments/preview')) {
+    let body: any = {};
+    if (method === 'POST') {
+      body = (await request.json().catch(() => ({}))) as any;
+    } else {
+      body = {
+        customerId: url.searchParams.get('customerId'),
+        amount: Number(url.searchParams.get('amount') || 0),
+        tdsAmount: Number(url.searchParams.get('tdsAmount') || 0),
+      };
+    }
+    const customerId = body.customerId;
+    const grossPaise = Number(body.amount) || 0;
+    const tdsPaise = Number(body.tdsAmount) || 0;
+    const netPaise = Math.max(0, grossPaise - tdsPaise);
+
+    let open: any[] = [];
+    if (db && customerId) {
+      try {
+        const { results } = await db.prepare(`
+          SELECT id, number, due_date, balance_due, grand_total, paid_amount
+          FROM invoices
+          WHERE customer_id = ? AND balance_due > 0 AND status != 'cancelled' AND deleted_at IS NULL
+          ORDER BY date ASC, created_at ASC
+        `).bind(customerId).all();
+        open = (results || []).map((r: any) => ({
+          id: r.id,
+          number: r.number,
+          dueDate: r.due_date,
+          balance: Number(r.balance_due || 0),
+        }));
+      } catch (e) {
+        console.error('D1 preview open invoices error:', e);
+      }
+    }
+
+    const preferInvoiceId = body.allocation?.preferInvoiceId;
+    if (preferInvoiceId) {
+      const idx = open.findIndex((x) => x.id === preferInvoiceId);
+      if (idx > 0) {
+        const [preferred] = open.splice(idx, 1);
+        open.unshift(preferred);
+      }
+    }
+
+    let remaining = netPaise;
+    const allocations: { invoiceId: string; amount: number }[] = [];
+    for (const inv of open) {
+      if (remaining <= 0) break;
+      const alloc = Math.min(remaining, inv.balance);
+      allocations.push({ invoiceId: inv.id, amount: alloc });
+      remaining -= alloc;
+    }
+    const advance = Math.max(0, remaining);
+
     return jsonRes({
-      amount: 2950000,
-      allocated: 2950000,
-      unallocated: 0,
-      allocations: [{ invoiceId: 'inv-1', number: 'INV/26-27/0001', amount: 2950000 }],
+      open,
+      plan: {
+        allocations,
+        advance,
+      },
+      amount: netPaise,
+      allocated: netPaise - advance,
+      unallocated: advance,
     });
+  }
+
+  // 9. /payments
+  if (path === '/payments' || path === '/payments/') {
+    if (method === 'GET') {
+      if (db) {
+        try {
+          const { results: pRows } = await db.prepare(`
+            SELECT p.*, c.display_name, c.legal_name
+            FROM payments p
+            LEFT JOIN customers c ON p.customer_id = c.id
+            WHERE p.deleted_at IS NULL
+            ORDER BY p.date DESC, p.created_at DESC
+          `).all();
+
+          const items = await Promise.all(
+            (pRows || []).map(async (r: any) => {
+              const d = r.data_json ? JSON.parse(r.data_json) : {};
+              const { results: alcRows } = await db.prepare(`
+                SELECT a.invoice_id, a.amount, i.number
+                FROM allocations a
+                LEFT JOIN invoices i ON a.invoice_id = i.id
+                WHERE a.payment_id = ?
+              `).bind(r.id).all();
+
+              return {
+                id: r.id,
+                receiptNo: r.receipt_no,
+                customerId: r.customer_id,
+                customerName: r.display_name || r.legal_name || r.customer_name || 'Customer',
+                date: r.date,
+                amount: r.amount,
+                tdsAmount: r.tds_amount,
+                mode: r.mode,
+                reference: r.reference,
+                status: r.status,
+                advance: r.advance,
+                allocations: (alcRows || []).map((a: any) => ({
+                  invoiceId: a.invoice_id,
+                  number: a.number || a.invoice_id,
+                  amount: a.amount,
+                })),
+                reversal: d.reversal || null,
+                version: 1,
+              };
+            })
+          );
+          return jsonRes({ items, nextCursor: null });
+        } catch (e) {
+          console.error('D1 GET /payments error:', e);
+        }
+      }
+      return jsonRes({ items: memoryStore.payments, nextCursor: null });
+    }
+
+    if (method === 'POST') {
+      const body = (await request.json().catch(() => ({}))) as any;
+      if (!db) return jsonRes({ error: 'Database required' }, 500);
+
+      const customerId = body.customerId;
+      if (!customerId) {
+        return jsonRes({ type: 'https://salesphere.live/errors/validation', title: 'Customer is required', status: 422 }, 422);
+      }
+
+      const grossAmount = Number(body.amount);
+      if (!grossAmount || grossAmount <= 0) {
+        return jsonRes({ type: 'https://salesphere.live/errors/validation', title: 'Payment amount must be greater than zero', status: 422, message: 'Amount must be greater than zero' }, 422);
+      }
+
+      const tdsAmount = Number(body.tdsAmount) || 0;
+      const netAmount = Math.max(0, grossAmount - tdsAmount);
+      const mode = body.mode || 'neft';
+      const reference = (body.reference || '').trim() || null;
+
+      if (reference && !body.utrOverrideReason) {
+        const dup: any = await db.prepare("SELECT receipt_no FROM payments WHERE reference = ? AND customer_id = ? AND mode = ? AND status = 'active' AND deleted_at IS NULL LIMIT 1").bind(reference, customerId, mode).first();
+        if (dup?.receipt_no) {
+          return jsonRes({
+            type: 'https://salesphere.live/errors/duplicate',
+            code: 'UTR_DUPLICATE',
+            title: `Duplicate reference ${reference} already used by receipt ${dup.receipt_no}`,
+            status: 422,
+            body: { usedBy: dup.receipt_no },
+          }, 422);
+        }
+      }
+
+      const custRow: any = await db.prepare('SELECT display_name, legal_name FROM customers WHERE id = ?').bind(customerId).first();
+      const customerName = custRow?.display_name || custRow?.legal_name || body.customerName || 'Customer';
+
+      const nextPayNum = await getNextDocNumber(db, 'payments', 'receipt_no', 'RCT/26-27/');
+      const payId = 'pay-' + Date.now();
+      const dateStr = body.date || new Date().toISOString().slice(0, 10);
+
+      let plannedAllocations: { invoiceId: string; amount: number }[] = [];
+      let advance = 0;
+
+      if (body.allocation?.mode === 'manual' && Array.isArray(body.allocation?.items)) {
+        let totalManual = 0;
+        for (const item of body.allocation.items) {
+          const itemAmt = Number(item.amount) || 0;
+          if (itemAmt > 0) {
+            const invRow: any = await db.prepare('SELECT balance_due, number FROM invoices WHERE id = ?').bind(item.invoiceId).first();
+            if (itemAmt > (invRow?.balance_due ?? 0)) {
+              return jsonRes({
+                type: 'https://salesphere.live/errors/validation',
+                title: `Allocation ₹${(itemAmt / 100).toFixed(2)} exceeds invoice ${invRow?.number ?? item.invoiceId} balance due ₹${((invRow?.balance_due ?? 0) / 100).toFixed(2)}`,
+                status: 422,
+              }, 422);
+            }
+            plannedAllocations.push({ invoiceId: item.invoiceId, amount: itemAmt });
+            totalManual += itemAmt;
+          }
+        }
+        if (totalManual > netAmount) {
+          return jsonRes({ type: 'https://salesphere.live/errors/validation', title: 'Total allocated exceeds payment amount', status: 422 }, 422);
+        }
+        advance = Math.max(0, netAmount - totalManual);
+      } else {
+        const { results: openInvs } = await db.prepare(`
+          SELECT id, number, balance_due, grand_total, paid_amount
+          FROM invoices
+          WHERE customer_id = ? AND balance_due > 0 AND status != 'cancelled' AND deleted_at IS NULL
+          ORDER BY date ASC, created_at ASC
+        `).bind(customerId).all();
+
+        const openList = (openInvs || []) as any[];
+        if (body.allocation?.preferInvoiceId) {
+          const pIdx = openList.findIndex((x) => x.id === body.allocation.preferInvoiceId);
+          if (pIdx > 0) {
+            const [pref] = openList.splice(pIdx, 1);
+            openList.unshift(pref);
+          }
+        }
+
+        let rem = netAmount;
+        for (const inv of openList) {
+          if (rem <= 0) break;
+          const bal = Number(inv.balance_due || 0);
+          const alloc = Math.min(rem, bal);
+          plannedAllocations.push({ invoiceId: inv.id, amount: alloc });
+          rem -= alloc;
+        }
+        advance = Math.max(0, rem);
+      }
+
+      const batchQueries: any[] = [];
+      const timestamp = new Date().toISOString();
+
+      batchQueries.push(
+        db.prepare(`
+          INSERT INTO payments (id, receipt_no, customer_id, customer_name, date, amount, tds_amount, mode, reference, status, advance, data_json, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+        `).bind(
+          payId,
+          nextPayNum,
+          customerId,
+          customerName,
+          dateStr,
+          grossAmount,
+          tdsAmount,
+          mode,
+          reference,
+          advance,
+          JSON.stringify({
+            bankAccountId: body.bankAccountId || null,
+            tdsSection: body.tdsSection || null,
+            note: body.note || null,
+            utrOverrideReason: body.utrOverrideReason || null,
+            netAmount,
+          }),
+          timestamp,
+          timestamp
+        )
+      );
+
+      const clientAllocations: any[] = [];
+      for (const alloc of plannedAllocations) {
+        const allocId = 'alc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+        batchQueries.push(
+          db.prepare(`
+            INSERT INTO allocations (id, payment_id, invoice_id, amount, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `).bind(allocId, payId, alloc.invoiceId, alloc.amount, timestamp, timestamp)
+        );
+
+        const invRow: any = await db.prepare('SELECT grand_total, paid_amount, credited_amount, number FROM invoices WHERE id = ?').bind(alloc.invoiceId).first();
+        const curPaid = Number(invRow?.paid_amount ?? 0);
+        const curCredited = Number(invRow?.credited_amount ?? 0);
+        const grandTot = Number(invRow?.grand_total ?? 0);
+        const newPaid = curPaid + alloc.amount;
+        const newBalance = Math.max(0, grandTot - newPaid - curCredited);
+        const newStatus = newBalance <= 0 ? 'paid' : 'partly_paid';
+
+        batchQueries.push(
+          db.prepare(`
+            UPDATE invoices
+            SET paid_amount = ?, balance_due = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `).bind(newPaid, newBalance, newStatus, alloc.invoiceId)
+        );
+
+        batchQueries.push(
+          db.prepare(`
+            INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
+            VALUES (?, 'invoice', ?, 'payment', ?, ?, ?, CURRENT_TIMESTAMP)
+          `).bind(
+            'act-inv-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            alloc.invoiceId,
+            `Payment applied: ${nextPayNum} (₹${(alloc.amount / 100).toFixed(2)})`,
+            `Applied to invoice ${invRow?.number || alloc.invoiceId}`,
+            authUser?.fullName || 'Owner Admin'
+          )
+        );
+
+        clientAllocations.push({
+          invoiceId: alloc.invoiceId,
+          number: invRow?.number || alloc.invoiceId,
+          amount: alloc.amount,
+        });
+      }
+
+      batchQueries.push(
+        db.prepare(`
+          INSERT INTO timeline (id, record_type, record_id, type, summary, details, user_name, created_at)
+          VALUES (?, 'customer', ?, 'payment', ?, ?, ?, CURRENT_TIMESTAMP)
+        `).bind(
+          'act-cust-' + Date.now(),
+          customerId,
+          `Payment received: ${nextPayNum} (₹${(grossAmount / 100).toFixed(2)})`,
+          `Mode: ${mode.toUpperCase()}${reference ? ' · Ref: ' + reference : ''}${advance > 0 ? ' · Advance: ₹' + (advance / 100).toFixed(2) : ''}`,
+          authUser?.fullName || 'Owner Admin'
+        )
+      );
+
+      batchQueries.push(
+        db.prepare(`
+          INSERT INTO audit_log (id, at, user_name, action, record_type, record_id, changes_json)
+          VALUES (?, ?, ?, 'payment.create', 'payment', ?, ?)
+        `).bind(
+          'aud-' + Date.now(),
+          timestamp,
+          authUser?.fullName || 'Owner Admin',
+          payId,
+          JSON.stringify({ receiptNo: nextPayNum, customerId, amount: grossAmount, mode, reference, advance, allocations: clientAllocations })
+        )
+      );
+
+      await db.batch(batchQueries);
+
+      return jsonRes({
+        id: payId,
+        receiptNo: nextPayNum,
+        customerId,
+        customerName,
+        date: dateStr,
+        amount: grossAmount,
+        tdsAmount,
+        mode,
+        reference,
+        status: 'active',
+        advance,
+        allocations: clientAllocations,
+      }, 201);
+    }
   }
 
   if (path.startsWith('/payments/')) {
     const pid = path.replace(/^\/payments\//, '').split('/')[0].split('?')[0];
+    if (db) {
+      try {
+        const r: any = await db.prepare(`
+          SELECT p.*, c.display_name, c.legal_name
+          FROM payments p
+          LEFT JOIN customers c ON p.customer_id = c.id
+          WHERE p.id = ? AND p.deleted_at IS NULL
+        `).bind(pid).first();
+
+        if (r) {
+          const d = r.data_json ? JSON.parse(r.data_json) : {};
+          const { results: alcRows } = await db.prepare(`
+            SELECT a.invoice_id, a.amount, i.number
+            FROM allocations a
+            LEFT JOIN invoices i ON a.invoice_id = i.id
+            WHERE a.payment_id = ?
+          `).bind(r.id).all();
+
+          return jsonRes({
+            id: r.id,
+            receiptNo: r.receipt_no,
+            customerId: r.customer_id,
+            customerName: r.display_name || r.legal_name || r.customer_name || 'Customer',
+            date: r.date,
+            amount: r.amount,
+            tdsAmount: r.tds_amount,
+            mode: r.mode,
+            reference: r.reference,
+            status: r.status,
+            advance: r.advance,
+            allocations: (alcRows || []).map((a: any) => ({
+              invoiceId: a.invoice_id,
+              number: a.number || a.invoice_id,
+              amount: a.amount,
+            })),
+            reversal: d.reversal || null,
+            version: 1,
+          });
+        }
+      } catch (e) {
+        console.error('D1 GET /payments/:id error:', e);
+      }
+    }
     const pay = memoryStore.payments.find((p) => p.id === pid);
     if (!pay) return jsonRes({ title: 'Payment not found', status: 404, code: 'NOT_FOUND' }, 404);
     return jsonRes(pay);

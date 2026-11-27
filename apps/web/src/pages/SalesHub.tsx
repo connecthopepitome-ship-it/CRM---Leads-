@@ -311,7 +311,7 @@ export default function SalesHub() {
                   className="rounded-2xl border border-[#DCE7D9] bg-white p-4 shadow-2xs hover:border-[#CFE5CB] active:bg-[#F5F9F2] transition-colors cursor-pointer space-y-3"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm text-[#3D7952]">
+                    <span className={`font-bold text-sm ${row.status === 'reversed' ? 'line-through text-slate-400' : 'text-[#3D7952]'}`}>
                       {num}
                     </span>
                     <Badge status={String(row.status)} />
@@ -388,7 +388,7 @@ export default function SalesHub() {
                         className="hover:bg-[#F5F9F2]/70 cursor-pointer transition-colors"
                       >
                         {/* Document Number Link in primary green */}
-                        <td className="px-5 py-3.5 font-semibold text-[#3D7952] hover:underline">
+                        <td className={`px-5 py-3.5 font-semibold ${row.status === 'reversed' ? 'line-through text-slate-400' : 'text-[#3D7952] hover:underline'}`}>
                           {num}
                         </td>
 

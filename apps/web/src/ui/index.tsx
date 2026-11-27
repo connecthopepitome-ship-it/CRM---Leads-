@@ -351,7 +351,7 @@ export function KeyValue({ items, columns = 1 }: { items: ([string, ReactNode] |
         return (
           <div key={k ?? idx} className="flex items-start justify-between gap-3 border-b border-[#DCE7D9]/60 py-2 min-w-0">
             <dt className="text-[#6B7A6B] font-medium shrink-0 text-xs sm:text-sm pt-0.5">{k}</dt>
-            <dd className="text-right font-semibold text-[#202820] text-xs sm:text-sm min-w-0 break-normal [overflow-wrap:anywhere] leading-snug">{v ?? '—'}</dd>
+            <dd className="text-right font-semibold text-[#202820] text-xs sm:text-sm min-w-0 break-words leading-snug">{v ?? '—'}</dd>
           </div>
         );
       })}

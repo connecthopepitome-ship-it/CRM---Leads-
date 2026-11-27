@@ -22,39 +22,6 @@ interface Open {
   balance: number;
 }
 
-const PRESET_PAYMENTS: Record<string, { label: string; customerId: string; amount: string; mode: string; reference: string; tds: string; tdsSection: string; note: string }> = {
-  neft: {
-    label: 'NEFT Settlement (₹49,500)',
-    customerId: 'cust-1',
-    amount: '49500',
-    mode: 'neft',
-    reference: 'HDFC202611149872',
-    tds: '990',
-    tdsSection: '194J',
-    note: 'Full settlement against milestone invoices for November.',
-  },
-  upi: {
-    label: 'UPI Advance (₹15,000)',
-    customerId: 'cust-2',
-    amount: '15000',
-    mode: 'upi',
-    reference: 'UPI/2026/091823984',
-    tds: '',
-    tdsSection: '',
-    note: 'Initial subscription booking advance for CRM rollout.',
-  },
-  rtgs: {
-    label: 'RTGS High-Value (₹2,50,000)',
-    customerId: 'cust-4',
-    amount: '250000',
-    mode: 'rtgs',
-    reference: 'ICICR520261114002',
-    tds: '5000',
-    tdsSection: '194C',
-    note: 'Annual enterprise multi-site implementation fee.',
-  },
-};
-
 export default function PaymentForm() {
   const [params] = useSearchParams();
   const nav = useNavigate();
@@ -62,7 +29,7 @@ export default function PaymentForm() {
   const { perm } = useAuth();
   const banks = useOptions('bankAccounts');
 
-  const [customerId, setCustomerId] = useState(params.get('customerId') ?? 'cust-1');
+  const [customerId, setCustomerId] = useState(params.get('customerId') ?? '');
   const [search, setSearch] = useState('');
   const customers = useQuery({
     queryKey: ['cust-pick', search],
@@ -71,13 +38,13 @@ export default function PaymentForm() {
 
   const [f, setF] = useState({
     date: today(),
-    amount: '49500',
+    amount: '',
     mode: 'neft',
-    reference: 'HDFC202611149872',
+    reference: '',
     bankAccountId: '',
-    tds: '990',
-    tdsSection: '194J',
-    note: 'Full settlement against milestone invoices for November.',
+    tds: '',
+    tdsSection: '',
+    note: '',
   });
 
   const [manual, setManual] = useState<Record<string, string> | null>(null);
@@ -85,41 +52,18 @@ export default function PaymentForm() {
   const [override, setOverride] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [activePreset, setActivePreset] = useState<string | null>('neft');
   const idemKey = useMemo(() => uid(), []);
 
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => {
-    setActivePreset(null);
     setF((x) => ({ ...x, [k]: e.target.value }));
   };
 
-  const applyPreset = (key: string) => {
-    const p = PRESET_PAYMENTS[key];
-    if (!p) return;
-    setActivePreset(key);
-    setCustomerId(p.customerId);
-    setF({
-      date: today(),
-      amount: p.amount,
-      mode: p.mode,
-      reference: p.reference,
-      bankAccountId: banks.data?.[0]?.id || '',
-      tds: p.tds,
-      tdsSection: p.tdsSection,
-      note: p.note,
-    });
-    setError(null);
-    setUtrUsed(null);
-    toast(`Loaded payment preset: ${p.label}`);
-  };
-
   const resetForm = () => {
-    setActivePreset(null);
     setCustomerId('');
     setF({
       date: today(),
       amount: '',
-      mode: 'upi',
+      mode: 'neft',
       reference: '',
       bankAccountId: '',
       tds: '',
@@ -213,39 +157,13 @@ export default function PaymentForm() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-12">
-      {/* Header and Test Data Toolbar */}
+      {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <PageHeader back="/sales?tab=payments" title="Record Inward Payment" />
-
-        {/* Dummy Data Presets Toolbar */}
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#CFE5CB] bg-[#E3EFDF] p-1.5 shadow-2xs">
-          <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-[#233D2D]">
-            <Sparkles className="h-3.5 w-3.5 text-[#3D7952]" />
-            Test Data:
-          </span>
-          {Object.entries(PRESET_PAYMENTS).map(([k, p]) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => applyPreset(k)}
-              className={`rounded-xl px-3 py-1.5 text-xs font-medium transition-all ${
-                activePreset === k
-                  ? 'bg-[#233D2D] text-white shadow-xs font-bold'
-                  : 'bg-white text-[#202820] hover:bg-[#F5F9F2] shadow-2xs'
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={resetForm}
-            title="Reset form"
-            className="rounded-xl border border-[#DCE7D9] bg-white p-1.5 text-[#778477] hover:text-rose-600 transition-all shadow-2xs"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <Button variant="secondary" size="sm" onClick={resetForm} className="self-start sm:self-auto">
+          <RotateCcw className="h-3.5 w-3.5 mr-1" />
+          Reset form
+        </Button>
       </div>
 
       {error && <Banner tone="danger">{error}</Banner>}
@@ -513,7 +431,7 @@ export default function PaymentForm() {
                     <div className="border-t border-slate-200 pt-2 flex justify-between text-sm font-bold text-slate-900">
                       <span>Net Inward Credit:</span>
                       <span className="text-emerald-700">
-                        {money(toPaise(f.amount || 0))}
+                        {money(Math.max(0, toPaise(f.amount || 0) - toPaise(f.tds || 0)))}
                       </span>
                     </div>
                   </div>

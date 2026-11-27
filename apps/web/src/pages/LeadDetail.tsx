@@ -167,7 +167,7 @@ export default function LeadDetail() {
                     ),
                   ]
                 : null,
-              ['Phone', l.phone ?? (l.phoneRaw ? <span>{l.phoneRaw} <Badge tone="warning">Check number</Badge></span> : null)],
+              ['Phone', l.phone ? <span className="whitespace-nowrap">{l.phone}</span> : (l.phoneRaw ? <span>{l.phoneRaw} <Badge tone="warning">Check number</Badge></span> : null)],
               ['Email', l.email ? <span className="break-all">{l.email}</span> : null],
               ['Location', [l.city, l.pincode].filter(Boolean).join(' - ') || null],
               ['Lead Source', (l as any).sourceLabel || sources.data?.find((s) => s.id === (l as any).sourceId || s.key === (l as any).sourceId)?.label || (l as any).sourceId || null],

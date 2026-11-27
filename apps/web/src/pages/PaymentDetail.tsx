@@ -61,7 +61,7 @@ export default function PaymentDetail() {
   const p = q.data;
   return (
     <>
-      <PageHeader back="/sales?tab=payments" title={`Receipt ${p.receiptNo ?? '—'}`} subtitle={<><Link to={`/customers/${p.customerId}`} className="text-primary hover:underline">{p.customerName ?? 'Customer'}</Link> · <Badge status={p.status ?? 'active'} /></>} actions={<>
+      <PageHeader back="/sales?tab=payments" title={<span className={p.status === 'reversed' ? 'line-through text-slate-400' : ''}>{`Receipt ${p.receiptNo ?? '—'}`}</span>} subtitle={<><Link to={`/customers/${p.customerId}`} className="text-primary hover:underline">{p.customerName ?? 'Customer'}</Link> · <Badge status={p.status ?? 'active'} /></>} actions={<>
         <Button variant="secondary" onClick={() => void share()}>Share receipt</Button>
         {p.status === 'active' && perm('payment:reverse') && <Button variant="danger" onClick={() => setRev(true)}>Reverse payment</Button>}
       </>} />

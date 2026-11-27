@@ -171,6 +171,52 @@ CREATE TABLE IF NOT EXISTS masters (
   version INTEGER NOT NULL DEFAULT 1
 );
 
+CREATE TABLE IF NOT EXISTS allocations (
+  id TEXT PRIMARY KEY,
+  payment_id TEXT NOT NULL,
+  invoice_id TEXT NOT NULL,
+  amount REAL NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_allocations_payment ON allocations(payment_id);
+CREATE INDEX IF NOT EXISTS idx_allocations_invoice ON allocations(invoice_id);
+
+CREATE TABLE IF NOT EXISTS credit_notes (
+  id TEXT PRIMARY KEY,
+  number TEXT NOT NULL UNIQUE,
+  invoice_id TEXT NOT NULL,
+  invoice_number TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  customer_name TEXT NOT NULL,
+  date TEXT NOT NULL,
+  mode TEXT NOT NULL DEFAULT 'partial',
+  amount REAL NOT NULL DEFAULT 0,
+  taxable_amount REAL NOT NULL DEFAULT 0,
+  cgst REAL NOT NULL DEFAULT 0,
+  sgst REAL NOT NULL DEFAULT 0,
+  igst REAL NOT NULL DEFAULT 0,
+  reason TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  data_json TEXT,
+  deleted_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_credit_notes_invoice ON credit_notes(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_credit_notes_customer ON credit_notes(customer_id);
+
+CREATE TABLE IF NOT EXISTS number_series (
+  prefix TEXT PRIMARY KEY,
+  current_seq INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_payments_receipt_no ON payments(receipt_no);
+CREATE INDEX IF NOT EXISTS idx_payments_customer_ref ON payments(customer_id, reference, mode);
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
