@@ -133,6 +133,7 @@ export default function Reports() {
                   <option value="RPT-003">Sales</option>
                   <option value="RPT-004">Collections & ageing</option>
                   <option value="RPT-005">Lead source performance</option>
+                  <option value="RPT-006">GST Outward Supplies & Credit Notes</option>
                 </>
               )}
             </select>

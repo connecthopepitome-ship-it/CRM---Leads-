@@ -33,7 +33,13 @@ export default function PaymentForm() {
   const [search, setSearch] = useState('');
   const customers = useQuery({
     queryKey: ['cust-pick', search],
-    queryFn: () => get<{ items: { id: string; displayName: string }[] }>(`/customers?limit=10${search.length >= 2 ? `&q=${encodeURIComponent(search)}` : ''}`),
+    queryFn: () => get<{ items: { id: string; displayName: string }[] }>(`/customers?limit=50${search.trim().length >= 2 ? `&q=${encodeURIComponent(search.trim())}` : ''}`),
+  });
+
+  const selectedCustQuery = useQuery({
+    queryKey: ['customer-detail-pick', customerId],
+    queryFn: () => get<any>(`/customers/${customerId}`),
+    enabled: !!customerId,
   });
 
   const [f, setF] = useState({
@@ -153,7 +159,19 @@ export default function PaymentForm() {
   };
 
   const plan = preview.data?.plan;
-  const customerList = customers.data?.items ?? [];
+  const customerList = useMemo(() => {
+    const list = [...(customers.data?.items ?? [])];
+    if (customerId && selectedCustQuery.data) {
+      const exists = list.some((c) => c.id === customerId);
+      if (!exists) {
+        list.unshift({
+          id: customerId,
+          displayName: selectedCustQuery.data.displayName || selectedCustQuery.data.display_name || 'Selected Customer',
+        });
+      }
+    }
+    return list;
+  }, [customers.data?.items, customerId, selectedCustQuery.data]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-12">
@@ -189,25 +207,39 @@ export default function PaymentForm() {
             </div>
 
             <div className="grid gap-4 p-5 sm:grid-cols-2">
-              {!params.get('customerId') && (
-                <>
-                  <TextField
-                    label="Search Customer Ledger"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Type name or phone…"
-                  />
-                  <SelectField
-                    label="Paying Customer"
-                    required
-                    value={customerId}
-                    onChange={(e) => setCustomerId(e.target.value)}
-                    placeholder="Choose customer…"
-                    options={customerList.map((c) => ({ value: c.id, label: c.displayName }))}
-                  />
-                </>
-              )}
+              <TextField
+                label="Search Customer Ledger"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Type name, phone or code…"
+              />
+              <SelectField
+                label="Paying Customer"
+                required
+                value={customerId}
+                onChange={(e) => setCustomerId(e.target.value)}
+                placeholder="Choose customer…"
+                options={customerList.map((c) => ({ value: c.id, label: c.displayName }))}
+              />
             </div>
+            {customerId && selectedCustQuery.data && (
+              <div className="px-5 pb-4 pt-0">
+                <div className="flex items-center justify-between rounded-lg bg-blue-50/70 border border-blue-100/90 px-3 py-2 text-xs text-blue-900">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{selectedCustQuery.data.displayName || selectedCustQuery.data.display_name}</span>
+                    {selectedCustQuery.data.code && <span className="text-blue-700 font-mono">({selectedCustQuery.data.code})</span>}
+                    {selectedCustQuery.data.phone && <span className="text-slate-500">· {selectedCustQuery.data.phone}</span>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCustomerId('')}
+                    className="text-[11px] text-blue-700 hover:text-blue-900 font-medium hover:underline cursor-pointer"
+                  >
+                    Change customer
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* SECTION 2: Transaction & Banking (Emerald Accent) */}

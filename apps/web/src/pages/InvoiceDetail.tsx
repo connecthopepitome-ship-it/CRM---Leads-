@@ -51,7 +51,18 @@ interface Invoice {
   credited: number;
   balanceDue: number;
   lines: InvoiceLine[];
-  creditNotes: { id: string; number: string; amount: number; reason: string }[];
+  creditNotes: {
+    id: string;
+    number: string;
+    amount: number;
+    reason: string;
+    date?: string;
+    taxable?: number;
+    taxableAmount?: number;
+    cgst?: number;
+    sgst?: number;
+    igst?: number;
+  }[];
   allocations: { paymentId: string | null; amount: number }[];
   cancelledByNumber?: string;
   convertedToId?: string;
@@ -622,11 +633,44 @@ export default function InvoiceDetail() {
 
           {!!i.creditNotes?.length && (
             <Card title="Credit Notes">
-              <ul className="text-xs space-y-1.5">
-                {i.creditNotes.map((c) => (
-                  <li key={c.id} className="flex justify-between py-1 border-b border-[#DCE7D9]/40 last:border-0">
-                    <span className="font-medium text-[#202820]">{c.number} · {c.reason}</span>
-                    <span className="font-mono font-bold text-[#D66B68]">-{money(c.amount)}</span>
+              <ul className="text-xs space-y-3">
+                {i.creditNotes.map((c: any) => (
+                  <li key={c.id} className="py-2 border-b border-[#DCE7D9]/40 last:border-0">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-[#202820]">{c.number}</span>
+                          {c.date && <span className="text-[#778477] font-mono text-[11px]">({c.date})</span>}
+                        </div>
+                        <p className="text-[#778477] text-[11px] mt-0.5">{c.reason || 'Credit adjustment'}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-mono font-bold text-[#D66B68]">-{money(c.amount)}</span>
+                        <div className="mt-1">
+                          <a
+                            href={`/api/v1/documents/credit-note/${c.id}/pdf`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] text-[#3D7952] hover:underline font-medium"
+                          >
+                            <FileText size={12} />
+                            View PDF
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                    {((c.taxable ?? c.taxableAmount ?? 0) > 0 || (c.cgst ?? 0) > 0 || (c.igst ?? 0) > 0) && (
+                      <div className="mt-1.5 flex flex-wrap gap-2 text-[10px] text-[#778477] bg-[#F5F9F2] px-2 py-1 rounded">
+                        <span>Taxable: {money(c.taxable ?? c.taxableAmount ?? 0)}</span>
+                        {((c.cgst ?? 0) > 0 || (c.sgst ?? 0) > 0) && (
+                          <>
+                            <span>CGST: {money(c.cgst ?? 0)}</span>
+                            <span>SGST: {money(c.sgst ?? 0)}</span>
+                          </>
+                        )}
+                        {(c.igst ?? 0) > 0 && <span>IGST: {money(c.igst)}</span>}
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

@@ -58,3 +58,9 @@ CREATE INDEX IF NOT EXISTS idx_payments_customer_ref ON payments(customer_id, re
 DELETE FROM invoices WHERE number IN ('INV/26-27/0011', 'INV/26-27/0012', 'INV/26-27/0013');
 DELETE FROM customers WHERE id = 'cust-1795698050107';
 DELETE FROM payments WHERE id = 'pay-1795698148143';
+
+-- Data correction for partial credit note bug fix
+UPDATE invoices SET status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE id IN ('inv-1795755484855', 'inv-1795756110436') AND paid_amount + credited_amount >= grand_total;
+UPDATE customers SET state = 'Maharashtra', data_json = '{"contacts":[],"addresses":[],"billing":null,"stateCode":"27","territoryId":null,"customerGroupId":null,"tags":[]}' WHERE id = 'cust-1795756110153';
+
+

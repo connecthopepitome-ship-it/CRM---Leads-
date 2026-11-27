@@ -245,6 +245,90 @@ function getProductLabel(id?: string | null): string {
   return PRODUCT_LABELS[id] || id;
 }
 
+const GST_STATE_CODE_MAP: Record<string, string> = {
+  '01': 'Jammu and Kashmir',
+  '02': 'Himachal Pradesh',
+  '03': 'Punjab',
+  '04': 'Chandigarh',
+  '05': 'Uttarakhand',
+  '06': 'Haryana',
+  '07': 'Delhi',
+  '08': 'Rajasthan',
+  '09': 'Uttar Pradesh',
+  '10': 'Bihar',
+  '11': 'Sikkim',
+  '12': 'Arunachal Pradesh',
+  '13': 'Nagaland',
+  '14': 'Manipur',
+  '15': 'Mizoram',
+  '16': 'Tripura',
+  '17': 'Meghalaya',
+  '18': 'Assam',
+  '19': 'West Bengal',
+  '20': 'Jharkhand',
+  '21': 'Odisha',
+  '22': 'Chhattisgarh',
+  '23': 'Madhya Pradesh',
+  '24': 'Gujarat',
+  '26': 'Dadra and Nagar Haveli and Daman and Diu',
+  '27': 'Maharashtra',
+  '29': 'Karnataka',
+  '30': 'Goa',
+  '31': 'Lakshadweep',
+  '32': 'Kerala',
+  '33': 'Tamil Nadu',
+  '34': 'Puducherry',
+  '35': 'Andaman and Nicobar Islands',
+  '36': 'Telangana',
+  '37': 'Andhra Pradesh',
+  '38': 'Ladakh',
+  '97': 'Other Territory',
+};
+
+const GST_NAME_TO_CODE_MAP: Record<string, string> = {
+  'orissa': '21',
+  'pondicherry': '34',
+  'new delhi': '07',
+  'ncr': '07',
+  'uttaranchal': '05',
+};
+for (const [c, n] of Object.entries(GST_STATE_CODE_MAP)) {
+  GST_NAME_TO_CODE_MAP[n.toLowerCase().trim()] = c;
+}
+
+function resolveStateAndCode(inputState?: string | null, inputCode?: string | null, gstin?: string | null): { code: string; name: string } {
+  // 1. If GSTIN has 2 digits at start
+  const cleanGstin = (gstin || '').trim();
+  if (/^\d{2}/.test(cleanGstin)) {
+    const code = cleanGstin.slice(0, 2);
+    if (GST_STATE_CODE_MAP[code]) {
+      return { code, name: GST_STATE_CODE_MAP[code] };
+    }
+  }
+
+  // 2. If valid 2-digit code provided
+  const cleanCode = (inputCode || '').trim();
+  if (cleanCode && GST_STATE_CODE_MAP[cleanCode]) {
+    return { code: cleanCode, name: GST_STATE_CODE_MAP[cleanCode] };
+  }
+
+  // 3. If state name provided
+  const cleanState = (inputState || '').trim().toLowerCase();
+  if (cleanState) {
+    if (GST_NAME_TO_CODE_MAP[cleanState]) {
+      const code = GST_NAME_TO_CODE_MAP[cleanState];
+      return { code, name: GST_STATE_CODE_MAP[code] };
+    }
+    for (const [name, code] of Object.entries(GST_NAME_TO_CODE_MAP)) {
+      if (cleanState.includes(name) || name.includes(cleanState)) {
+        return { code, name: GST_STATE_CODE_MAP[code] };
+      }
+    }
+  }
+
+  return { code: '29', name: 'Karnataka' };
+}
+
 function calculateLinesAndTotals(
   submittedLines: any[],
   placeOfSupply = '29',
@@ -1462,15 +1546,31 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       const teamId = body.teamId || body.team_id || authUser?.teamId || null;
 
       const billing = body.billing || (Array.isArray(body.addresses) ? body.addresses[0] : null);
-      const billingStateCode = billing?.stateCode || (body.gstin && /^\d{2}/.test(body.gstin) ? body.gstin.slice(0, 2) : '29');
-      const STATE_CODE_NAMES: Record<string, string> = {
-        '27': 'Maharashtra', '29': 'Karnataka', '32': 'Kerala', '33': 'Tamil Nadu', '36': 'Telangana',
-        '07': 'Delhi', '24': 'Gujarat', '09': 'Uttar Pradesh', '19': 'West Bengal', '06': 'Haryana',
-        '08': 'Rajasthan', '23': 'Madhya Pradesh', '03': 'Punjab', '37': 'Andhra Pradesh', '21': 'Odisha',
-      };
+      const resolvedState = resolveStateAndCode(
+        billing?.state || body.state,
+        billing?.stateCode || body.stateCode,
+        body.gstin
+      );
+      const billingStateCode = resolvedState.code;
+      const state = resolvedState.name;
       const city = billing?.city || body.city || '';
-      const state = billing?.state || body.state || STATE_CODE_NAMES[billingStateCode] || 'Karnataka';
       const address = billing?.line1 ? `${billing.line1}${city ? ', ' + city : ''}` : (body.address || '');
+
+      const phone = body.phone || body.contact?.phone || null;
+      const email = body.email || body.contact?.email || null;
+      const contactName = body.contact?.name || body.contactName || displayName;
+      const designation = body.contact?.designation || body.designation || 'Primary Contact';
+
+      const contacts = Array.isArray(body.contacts) && body.contacts.length > 0
+        ? body.contacts
+        : (phone || email || contactName ? [{
+            id: 'cnt-' + Date.now(),
+            name: contactName,
+            email,
+            phone,
+            designation,
+            isPrimary: true,
+          }] : []);
 
       const newCust = {
         id,
@@ -1478,14 +1578,14 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         displayName,
         legalName: (body.legalName || '').trim() || displayName,
         gstin: (body.gstin || '').trim() || null,
-        phone: body.contact?.phone || null,
-        email: body.contact?.email || null,
+        phone,
+        email,
         address,
         city,
         state,
         stateCode: billingStateCode,
-        contacts: body.contact ? [{ id: 'cnt-' + Date.now(), ...body.contact, isPrimary: true }] : [],
-        addresses: billing ? [billing] : [],
+        contacts,
+        addresses: billing ? [billing] : (address ? [{ line1: address, city, state, stateCode: billingStateCode }] : []),
         assignedUserId,
         assignedTo,
         teamId,
@@ -1810,10 +1910,11 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               ...(r.data_json ? JSON.parse(r.data_json) : {}),
             }));
           }
-          const payRows = await db.prepare("SELECT data_json, amount, status FROM payments WHERE customer_id = ? AND status = 'active' AND deleted_at IS NULL").bind(id).all();
+          const payRows = await db.prepare("SELECT data_json, amount, advance, status FROM payments WHERE customer_id = ? AND status = 'active' AND deleted_at IS NULL").bind(id).all();
           if (payRows?.results?.length) {
             custPayments = payRows.results.map((r: any) => ({
               amount: r.amount,
+              advance: r.advance,
               status: r.status,
               ...(r.data_json ? JSON.parse(r.data_json) : {}),
             }));
@@ -1824,11 +1925,20 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         } catch (e) {}
       }
       const totalCredits = (cust as any)._totalCredits || 0;
-      const totalSales = custInvoices.filter((i) => i.status !== 'cancelled').reduce((sum, inv) => sum + (inv.totals?.grandTotal || 0), 0);
+      const totalSales = custInvoices.filter((i) => i.status !== 'cancelled').reduce((sum, inv) => sum + (inv.totals?.grandTotal || inv.grand_total || 0), 0);
       const totalReceived = custPayments.filter((p) => p.status === 'active').reduce((sum, pay) => sum + (pay.amount || 0), 0);
-      const totalOutstanding = custInvoices.filter((i) => i.status !== 'cancelled').reduce((sum, inv) => sum + (inv.balanceDue || 0), 0);
-      const overdue = custInvoices.filter((i) => i.status !== 'cancelled' && (i.status === 'overdue' || (i.dueDate && new Date(i.dueDate) < new Date() && (i.balanceDue || 0) > 0))).reduce((sum, i) => sum + (i.balanceDue || 0), 0);
-      const advance = Math.max(0, totalReceived + totalCredits - totalSales);
+      const totalOutstanding = custInvoices.filter((i) => i.status !== 'cancelled').reduce((sum, inv) => sum + (inv.balanceDue ?? inv.balance_due ?? 0), 0);
+      const overdue = custInvoices.filter((i) => i.status !== 'cancelled' && (i.status === 'overdue' || (i.dueDate && new Date(i.dueDate) < new Date() && (inv.balanceDue ?? inv.balance_due ?? 0) > 0))).reduce((sum, i) => sum + (i.balanceDue ?? i.balance_due ?? 0), 0);
+
+      // Advance = sum of unallocated amounts on ACTIVE payments + customer credits from credit notes on paid invoices
+      const paymentAdvance = (custPayments || []).filter((p: any) => p.status === 'active').reduce((sum: number, p: any) => sum + Number(p.advance || 0), 0);
+      const creditAdvance = custInvoices.reduce((sum: number, inv: any) => {
+        const paid = Number(inv.paid_amount ?? inv.paid ?? 0);
+        const credited = Number(inv.credited_amount ?? inv.credited ?? 0);
+        const gt = Number(inv.totals?.grandTotal ?? inv.grand_total ?? 0);
+        return sum + Math.max(0, paid + credited - gt);
+      }, 0);
+      const advance = paymentAdvance + creditAdvance;
 
       return jsonRes({
         customer: cust,
@@ -1887,8 +1997,8 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           const displayName = body.displayName !== undefined ? body.displayName : row.display_name;
           const legalName = body.legalName !== undefined ? body.legalName : row.legal_name;
           const gstin = body.gstin !== undefined ? body.gstin : row.gstin;
-          const phone = body.phone !== undefined ? body.phone : row.phone;
-          const email = body.email !== undefined ? body.email : row.email;
+          const phone = body.phone !== undefined ? body.phone : (body.contact?.phone !== undefined ? body.contact.phone : row.phone);
+          const email = body.email !== undefined ? body.email : (body.contact?.email !== undefined ? body.contact.email : row.email);
           const assignedUserId = body.assignedUserId !== undefined ? (body.assignedUserId || null) : (body.assigned_user_id !== undefined ? (body.assigned_user_id || null) : row.assigned_user_id);
           const assignedTo = body.assignedTo !== undefined ? (body.assignedTo || null) : (body.assigned_to !== undefined ? (body.assigned_to || null) : row.assigned_to);
           const teamId = body.teamId !== undefined ? (body.teamId || null) : row.team_id;
@@ -1909,11 +2019,22 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             address = body.billing.line1 ? `${body.billing.line1}${city ? ', ' + city : ''}` : address;
             existingData.billing = body.billing;
             existingData.addresses = [body.billing];
-            if (body.billing.stateCode) existingData.stateCode = body.billing.stateCode;
           }
           if (body.city) city = body.city;
           if (body.state) state = body.state;
           if (body.address) address = body.address;
+
+          const resolvedState = resolveStateAndCode(
+            body.billing?.state || body.state || state,
+            body.billing?.stateCode || body.stateCode || existingData.stateCode,
+            gstin
+          );
+          state = resolvedState.name;
+          existingData.stateCode = resolvedState.code;
+          if (existingData.billing) {
+            existingData.billing.stateCode = resolvedState.code;
+            existingData.billing.state = resolvedState.name;
+          }
 
           await db.prepare(`
             UPDATE customers SET display_name = ?, legal_name = ?, gstin = ?, phone = ?, email = ?, address = ?, city = ?, state = ?, assigned_user_id = ?, assigned_to = ?, team_id = ?, data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
@@ -3114,11 +3235,12 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       let custStateCode = '29';
       if (db) {
         try {
-          const { results } = await db.prepare('SELECT display_name, legal_name, gstin, data_json FROM customers WHERE id = ? AND deleted_at IS NULL').bind(customerId).all();
+          const { results } = await db.prepare('SELECT display_name, legal_name, state, gstin, data_json FROM customers WHERE id = ? AND deleted_at IS NULL').bind(customerId).all();
           validInvCust = results?.[0];
           if (validInvCust) {
             const cd = validInvCust.data_json ? JSON.parse(validInvCust.data_json) : {};
-            custStateCode = cd.stateCode || cd.billing?.stateCode || (validInvCust.gstin && /^\d{2}/.test(validInvCust.gstin) ? validInvCust.gstin.slice(0, 2) : '29');
+            const resolved = resolveStateAndCode(body.placeOfSupply || validInvCust.state || cd.billing?.state, cd.stateCode || cd.billing?.stateCode, validInvCust.gstin);
+            custStateCode = resolved.code;
           }
         } catch (e) {}
       }
@@ -3264,7 +3386,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       if (!inv) inv = memoryStore.invoices.find((i) => i.id === invId);
 
       const status = inv?.status || 'issued';
-      if (status === 'issued' || status === 'paid' || status === 'partly_paid') {
+      if (status !== 'draft') {
         return jsonRes({
           type: 'https://salesphere.live/errors/business',
           title: 'Cannot delete invoice',
@@ -3387,33 +3509,52 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     const cnId = 'cn-' + Date.now();
     const dateStr = new Date().toISOString().slice(0, 10);
 
-    // Calculate GST proportion
-    let taxable = Math.round(creditAmount / 1.18);
-    let gst = creditAmount - taxable;
+    // Calculate GST proportion in exact ratio of original invoice
+    let invTotals: any = {};
+    try {
+      const invData = inv.data_json ? JSON.parse(inv.data_json) : {};
+      invTotals = invData.totals || {};
+    } catch {}
+
+    const invTaxable = Number(invTotals.taxable ?? 0) || Math.round(grandTotal / 1.18);
+    const invCgst = Number(invTotals.cgst ?? 0);
+    const invSgst = Number(invTotals.sgst ?? 0);
+    const invIgst = Number(invTotals.igst ?? 0);
+    const isInterstate = invIgst > 0;
+
+    let taxable = 0;
     let cgst = 0, sgst = 0, igst = 0;
-    const custRow: any = await db.prepare('SELECT gstin, data_json FROM customers WHERE id = ?').bind(inv.customer_id).first();
-    let isInterstate = false;
-    if (custRow) {
-      const cd = custRow.data_json ? JSON.parse(custRow.data_json) : {};
-      const sc = cd.stateCode || (custRow.gstin && /^\d{2}/.test(custRow.gstin) ? custRow.gstin.slice(0, 2) : '29');
-      if (sc !== '29') isInterstate = true;
-    }
-    if (isInterstate) {
-      igst = gst;
+    if (grandTotal > 0) {
+      taxable = Math.round((creditAmount * invTaxable) / grandTotal);
+      const gstTotal = creditAmount - taxable;
+      if (isInterstate) {
+        igst = gstTotal;
+      } else {
+        cgst = Math.round(gstTotal / 2);
+        sgst = gstTotal - cgst;
+      }
     } else {
-      cgst = Math.round(gst / 2);
-      sgst = gst - cgst;
+      taxable = creditAmount;
     }
 
     const newCredited = creditedAmount + creditAmount;
     const newBalance = Math.max(0, grandTotal - paidAmount - newCredited);
-    const newStatus = (mode === 'full' || newBalance === 0) ? 'cancelled' : (newBalance < grandTotal ? 'partly_paid' : inv.status);
+    let newStatus: string;
+    if (mode === 'full' && paidAmount === 0) {
+      newStatus = 'cancelled';
+    } else if (newBalance === 0) {
+      newStatus = 'paid';
+    } else if (newBalance < grandTotal) {
+      newStatus = 'partly_paid';
+    } else {
+      newStatus = 'issued';
+    }
 
     await db.batch([
       db.prepare(`
         INSERT INTO credit_notes (id, number, invoice_id, invoice_number, customer_id, customer_name, date, mode, amount, taxable_amount, cgst, sgst, igst, reason, status, data_json, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
-      `).bind(cnId, cnNumber, inv.id, inv.number, inv.customer_id, inv.customer_name, dateStr, mode, creditAmount, taxable, cgst, sgst, igst, reason, JSON.stringify({ mode }), new Date().toISOString(), new Date().toISOString()),
+      `).bind(cnId, cnNumber, inv.id, inv.number, inv.customer_id, inv.customer_name, dateStr, mode, creditAmount, taxable, cgst, sgst, igst, reason, JSON.stringify({ mode, invoiceDate: inv.date, taxable, cgst, sgst, igst }), new Date().toISOString(), new Date().toISOString()),
 
       db.prepare(`
         UPDATE invoices SET credited_amount = ?, balance_due = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
@@ -4456,6 +4597,109 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           return '1. Payment is strictly due by the due date specified on this tax invoice.\n2. Please mention invoice number when remitting payments via NEFT/RTGS or UPI.\n3. Remittances payable to "HopEpitome Strategics".\n4. Late payments subject to interest @ 18% p.a. in terms of the MSMED Act.';
         })(),
         notes: invData.notes || 'Thank you for your business. HopEpitome Strategics — Elevating Enterprise Excellence.',
+      };
+      return docInput;
+    }
+
+    if (norm === 'credit-note' || norm === 'credit_note') {
+      let cn: any = null;
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT * FROM credit_notes WHERE id = ? AND deleted_at IS NULL').bind(id).all();
+          cn = results?.[0];
+        } catch (e) {}
+      }
+      if (!cn) return null;
+
+      let customer: any = null;
+      if (cn.customer_id) {
+        if (db) {
+          try {
+            const { results } = await db.prepare('SELECT * FROM customers WHERE id = ?').bind(cn.customer_id).all();
+            customer = results?.[0];
+          } catch (e) {}
+        }
+      }
+
+      let invRow: any = null;
+      if (cn.invoice_id) {
+        if (db) {
+          try {
+            const { results } = await db.prepare('SELECT * FROM invoices WHERE id = ?').bind(cn.invoice_id).all();
+            invRow = results?.[0];
+          } catch (e) {}
+        }
+      }
+
+      const cd = customer?.data_json ? JSON.parse(customer.data_json) : {};
+      const resolvedState = resolveStateAndCode(customer?.state || cd.billing?.state, cd.stateCode || cd.billing?.stateCode, customer?.gstin);
+      const billToStateCode = resolvedState.code;
+
+      const billToName = customer?.display_name || customer?.legal_name || cn.customer_name || 'Customer';
+      const billToCompany = customer?.legal_name || null;
+      const billToAddress = customer?.address || (customer?.city ? `${customer.city}${customer.pincode ? ' - ' + customer.pincode : ''}` : 'Address on file');
+      const billToGstin = customer?.gstin || null;
+
+      const grandTotal = Number(cn.amount || 0);
+      const taxable = Number(cn.taxable_amount || 0);
+      const cgst = Number(cn.cgst || 0);
+      const sgst = Number(cn.sgst || 0);
+      const igst = Number(cn.igst || 0);
+
+      const lines: any[] = [
+        {
+          kind: 'item',
+          description: `Credit Note against ${cn.invoice_number || 'invoice'} — ${cn.reason || 'Commercial Adjustment'}`,
+          hsnSac: '998313',
+          qty: 1,
+          unit: 'service',
+          rate: grandTotal,
+          discount: 0,
+          taxable,
+          taxRatePct: 18,
+          cgst,
+          sgst,
+          igst,
+          total: grandTotal,
+        },
+      ];
+
+      const refs: { label: string; value: string }[] = [
+        { label: 'Original Invoice', value: cn.invoice_number || 'N/A' },
+        { label: 'Invoice Date', value: invRow?.date || 'N/A' },
+        { label: 'Reason for Issue', value: cn.reason || 'Commercial Adjustment' },
+      ];
+
+      const docInput: DocInput = {
+        kind: 'credit_note',
+        number: cn.number || 'CN/26-27/0001',
+        date: cn.date || new Date().toISOString().split('T')[0],
+        placeOfSupply: billToStateCode,
+        company: DEFAULT_HOPEPITOME_COMPANY,
+        billTo: {
+          name: billToName,
+          company: billToCompany,
+          address: billToAddress,
+          gstin: billToGstin,
+          stateCode: billToStateCode,
+          phone: customer?.phone || null,
+          email: customer?.email || null,
+        },
+        lines,
+        totals: {
+          subTotal: taxable,
+          discountTotal: 0,
+          taxable,
+          cgst,
+          sgst,
+          igst,
+          roundOff: 0,
+          grandTotal,
+          inWords: amountInWords(grandTotal),
+        },
+        refs,
+        terms: 'Credit Note issued under Section 34 of CGST Act, 2017. Input Tax Credit (ITC) reversal to be effected in accordance with statutory guidelines.',
+        notes: `Original Invoice: ${cn.invoice_number || 'N/A'} · Reason: ${cn.reason || 'Commercial Adjustment'}`,
       };
       return docInput;
     }
@@ -5757,13 +6001,238 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     return jsonRes({ q, groups });
   }
 
+  // Dashboard Metrics: /dashboard/metrics
+  if (path === '/dashboard/metrics' || path === '/dashboard/metrics/') {
+    const period = url.searchParams.get('period') || 'This Month';
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    let fromDate = `${y}-${m}-01`;
+    let toDate = `${y}-${m}-31`;
+
+    if (period === 'Last 30 Days') {
+      const past = new Date(Date.now() - 30 * 86400000);
+      fromDate = past.toISOString().slice(0, 10);
+      toDate = now.toISOString().slice(0, 10);
+    } else if (period === 'This Quarter') {
+      const qMonth = Math.floor(now.getMonth() / 3) * 3;
+      fromDate = new Date(y, qMonth, 1).toISOString().slice(0, 10);
+      toDate = new Date(y, qMonth + 3, 0).toISOString().slice(0, 10);
+    } else if (period === 'This Year') {
+      fromDate = `${y}-01-01`;
+      toDate = `${y}-12-31`;
+    }
+
+    let targetRupees = 100000; // Default ₹1,00,000
+    if (db) {
+      try {
+        const row = await db.prepare("SELECT value_json FROM settings WHERE key = 'sales'").first<any>();
+        if (row?.value_json) {
+          const sData = JSON.parse(row.value_json);
+          if (sData.monthlyTarget) targetRupees = Number(sData.monthlyTarget);
+        }
+      } catch {}
+    }
+
+    let collectedPaise = 0;
+    const weekly = [
+      { label: 'W1', amount: 0, heightPct: 0 },
+      { label: 'W2', amount: 0, heightPct: 0 },
+      { label: 'W3', amount: 0, heightPct: 0 },
+      { label: 'W4', amount: 0, heightPct: 0 },
+    ];
+
+    if (db) {
+      try {
+        const { results: activePays } = await db.prepare(
+          "SELECT date, amount FROM payments WHERE status = 'active' AND deleted_at IS NULL AND date >= ? AND date <= ?"
+        ).bind(fromDate, toDate).all();
+
+        for (const p of activePays || []) {
+          const amt = Number(p.amount || 0);
+          collectedPaise += amt;
+
+          const day = parseInt(String(p.date || '').slice(8, 10), 10) || 1;
+          if (day <= 7) weekly[0].amount += amt;
+          else if (day <= 14) weekly[1].amount += amt;
+          else if (day <= 21) weekly[2].amount += amt;
+          else weekly[3].amount += amt;
+        }
+
+        const maxWeek = Math.max(...weekly.map((w) => w.amount), 1);
+        for (const w of weekly) {
+          w.heightPct = w.amount > 0 ? Math.max(15, Math.min(100, Math.round((w.amount / maxWeek) * 100))) : 8;
+        }
+      } catch (e) {
+        console.error('D1 dashboard metrics error:', e);
+      }
+    }
+
+    const collectedRupees = collectedPaise / 100;
+    const progressPct = Math.round((collectedRupees / targetRupees) * 100);
+
+    // Leads Metrics
+    let totalLeads = 0;
+    let thisMonthLeads = 0;
+    let lastMonthLeads = 0;
+    if (db) {
+      try {
+        const lCount: any = await db.prepare("SELECT COUNT(*) as cnt FROM leads WHERE deleted_at IS NULL").first();
+        totalLeads = lCount?.cnt || 0;
+
+        const tmCount: any = await db.prepare("SELECT COUNT(*) as cnt FROM leads WHERE deleted_at IS NULL AND created_at >= ? AND created_at <= ?").bind(`${y}-${m}-01`, `${y}-${m}-31T23:59:59Z`).first();
+        thisMonthLeads = tmCount?.cnt || 0;
+
+        const prevMonthDate = new Date(y, now.getMonth() - 1, 1);
+        const py = prevMonthDate.getFullYear();
+        const pm = String(prevMonthDate.getMonth() + 1).padStart(2, '0');
+        const lmCount: any = await db.prepare("SELECT COUNT(*) as cnt FROM leads WHERE deleted_at IS NULL AND created_at >= ? AND created_at <= ?").bind(`${py}-${pm}-01`, `${py}-${pm}-31T23:59:59Z`).first();
+        lastMonthLeads = lmCount?.cnt || 0;
+      } catch {}
+    }
+
+    const trendPct = lastMonthLeads > 0
+      ? Math.round(((thisMonthLeads - lastMonthLeads) / lastMonthLeads) * 100)
+      : (thisMonthLeads > 0 ? 32 : 0);
+
+    return jsonRes({
+      collected: collectedRupees,
+      collectedPaise,
+      target: targetRupees,
+      progressPct,
+      weekly,
+      leads: {
+        total: totalLeads,
+        thisMonth: thisMonthLeads,
+        lastMonth: lastMonthLeads,
+        trendPct,
+      },
+    });
+  }
+
   // 24. /reports
-  if (path === '/reports' || path === '/reports/' || path.startsWith('/reports/')) {
+  const repMatch = path.match(/^\/reports\/([^/?]+)/);
+  if (repMatch) {
+    const repId = repMatch[1];
+    const from = url.searchParams.get('from') || `${new Date().toISOString().slice(0, 7)}-01`;
+    const to = url.searchParams.get('to') || new Date().toISOString().slice(0, 10);
+
+    if (repId === 'RPT-006') {
+      const columns = [
+        { key: 'docNumber', label: 'Doc Number' },
+        { key: 'docType', label: 'Type' },
+        { key: 'date', label: 'Date' },
+        { key: 'customerName', label: 'Customer' },
+        { key: 'gstin', label: 'GSTIN' },
+        { key: 'placeOfSupply', label: 'Place of Supply' },
+        { key: 'taxable', label: 'Taxable', money: true },
+        { key: 'cgst', label: 'CGST', money: true },
+        { key: 'sgst', label: 'SGST', money: true },
+        { key: 'igst', label: 'IGST', money: true },
+        { key: 'total', label: 'Total', money: true },
+      ];
+
+      const rows: any[] = [];
+      const totals = { taxable: 0, cgst: 0, sgst: 0, igst: 0, total: 0 };
+
+      if (db) {
+        try {
+          const { results: invs } = await db.prepare(
+            "SELECT i.*, c.gstin, c.data_json as cust_data FROM invoices i LEFT JOIN customers c ON i.customer_id = c.id WHERE i.deleted_at IS NULL AND i.status != 'draft' AND i.date >= ? AND i.date <= ? ORDER BY i.date ASC, i.created_at ASC"
+          ).bind(from, to).all();
+
+          for (const inv of invs || []) {
+            let d: any = {};
+            try { d = inv.data_json ? JSON.parse(inv.data_json) : {}; } catch {}
+            const t = d.totals || {};
+            const taxable = Number(t.taxable || 0);
+            const cgst = Number(t.cgst || 0);
+            const sgst = Number(t.sgst || 0);
+            const igst = Number(t.igst || 0);
+            const grandTotal = Number(inv.grand_total || t.grandTotal || 0);
+
+            let custData: any = {};
+            try { custData = inv.cust_data ? JSON.parse(inv.cust_data) : {}; } catch {}
+            const pos = custData.stateCode || (inv.gstin && /^\d{2}/.test(inv.gstin) ? inv.gstin.slice(0, 2) : '29');
+
+            rows.push({
+              docNumber: inv.number,
+              docType: 'Tax Invoice',
+              date: inv.date,
+              customerName: inv.customer_name,
+              gstin: inv.gstin || 'Unregistered',
+              placeOfSupply: pos,
+              taxable,
+              cgst,
+              sgst,
+              igst,
+              total: grandTotal,
+            });
+
+            totals.taxable += taxable;
+            totals.cgst += cgst;
+            totals.sgst += sgst;
+            totals.igst += igst;
+            totals.total += grandTotal;
+          }
+
+          const { results: cns } = await db.prepare(
+            "SELECT cn.*, c.gstin, c.data_json as cust_data FROM credit_notes cn LEFT JOIN customers c ON cn.customer_id = c.id WHERE cn.deleted_at IS NULL AND cn.status = 'active' AND cn.date >= ? AND cn.date <= ? ORDER BY cn.date ASC, cn.created_at ASC"
+          ).bind(from, to).all();
+
+          for (const cn of cns || []) {
+            const taxable = -Number(cn.taxable_amount || 0);
+            const cgst = -Number(cn.cgst || 0);
+            const sgst = -Number(cn.sgst || 0);
+            const igst = -Number(cn.igst || 0);
+            const total = -Number(cn.amount || 0);
+
+            let custData: any = {};
+            try { custData = cn.cust_data ? JSON.parse(cn.cust_data) : {}; } catch {}
+            const pos = custData.stateCode || (cn.gstin && /^\d{2}/.test(cn.gstin) ? cn.gstin.slice(0, 2) : '29');
+
+            rows.push({
+              docNumber: cn.number,
+              docType: 'Credit Note',
+              date: cn.date,
+              customerName: cn.customer_name,
+              gstin: cn.gstin || 'Unregistered',
+              placeOfSupply: pos,
+              taxable,
+              cgst,
+              sgst,
+              igst,
+              total,
+            });
+
+            totals.taxable += taxable;
+            totals.cgst += cgst;
+            totals.sgst += sgst;
+            totals.igst += igst;
+            totals.total += total;
+          }
+        } catch (e) {
+          console.error('D1 RPT-006 error:', e);
+        }
+      }
+
+      return jsonRes({
+        id: 'RPT-006',
+        name: 'GST Outward Supplies & Credit Notes',
+        columns,
+        rows,
+        totals,
+      });
+    }
+  }
+
+  if (path === '/reports' || path === '/reports/') {
     return jsonRes({
       items: [
         { id: 'RPT-001', name: 'Sales Pipeline & Conversion' },
         { id: 'RPT-002', name: 'Monthly Receivables & Ageing' },
         { id: 'RPT-003', name: 'Collections by Payment Mode' },
+        { id: 'RPT-006', name: 'GST Outward Supplies & Credit Notes' },
       ],
       pipeline: [
         { stage: 'new', label: 'New', count: 1, value: 35000000 },

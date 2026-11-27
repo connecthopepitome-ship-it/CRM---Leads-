@@ -45,6 +45,12 @@ export default function Home() {
     refetchInterval: 60_000,
   });
 
+  const metricsQ = useQuery({
+    queryKey: ['dashboard-metrics', timeFilter],
+    queryFn: () => get<any>(`/dashboard/metrics?period=${encodeURIComponent(timeFilter)}`),
+    refetchInterval: 30_000,
+  });
+
   const todayIST = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Kolkata',
     year: 'numeric',
@@ -468,69 +474,79 @@ export default function Home() {
         {/* RIGHT COLUMN: Revenue Progress + Leads Trend (6 cols) */}
         <div className="space-y-5 lg:col-span-6">
           {/* Module B: Revenue Progress */}
-          <div className="rounded-2xl border border-white/80 bg-white/80 backdrop-blur-md p-5 shadow-[0_4px_20px_-2px_rgba(35,61,45,0.04)] interactive-card">
-            <div className="flex items-center justify-between border-b border-[#DCE7D9]/70 pb-3">
-              <div>
-                <h2 className="text-sm font-bold text-[#202820] hover-text-lift">Revenue Progress</h2>
-                <p className="text-[11px] text-[#778477]">Collected vs Target</p>
-              </div>
-              <span className="text-xs font-bold text-[#3D7952] bg-[#EAF5E8]/90 px-2.5 py-0.5 rounded-full border border-[#CFE5CB] glass-badge">
-                49%
-              </span>
-            </div>
+          {(() => {
+            const collectedAmount = metricsQ.data?.collected ?? 29850;
+            const targetAmount = metricsQ.data?.target ?? 100000;
+            const progressPct = metricsQ.data?.progressPct ?? Math.round((collectedAmount / targetAmount) * 100);
+            const weekly = metricsQ.data?.weekly ?? [
+              { label: 'W1', amount: 0, heightPct: 8 },
+              { label: 'W2', amount: 0, heightPct: 8 },
+              { label: 'W3', amount: 2950000, heightPct: 100 },
+              { label: 'W4', amount: 35000, heightPct: 15 },
+            ];
+            const leadsTrend = metricsQ.data?.leads;
+            const trendPctStr = leadsTrend?.trendPct !== undefined 
+              ? (leadsTrend.trendPct >= 0 ? `+${leadsTrend.trendPct}% vs Last Month` : `${leadsTrend.trendPct}% vs Last Month`)
+              : '+32% vs Last Month';
 
-            <div className="mt-4">
-              <div className="flex items-baseline justify-between">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-xl font-extrabold text-[#202820] hover-text-glow">₹49,500</span>
-                  <span className="text-xs text-[#778477] font-medium">/ ₹1,00,000</span>
+            return (
+              <>
+                <div className="rounded-2xl border border-white/80 bg-white/80 backdrop-blur-md p-5 shadow-[0_4px_20px_-2px_rgba(35,61,45,0.04)] interactive-card">
+                  <div className="flex items-center justify-between border-b border-[#DCE7D9]/70 pb-3">
+                    <div>
+                      <h2 className="text-sm font-bold text-[#202820] hover-text-lift">Revenue Progress</h2>
+                      <p className="text-[11px] text-[#778477]">Collected vs Target</p>
+                    </div>
+                    <span className="text-xs font-bold text-[#3D7952] bg-[#EAF5E8]/90 px-2.5 py-0.5 rounded-full border border-[#CFE5CB] glass-badge">
+                      {progressPct}%
+                    </span>
+                  </div>
+
+                  <div className="mt-4">
+                    <div className="flex items-baseline justify-between">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-xl font-extrabold text-[#202820] hover-text-glow">₹{collectedAmount.toLocaleString('en-IN')}</span>
+                        <span className="text-xs text-[#778477] font-medium">/ ₹{targetAmount.toLocaleString('en-IN')}</span>
+                      </div>
+                      <span className="text-[11px] text-[#778477]">Monthly Target</span>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="mt-2.5 h-3 w-full rounded-full bg-[#E3EFDF] overflow-hidden">
+                      <div className="h-full rounded-full bg-[#3D7952] transition-all duration-500" style={{ width: `${Math.min(100, Math.max(0, progressPct))}%` }} />
+                    </div>
+
+                    {/* Mini Bar Chart for Weekly Progress */}
+                    <div className="mt-6">
+                      <span className="text-[11px] font-semibold text-[#778477] uppercase tracking-wider block mb-3">
+                        Weekly Collections
+                      </span>
+                      <div className="flex items-end justify-between gap-3 h-28 pt-2 border-b border-[#DCE7D9]/60">
+                        {weekly.map((w: any, idx: number) => (
+                          <div key={w.label || idx} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group cursor-pointer" title={`₹${((w.amount || 0) / 100).toLocaleString('en-IN')}`}>
+                            <div
+                              className={`w-full rounded-t-lg transition-all group-hover:shadow-[0_0_12px_rgba(61,121,82,0.4)] ${w.amount > 0 ? 'bg-[#3D7952] group-hover:bg-[#233D2D]' : 'bg-[#CFE5CB] group-hover:bg-[#3D7952]'}`}
+                              style={{ height: `${w.heightPct || 10}%` }}
+                            />
+                            <span className={`text-[10px] font-medium transition-colors ${w.amount > 0 ? 'text-[#3D7952] font-bold' : 'text-[#778477] group-hover:text-[#3D7952]'}`}>{w.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <span className="text-[11px] text-[#778477]">Monthly Target</span>
-              </div>
 
-              {/* Progress Bar */}
-              <div className="mt-2.5 h-3 w-full rounded-full bg-[#E3EFDF] overflow-hidden">
-                <div className="h-full rounded-full bg-[#3D7952] transition-all duration-500" style={{ width: '49%' }} />
-              </div>
-
-              {/* Mini Bar Chart for Weekly Progress */}
-              <div className="mt-6">
-                <span className="text-[11px] font-semibold text-[#778477] uppercase tracking-wider block mb-3">
-                  Weekly Collections
-                </span>
-                <div className="flex items-end justify-between gap-3 h-28 pt-2 border-b border-[#DCE7D9]/60">
-                  <div className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group cursor-pointer">
-                    <div className="w-full bg-[#CFE5CB] rounded-t-lg transition-all group-hover:bg-[#3D7952] group-hover:shadow-[0_0_12px_rgba(61,121,82,0.4)]" style={{ height: '35%' }} />
-                    <span className="text-[10px] text-[#778477] font-medium transition-colors group-hover:text-[#3D7952]">W1</span>
+                {/* Module D: Leads Trend Sparkline Area Chart */}
+                <div className="rounded-2xl border border-white/80 bg-white/80 backdrop-blur-md p-5 shadow-[0_4px_20px_-2px_rgba(35,61,45,0.04)] interactive-card">
+                  <div className="flex items-center justify-between border-b border-[#DCE7D9]/70 pb-3">
+                    <div>
+                      <h2 className="text-sm font-bold text-[#202820] hover-text-lift">Leads Trend</h2>
+                      <p className="text-[11px] text-[#778477]">Acquisition volume ({leadsTrend?.thisMonth ?? 8} leads this month)</p>
+                    </div>
+                    <span className="text-xs font-bold text-[#3D7952]">
+                      {trendPctStr}
+                    </span>
                   </div>
-                  <div className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group cursor-pointer">
-                    <div className="w-full bg-[#CFE5CB] rounded-t-lg transition-all group-hover:bg-[#3D7952] group-hover:shadow-[0_0_12px_rgba(61,121,82,0.4)]" style={{ height: '55%' }} />
-                    <span className="text-[10px] text-[#778477] font-medium transition-colors group-hover:text-[#3D7952]">W2</span>
-                  </div>
-                  <div className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group cursor-pointer">
-                    <div className="w-full bg-[#3D7952] rounded-t-lg transition-all group-hover:bg-[#233D2D] group-hover:shadow-[0_0_12px_rgba(35,61,45,0.4)]" style={{ height: '80%' }} />
-                    <span className="text-[10px] text-[#3D7952] font-bold">W3</span>
-                  </div>
-                  <div className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group cursor-pointer">
-                    <div className="w-full bg-[#CFE5CB] rounded-t-lg transition-all group-hover:bg-[#3D7952] group-hover:shadow-[0_0_12px_rgba(61,121,82,0.4)]" style={{ height: '25%' }} />
-                    <span className="text-[10px] text-[#778477] font-medium transition-colors group-hover:text-[#3D7952]">W4</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Module D: Leads Trend Sparkline Area Chart */}
-          <div className="rounded-2xl border border-white/80 bg-white/80 backdrop-blur-md p-5 shadow-[0_4px_20px_-2px_rgba(35,61,45,0.04)] interactive-card">
-            <div className="flex items-center justify-between border-b border-[#DCE7D9]/70 pb-3">
-              <div>
-                <h2 className="text-sm font-bold text-[#202820] hover-text-lift">Leads Trend</h2>
-                <p className="text-[11px] text-[#778477]">Acquisition volume throughout the month</p>
-              </div>
-              <span className="text-xs font-bold text-[#3D7952]">
-                +32% vs Last Month
-              </span>
-            </div>
 
             {/* Sparkline Curve */}
             <div className="mt-4">
@@ -570,6 +586,9 @@ export default function Home() {
               </div>
             </div>
           </div>
+          </>
+          );
+          })()}
         </div>
       </div>
     </div>

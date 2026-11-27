@@ -90,7 +90,7 @@ export function Preferences() {
   }, [terms.data]);
 
   const fin = useQuery({ queryKey: ['settings', 'finance'], queryFn: () => get<any>('/admin/settings/finance') });
-  const [s, setS] = useState({ minutes: '15', start: '09:00', end: '19:00', validDays: '15', execLimit: '10', mgrLimit: '20', lockDate: '' });
+  const [s, setS] = useState({ minutes: '15', start: '09:00', end: '19:00', validDays: '15', execLimit: '10', mgrLimit: '20', lockDate: '', monthlyTarget: '100000' });
 
   useEffect(() => {
     const slaRaw = (sla.data as any)?.data ?? sla.data;
@@ -106,6 +106,7 @@ export function Preferences() {
         execLimit: String(salesRaw?.discountLimits?.sales_exec ?? x.execLimit ?? '10'),
         mgrLimit: String(salesRaw?.discountLimits?.sales_manager ?? x.mgrLimit ?? '20'),
         lockDate: finRaw?.lockDate ?? x.lockDate ?? '',
+        monthlyTarget: String(salesRaw?.monthlyTarget ?? x.monthlyTarget ?? '100000'),
       }));
     }
   }, [sla.data, sales.data, fin.data]);
@@ -240,13 +241,14 @@ export function Preferences() {
           <TextField label="Quote validity (days)" inputMode="numeric" value={s.validDays} onChange={(e) => setS({ ...s, validDays: e.target.value })} />
           <TextField label="Executive discount limit %" inputMode="decimal" value={s.execLimit} onChange={(e) => setS({ ...s, execLimit: e.target.value })} />
           <TextField label="Manager discount limit %" inputMode="decimal" value={s.mgrLimit} onChange={(e) => setS({ ...s, mgrLimit: e.target.value })} />
+          <TextField label="Monthly Collection Target (₹)" inputMode="numeric" value={s.monthlyTarget} onChange={(e) => setS({ ...s, monthlyTarget: e.target.value })} />
           <TextField label="Books locked up to" type="date" value={s.lockDate} onChange={(e) => setS({ ...s, lockDate: e.target.value })} />
         </div>
         <Button
           className="mt-4"
           onClick={() => {
             saveSection.mutate({ section: 'sla', data: { minutes: Number(s.minutes), calendar: { days: [1, 2, 3, 4, 5, 6], start: s.start, end: s.end } } });
-            saveSection.mutate({ section: 'sales', data: { validDays: Number(s.validDays), discountLimits: { sales_exec: Number(s.execLimit), sales_manager: Number(s.mgrLimit) } } });
+            saveSection.mutate({ section: 'sales', data: { validDays: Number(s.validDays), discountLimits: { sales_exec: Number(s.execLimit), sales_manager: Number(s.mgrLimit) }, monthlyTarget: Number(s.monthlyTarget) || 100000 } });
             saveSection.mutate({ section: 'finance', data: { lockDate: s.lockDate || null } });
           }}
         >
