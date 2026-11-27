@@ -181,7 +181,7 @@ export function Company() {
           label="Country"
           value={f.country}
           onChange={(e) => handleCountryChange(e.target.value)}
-          options={COUNTRIES.map((c) => ({ value: c.code, label: `${c.name} (${c.code})` }))}
+          options={(Array.isArray(COUNTRIES) ? COUNTRIES : Object.values(COUNTRIES)).map((c) => ({ value: c.code, label: `${c.name} (${c.code})` }))}
         />
 
         <SelectField

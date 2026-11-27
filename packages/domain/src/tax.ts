@@ -187,8 +187,8 @@ export function isLutValid(company: TaxDeterminationCompany, docDate?: string | 
  * Determine Place of Supply according to statutory rules
  */
 export function determinePlaceOfSupply(
-  company: TaxDeterminationCompany,
-  customer: TaxDeterminationCustomer,
+  company?: TaxDeterminationCompany | null,
+  customer?: TaxDeterminationCustomer | null,
   override?: string | null
 ): { code: string; label: string } {
   if (override) {
@@ -196,8 +196,8 @@ export function determinePlaceOfSupply(
     return { code: override, label: `${lbl} (${override})` };
   }
 
-  const custCountry = (customer.country || 'IN').toUpperCase();
-  const compCountry = (company.country || 'IN').toUpperCase();
+  const custCountry = ((customer && customer.country) || 'IN').toUpperCase();
+  const compCountry = ((company && company.country) || 'IN').toUpperCase();
 
   // If customer is outside India (for Indian company)
   if (compCountry === 'IN' && custCountry !== 'IN') {
@@ -206,21 +206,27 @@ export function determinePlaceOfSupply(
 
   // If customer is in India
   if (custCountry === 'IN') {
-    const sc = (customer.stateCode || company.stateCode || '29').trim();
+    const sc = ((customer && customer.stateCode) || (company && company.stateCode) || '29').trim();
     const lbl = GST_STATES[sc] || sc;
     return { code: sc, label: `${lbl} (${sc})` };
   }
 
   // Other countries
-  const code = customer.stateCode || '96';
-  return { code, label: customer.stateCode ? `${customer.stateCode}, ${custCountry}` : custCountry };
+  const code = (customer && customer.stateCode) || '96';
+  return { code, label: customer && customer.stateCode ? `${customer.stateCode}, ${custCountry}` : custCountry };
 }
 
 /**
  * Core Tax Determination Engine (Section C)
  */
-export function determineTax(input: TaxDeterminationInput): TaxDeterminationResult {
-  const { company, customer, docDate, docKind = 'tax_invoice', placeOfSupplyOverride, lines = [] } = input;
+export function determineTax(input?: TaxDeterminationInput | null): TaxDeterminationResult {
+  const safeInput = input || {
+    company: { country: 'IN', stateCode: '29', taxRegistered: true, taxRegime: 'IN_GST' },
+    customer: { country: 'IN', stateCode: '29', taxStatus: 'unregistered' },
+  };
+  const { docDate, docKind = 'tax_invoice', placeOfSupplyOverride, lines = [] } = safeInput;
+  const company = safeInput.company || { country: 'IN', stateCode: '29', taxRegistered: true, taxRegime: 'IN_GST' };
+  const customer = safeInput.customer || { country: 'IN', stateCode: '29', taxStatus: 'unregistered' };
 
   const compCountry = (company.country || 'IN').toUpperCase();
   const custCountry = (customer.country || 'IN').toUpperCase();

@@ -241,7 +241,12 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
         stateCode: (selectedParty as any).stateCode || undefined,
         taxStatus: (selectedParty as any).taxStatus || 'registered',
         currency: (selectedParty as any).currency || 'INR',
-      } : undefined,
+      } : {
+        country: 'IN',
+        stateCode: '29',
+        taxStatus: 'unregistered',
+        currency: 'INR',
+      },
       placeOfSupply,
       docType: isQuote ? 'quotation' : isOrder ? 'order' : 'invoice',
     });

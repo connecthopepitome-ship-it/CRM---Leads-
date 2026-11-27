@@ -266,8 +266,8 @@ describe('payments (FR-071)', () => {
 
 describe('customers (FR-074, FR-076)', () => {
   it('TC-217 FR-074 AC1 GSTIN state must match', () => {
-    expect(validateGstin('29ABCDE1234F1Z5', '29')).toBeNull();
-    expect(validateGstin('29ABCDE1234F1Z5', '27')).toBe('GSTIN_STATE_MISMATCH');
+    expect(validateGstin('29ABCDE1234F1ZW', '29')).toBeNull();
+    expect(validateGstin('29ABCDE1234F1ZW', '27')).toBe('GSTIN_STATE_MISMATCH');
     expect(validateGstin('29ABCDE1234F1X5')).toBe('GSTIN_INVALID');
   });
   const e = (date: string, kind: LedgerEntry['kind'], debit: number, credit: number, seq = 0): LedgerEntry => ({ date, kind, docNumber: kind, debit, credit, seq });

@@ -125,7 +125,7 @@ export interface CountryConfig {
   phoneCode: string;
 }
 
-export const COUNTRIES: Record<string, CountryConfig> = {
+const COUNTRIES_MAP: Record<string, CountryConfig> = {
   IN: { code: 'IN', name: 'India', currency: 'INR', taxRegime: 'IN_GST', phoneCode: '+91' },
   AE: { code: 'AE', name: 'United Arab Emirates', currency: 'AED', taxRegime: 'AE_VAT', phoneCode: '+971' },
   US: { code: 'US', name: 'United States', currency: 'USD', taxRegime: 'NONE', phoneCode: '+1' },
@@ -165,6 +165,20 @@ export const COUNTRIES: Record<string, CountryConfig> = {
   ES: { code: 'ES', name: 'Spain', currency: 'EUR', taxRegime: 'NONE', phoneCode: '+34' },
   IT: { code: 'IT', name: 'Italy', currency: 'EUR', taxRegime: 'NONE', phoneCode: '+39' },
 };
+
+export const COUNTRY_LIST: CountryConfig[] = Object.values(COUNTRIES_MAP);
+
+// Hybrid array + dict allowing both COUNTRIES.map(...) and COUNTRIES['IN'] / COUNTRIES.IN
+const createCountriesHybrid = (): CountryConfig[] & Record<string, CountryConfig> => {
+  const arr = [...COUNTRY_LIST] as any;
+  for (const [code, item] of Object.entries(COUNTRIES_MAP)) {
+    arr[code] = item;
+    arr[code.toLowerCase()] = item;
+  }
+  return arr;
+};
+
+export const COUNTRIES: CountryConfig[] & Record<string, CountryConfig> = createCountriesHybrid();
 
 export const UAE_EMIRATES = [
   'Abu Dhabi',

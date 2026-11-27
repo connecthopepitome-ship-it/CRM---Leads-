@@ -301,8 +301,9 @@ export default function Customers() {
             </div>
 
             {filteredCustomers.map((c) => {
-              const initials = c.displayName
+              const initials = (c.displayName || 'Customer')
                 .split(' ')
+                .filter(Boolean)
                 .slice(0, 2)
                 .map((w) => w[0])
                 .join('')
@@ -403,8 +404,9 @@ export default function Customers() {
           <div className="space-y-1.5 max-h-[580px] overflow-y-auto pr-0.5">
             {filteredCustomers.map((c) => {
               const isSelected = c.id === selectedId;
-              const initials = c.displayName
+              const initials = (c.displayName || 'Customer')
                 .split(' ')
+                .filter(Boolean)
                 .slice(0, 2)
                 .map((w) => w[0])
                 .join('')

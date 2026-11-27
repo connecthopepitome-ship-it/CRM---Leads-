@@ -74,11 +74,11 @@ export default function Customer360() {
     .filter((f: any) => f.recordType === 'customer' && f.recordId === customer.id && f.status !== 'completed' && !f.completed && f.dueAt)
     .sort((a: any, b: any) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())[0];
   const nextFuOverdue = nextFu && new Date(nextFu.dueAt).getTime() < Date.now();
-  const custData = (detail.data || customer) as any;
-  const country = custData.country || 'IN';
-  const currency = custData.currency || (country === 'IN' ? 'INR' : 'USD');
-  const taxStatus = custData.taxStatus || (custData.tax_status ? custData.tax_status : (country !== 'IN' ? 'overseas' : (custData.gstin ? 'registered' : 'unregistered')));
-  const taxId = custData.taxId || custData.tax_id || custData.gstin || null;
+  const custData = ((detail && detail.data) || customer || {}) as any;
+  const country = custData?.country || 'IN';
+  const currency = custData?.currency || (country === 'IN' ? 'INR' : 'USD');
+  const taxStatus = custData?.taxStatus || (custData?.tax_status ? custData.tax_status : (country !== 'IN' ? 'overseas' : (custData?.gstin ? 'registered' : 'unregistered')));
+  const taxId = custData?.taxId || custData?.tax_id || custData?.gstin || null;
 
   return (
     <>
