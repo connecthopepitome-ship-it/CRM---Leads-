@@ -1,4 +1,5 @@
 export * from './money.js';
+export * from './currency.js';
 export * from './words.js';
 export * from './dates.js';
 export * from './numbering.js';

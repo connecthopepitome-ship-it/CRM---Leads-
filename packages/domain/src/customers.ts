@@ -1,15 +1,7 @@
 import type { IsoDate } from './dates.js';
 import type { Paise } from './money.js';
 
-export const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 export const PAN_PATTERN = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
-
-/** RULE-016: pattern and state code match. */
-export function validateGstin(gstin: string, stateCode?: string | null): string | null {
-  if (!GSTIN_PATTERN.test(gstin)) return 'GSTIN_INVALID';
-  if (stateCode && gstin.slice(0, 2) !== stateCode) return 'GSTIN_STATE_MISMATCH';
-  return null;
-}
 
 export interface LedgerEntry {
   date: IsoDate;

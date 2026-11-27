@@ -4,6 +4,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { CURRENCIES, formatCurrency } from '@ss/domain';
 import { ApiError, get, post } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { date, money, toPaise, today, uid } from '../lib/format';
@@ -58,6 +59,8 @@ export default function PaymentForm() {
     return {
       date: today(),
       amount: amt,
+      currency: 'INR',
+      exchangeRate: '1.00',
       mode: 'neft',
       reference: '',
       bankAccountId: '',
@@ -83,6 +86,8 @@ export default function PaymentForm() {
     setF({
       date: today(),
       amount: '',
+      currency: 'INR',
+      exchangeRate: '1.00',
       mode: 'neft',
       reference: '',
       bankAccountId: '',
@@ -96,10 +101,30 @@ export default function PaymentForm() {
   };
 
   useEffect(() => {
-    if (targetInvoiceQuery.data && !f.amount) {
-      const bal = targetInvoiceQuery.data.balanceDue ?? (targetInvoiceQuery.data.grandTotal - (targetInvoiceQuery.data.paidAmount || 0));
-      if (bal > 0) {
-        setF((prev) => ({ ...prev, amount: String(bal / 100) }));
+    if (selectedCustQuery.data?.currency) {
+      const cur = selectedCustQuery.data.currency;
+      setF((prev) => ({
+        ...prev,
+        currency: cur,
+        exchangeRate: cur === 'INR' ? '1.00' : (prev.exchangeRate === '1.00' ? (cur === 'USD' ? '84.00' : (cur === 'AED' ? '22.80' : '1.00')) : prev.exchangeRate),
+      }));
+    }
+  }, [selectedCustQuery.data]);
+
+  useEffect(() => {
+    if (targetInvoiceQuery.data) {
+      if (!f.amount) {
+        const bal = targetInvoiceQuery.data.balanceDue ?? (targetInvoiceQuery.data.grandTotal - (targetInvoiceQuery.data.paidAmount || 0));
+        if (bal > 0) {
+          setF((prev) => ({ ...prev, amount: String(bal / 100) }));
+        }
+      }
+      if (targetInvoiceQuery.data.currency) {
+        setF((prev) => ({
+          ...prev,
+          currency: targetInvoiceQuery.data.currency,
+          exchangeRate: targetInvoiceQuery.data.exchangeRate ? String(targetInvoiceQuery.data.exchangeRate) : prev.exchangeRate,
+        }));
       }
     }
   }, [targetInvoiceQuery.data]);
@@ -144,6 +169,8 @@ export default function PaymentForm() {
         customerId,
         date: f.date,
         amount: toPaise(f.amount),
+        currency: f.currency,
+        exchangeRate: Number(f.exchangeRate) || 1,
         mode: f.mode,
         reference: f.reference || null,
         bankAccountId: f.bankAccountId || null,
@@ -273,14 +300,43 @@ export default function PaymentForm() {
               </div>
               {f.amount && (
                 <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700 border border-emerald-200/60">
-                  {money(toPaise(f.amount))}
+                  {formatCurrency(toPaise(f.amount), f.currency)}
                 </span>
               )}
             </div>
 
             <div className="grid gap-4 p-5 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2 sm:col-span-2">
+                <SelectField
+                  label="Payment Currency"
+                  value={f.currency}
+                  onChange={(e) => {
+                    const c = e.target.value;
+                    setF((prev) => ({
+                      ...prev,
+                      currency: c,
+                      exchangeRate: c === 'INR' ? '1.00' : (prev.exchangeRate === '1.00' ? (c === 'USD' ? '84.00' : (c === 'AED' ? '22.80' : '1.00')) : prev.exchangeRate),
+                    }));
+                  }}
+                  options={Object.values(CURRENCIES).map((c) => ({
+                    value: c.code,
+                    label: `${c.code} (${c.symbol}) - ${c.name}`,
+                  }))}
+                />
+                {f.currency !== 'INR' && (
+                  <TextField
+                    label={`Exchange Rate (1 ${f.currency} in INR)`}
+                    required
+                    inputMode="decimal"
+                    value={f.exchangeRate}
+                    onChange={set('exchangeRate')}
+                    placeholder="e.g. 84.00"
+                    hint={`Equivalent: ₹${(((Number(f.amount) || 0) * (Number(f.exchangeRate) || 1))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} INR`}
+                  />
+                )}
+              </div>
               <TextField
-                label="Amount Received (₹)"
+                label={`Amount Received (${CURRENCIES[f.currency]?.symbol || f.currency})`}
                 required
                 inputMode="decimal"
                 value={f.amount}
@@ -434,7 +490,7 @@ export default function PaymentForm() {
                       columns={[
                         { key: 'number', label: 'Invoice No' },
                         { key: 'dueDate', label: 'Due Date', render: (o) => date(o.dueDate) },
-                        { key: 'balance', label: 'Outstanding', align: 'right', render: (o) => money(o.balance) },
+                        { key: 'balance', label: 'Outstanding', align: 'right', render: (o) => formatCurrency(o.balance, f.currency) },
                         {
                           key: 'apply',
                           label: 'Settled',
@@ -449,10 +505,10 @@ export default function PaymentForm() {
                                 onChange={(e) => setManual({ ...manual, [o.id]: e.target.value })}
                               />
                             ) : toPaise(f.amount || 0) <= 0 ? (
-                              <span className="font-semibold text-slate-400">₹0.00</span>
+                              <span className="font-semibold text-slate-400">{formatCurrency(0, f.currency)}</span>
                             ) : (
                               <span className="font-semibold text-emerald-700">
-                                {money(plan?.allocations?.find((a) => a.invoiceId === o.id)?.amount ?? 0)}
+                                {formatCurrency(plan?.allocations?.find((a) => a.invoiceId === o.id)?.amount ?? 0, f.currency)}
                               </span>
                             ),
                         },
@@ -463,7 +519,7 @@ export default function PaymentForm() {
                   {!manual && !!plan?.advance && toPaise(f.amount) > 0 && (
                     <div className="flex items-center justify-between rounded-xl bg-indigo-50/70 p-3 text-xs text-indigo-900 border border-indigo-100">
                       <span className="font-medium">Unallocated Advance Balance:</span>
-                      <span className="font-bold text-sm text-indigo-700">{money(plan.advance)}</span>
+                      <span className="font-bold text-sm text-indigo-700">{formatCurrency(plan.advance, f.currency)}</span>
                     </div>
                   )}
 
@@ -471,18 +527,24 @@ export default function PaymentForm() {
                   <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 space-y-2">
                     <div className="flex justify-between text-xs text-slate-600">
                       <span>Gross Amount:</span>
-                      <span className="font-semibold text-slate-900">{f.amount ? money(toPaise(f.amount)) : '₹0.00'}</span>
+                      <span className="font-semibold text-slate-900">{f.amount ? formatCurrency(toPaise(f.amount), f.currency) : formatCurrency(0, f.currency)}</span>
                     </div>
+                    {f.currency !== 'INR' && (
+                      <div className="flex justify-between text-xs text-slate-500 font-mono">
+                        <span>Base (INR):</span>
+                        <span>₹{(((Number(f.amount) || 0) * (Number(f.exchangeRate) || 1))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
                     {f.tds && (
                       <div className="flex justify-between text-xs text-purple-700">
                         <span>TDS Withheld ({f.tdsSection || '194'}):</span>
-                        <span className="font-semibold">- {money(toPaise(f.tds))}</span>
+                        <span className="font-semibold">- {formatCurrency(toPaise(f.tds), f.currency)}</span>
                       </div>
                     )}
                     <div className="border-t border-slate-200 pt-2 flex justify-between text-sm font-bold text-slate-900">
                       <span>Net Inward Credit:</span>
                       <span className="text-emerald-700">
-                        {money(Math.max(0, toPaise(f.amount || 0) - toPaise(f.tds || 0)))}
+                        {formatCurrency(Math.max(0, toPaise(f.amount || 0) - toPaise(f.tds || 0)), f.currency)}
                       </span>
                     </div>
                   </div>

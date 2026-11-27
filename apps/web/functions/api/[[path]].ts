@@ -55,7 +55,15 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
 
   // If designated edge origin or local edge mode, handle directly
   if (env.API_ORIGIN.includes('salesphere.live') || env.API_ORIGIN.includes('internal') || env.API_ORIGIN === 'edge') {
-    return handleEdgeApi(request, env.DB);
+    try {
+      return await handleEdgeApi(request, env.DB);
+    } catch (err: any) {
+      console.error('handleEdgeApi uncaught error:', err);
+      return new Response(JSON.stringify({ error: err?.message || String(err), stack: err?.stack }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS }
+      });
+    }
   }
 
   const headers = new Headers(request.headers);
@@ -78,6 +86,13 @@ export const onRequest = async ({ request, env }: Ctx): Promise<Response> => {
     return out;
   } catch (err: any) {
     console.warn(`Upstream fetch to ${env.API_ORIGIN} failed (${err?.message || err}), falling back to edge API handler`);
-    return handleEdgeApi(request, env.DB);
+    try {
+      return await handleEdgeApi(request, env.DB);
+    } catch (e: any) {
+      return new Response(JSON.stringify({ error: e?.message || String(e), stack: e?.stack }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS }
+      });
+    }
   }
 };

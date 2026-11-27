@@ -1,5 +1,16 @@
 import QRCode from 'qrcode';
-import { amountInWords, buildUpiUri, displayDate, formatINR, GST_STATES, paymentBlockMode, type Paise } from '@ss/domain';
+import {
+  amountInWords,
+  buildUpiUri,
+  displayDate,
+  formatINR,
+  formatCurrency,
+  currencyAmountInWords,
+  CURRENCIES,
+  GST_STATES,
+  paymentBlockMode,
+  type Paise,
+} from '@ss/domain';
 import { HOPEPITOME_LOGO_DATA_URL } from './logo.js';
 
 export { HOPEPITOME_LOGO_DATA_URL, amountInWords };
@@ -8,9 +19,16 @@ export { HOPEPITOME_LOGO_DATA_URL, amountInWords };
 
 export interface DocCompany {
   legalName: string;
+  tradeName?: string | null;
   tagline?: string | null;
   address: string;
+  country?: string;
+  currency?: string;
+  taxRegime?: 'IN_GST' | 'AE_VAT' | 'NONE';
+  taxRegistered?: boolean;
   gstin?: string | null;
+  trn?: string | null;
+  pan?: string | null;
   stateCode: string;
   phone?: string | null;
   email?: string | null;
@@ -18,14 +36,31 @@ export interface DocCompany {
   jurisdiction?: string | null;
   signatory?: string | null;
   logoDataUrl?: string | null;
+  lutNumber?: string | null;
+  lutValidity?: string | null;
+  bankName?: string | null;
+  bankAccount?: string | null;
+  bankIfsc?: string | null;
+  bankBranch?: string | null;
+  bankIban?: string | null;
+  bankSwift?: string | null;
+  bankCurrency?: string | null;
+  upiId?: string | null;
 }
 
 export interface DocParty {
   name: string;
   company?: string | null;
   address?: string | null;
-  gstin?: string | null;
+  city?: string | null;
+  state?: string | null;
   stateCode?: string | null;
+  country?: string | null;
+  currency?: string | null;
+  taxStatus?: string | null;
+  taxId?: string | null;
+  gstin?: string | null;
+  trn?: string | null;
   phone?: string | null;
   email?: string | null;
 }
@@ -61,6 +96,11 @@ export interface DocTotalsView {
 export interface DocInput {
   kind: 'quotation' | 'order' | 'tax_invoice' | 'bill_of_supply' | 'proforma' | 'credit_note' | 'receipt';
   copy?: 'ORIGINAL' | 'DUPLICATE' | 'OFFICE COPY';
+  title?: string | null;
+  subtitle?: string | null;
+  currency?: string;
+  exchangeRate?: number;
+  baseCurrency?: string;
   number: string | null;
   date: string;
   dueDate?: string | null;
@@ -73,26 +113,53 @@ export interface DocInput {
   shipTo?: DocParty | null;
   lines: DocLine[];
   totals: DocTotalsView;
+  baseTotals?: DocTotalsView | null;
+  taxTreatment?: string;
+  lutText?: string | null;
   terms?: string | null;
   notes?: string | null;
   payment?: {
     balance: Paise;
     paid: Paise;
+    currency?: string;
     vpa?: string | null;
     payeeName?: string | null;
     trEnabled?: boolean;
-    bank?: { name: string; accountNo: string; ifsc: string; branch?: string } | null;
+    bank?: {
+      name: string;
+      accountNo: string;
+      ifsc?: string;
+      iban?: string;
+      swift?: string;
+      currency?: string;
+      branch?: string;
+    } | null;
     showQr: boolean;
   } | null;
-  receipt?: { amount: Paise; mode: string; reference?: string | null; tds: Paise; allocations: { number: string; amount: Paise }[]; cancelledReason?: string | null } | null;
+  receipt?: {
+    amount: Paise;
+    currency?: string;
+    exchangeRate?: number;
+    baseAmount?: Paise;
+    mode: string;
+    reference?: string | null;
+    tds: Paise;
+    allocations: { number: string; amount: Paise }[];
+    cancelledReason?: string | null;
+  } | null;
   poweredBy?: boolean;
 }
 
 export const DEFAULT_HOPEPITOME_COMPANY: DocCompany = {
   legalName: 'HopEpitome Strategics',
+  tradeName: 'HopEpitome',
   tagline: 'We build digital systems for businesses and distinctive professional identities for people.',
   address: 'No. 42, 4th Floor, Prestige Tech Park, Marathahalli-Sarjapur Outer Ring Road, Bangalore - 560103, Karnataka, India',
-  gstin: '29ABCDE1234F1Z5',
+  country: 'IN',
+  currency: 'INR',
+  taxRegime: 'IN_GST',
+  taxRegistered: true,
+  gstin: null,
   stateCode: '29',
   phone: '+91 98450 11108',
   email: 'service@hopepitome.com',
@@ -136,38 +203,57 @@ export async function upiQrSvg(uri: string): Promise<string> {
 async function paymentBlock(d: DocInput): Promise<string> {
   const p = d.payment;
   if (!p) return '';
-  const modeName = paymentBlockMode(p.balance, !!(p.vpa && p.showQr), !!p.bank);
+  const cur = d.currency || d.company?.currency || 'INR';
+  const fmt = (v: number) => formatCurrency(v, cur, true);
+  const isPaid = p.balance <= 0 && p.paid > 0;
 
-  if (modeName === 'paid') {
+  if (isPaid) {
     return `
       <div class="pay-section pay-paid">
         <div class="stamp-paid">
           <span class="stamp-icon">✓</span> PAID IN FULL
         </div>
         <div class="pay-paid-details">
-          <div class="pay-paid-title">Received with thanks: ₹${m(p.paid)}</div>
+          <div class="pay-paid-title">Received with thanks: ${esc(fmt(p.paid))}</div>
           <div class="pay-paid-sub">All invoices linked to this commercial schedule have been cleared.</div>
         </div>
       </div>
     `;
   }
 
-  const bankHtml = p.bank
-    ? `
-      <div class="bank-box">
-        <div class="bank-title"><span class="bank-icon">🏛</span> Direct Bank Transfer (NEFT / RTGS / IMPS)</div>
-        <div class="bank-grid">
-          <div><span class="bank-lbl">Bank Name:</span> <b>${esc(p.bank.name)}</b></div>
-          <div><span class="bank-lbl">Account No:</span> <b class="font-mono">${esc(p.bank.accountNo)}</b></div>
-          <div><span class="bank-lbl">IFSC Code:</span> <b class="font-mono">${esc(p.bank.ifsc)}</b></div>
-          ${p.bank.branch ? `<div><span class="bank-lbl">Branch:</span> ${esc(p.bank.branch)}</div>` : ''}
+  const isForeignBank = cur !== 'INR' || !!p.bank?.iban || !!p.bank?.swift;
+  let bankHtml = '';
+  if (p.bank) {
+    if (isForeignBank) {
+      bankHtml = `
+        <div class="bank-box">
+          <div class="bank-title"><span class="bank-icon">🏛</span> International Wire Transfer (SWIFT / IBAN)</div>
+          <div class="bank-grid">
+            <div><span class="bank-lbl">Bank Name:</span> <b>${esc(p.bank.name)}</b></div>
+            <div><span class="bank-lbl">IBAN / Account:</span> <b class="font-mono">${esc(p.bank.iban || p.bank.accountNo)}</b></div>
+            ${p.bank.swift ? `<div><span class="bank-lbl">SWIFT / BIC:</span> <b class="font-mono">${esc(p.bank.swift)}</b></div>` : ''}
+            <div><span class="bank-lbl">Currency:</span> <b class="font-mono">${esc(p.bank.currency || cur)}</b></div>
+            ${p.bank.branch ? `<div><span class="bank-lbl">Branch / Country:</span> ${esc(p.bank.branch)}</div>` : ''}
+          </div>
         </div>
-      </div>
-    `
-    : '';
+      `;
+    } else {
+      bankHtml = `
+        <div class="bank-box">
+          <div class="bank-title"><span class="bank-icon">🏛</span> Direct Bank Transfer (NEFT / RTGS / IMPS)</div>
+          <div class="bank-grid">
+            <div><span class="bank-lbl">Bank Name:</span> <b>${esc(p.bank.name)}</b></div>
+            <div><span class="bank-lbl">Account No:</span> <b class="font-mono">${esc(p.bank.accountNo)}</b></div>
+            <div><span class="bank-lbl">IFSC Code:</span> <b class="font-mono">${esc(p.bank.ifsc)}</b></div>
+            ${p.bank.branch ? `<div><span class="bank-lbl">Branch:</span> ${esc(p.bank.branch)}</div>` : ''}
+          </div>
+        </div>
+      `;
+    }
+  }
 
   let qrHtml = '';
-  if (p.showQr && p.vpa) {
+  if (cur === 'INR' && p.showQr && p.vpa) {
     const uri = buildUpiUri({
       vpa: p.vpa,
       payeeName: p.payeeName ?? d.company.legalName,
@@ -180,7 +266,7 @@ async function paymentBlock(d: DocInput): Promise<string> {
         <div class="qr-svg-wrap">${await upiQrSvg(uri)}</div>
         <div class="qr-meta">
           <div class="qr-tag">Scan with any UPI App</div>
-          <div class="qr-amt">Pay ₹${m(p.balance)}</div>
+          <div class="qr-amt">Pay ${esc(fmt(p.balance))}</div>
           <div class="qr-vpa font-mono">UPI ID: ${esc(p.vpa)}</div>
         </div>
       </div>
@@ -193,13 +279,13 @@ async function paymentBlock(d: DocInput): Promise<string> {
         <div class="pay-heading">Commercial Settlement &amp; Payment Options</div>
         <div class="pay-due-badge">
           <span>Amount Payable:</span>
-          <b>₹${m(p.balance)}</b>
+          <b>${esc(fmt(p.balance))}</b>
         </div>
       </div>
       <div class="pay-body">
         ${qrHtml}
         <div class="pay-details">
-          ${p.paid ? `<div class="pay-received">Advance / Received so far: <b>₹${m(p.paid)}</b></div>` : ''}
+          ${p.paid ? `<div class="pay-received">Advance / Received so far: <b>${esc(fmt(p.paid))}</b></div>` : ''}
           ${bankHtml}
         </div>
       </div>
@@ -217,12 +303,20 @@ export async function renderDocumentHtml(d: DocInput): Promise<string> {
     co.logoDataUrl = HOPEPITOME_LOGO_DATA_URL;
   }
 
-  const gst = d.kind !== 'bill_of_supply' && d.kind !== 'receipt' && d.lines.some((l) => l.cgst || l.sgst || l.igst);
-  const intra = d.lines.some((l) => l.cgst || l.sgst);
+  const cur = d.currency || co.currency || 'INR';
+  const sym = CURRENCIES[cur]?.symbol || cur;
+  const fmt = (p: Paise) => esc(formatCurrency(p, cur, true));
+  const isUae = co.taxRegime === 'AE_VAT';
+  const isTaxRegistered = co.taxRegistered !== false;
+
+  const gst = d.kind !== 'bill_of_supply' && d.kind !== 'receipt' && isTaxRegistered && d.taxTreatment !== 'bill_of_supply' && d.taxTreatment !== 'none' && d.lines.some((l) => l.cgst || l.sgst || l.igst);
+  const intra = !isUae && d.lines.some((l) => l.cgst || l.sgst);
   const colSpanCount = gst ? (intra ? 10 : 9) : 8;
 
   const taxHeaders = gst
-    ? intra
+    ? isUae
+      ? '<th class="r">VAT (5%)</th>'
+      : intra
       ? '<th class="r">CGST</th><th class="r">SGST</th>'
       : '<th class="r">IGST</th>'
     : '';
@@ -239,9 +333,11 @@ export async function renderDocumentHtml(d: DocInput): Promise<string> {
         `;
       }
       const taxCols = gst
-        ? intra
-          ? `<td class="r font-mono">${l.cgst ? m(l.cgst) : '—'}</td><td class="r font-mono">${l.sgst ? m(l.sgst) : '—'}</td>`
-          : `<td class="r font-mono">${l.igst ? m(l.igst) : '—'}</td>`
+        ? isUae
+          ? `<td class="r font-mono">${(l.igst || l.cgst || l.sgst) ? fmt(l.igst || ((l.cgst || 0) + (l.sgst || 0))) : '—'}</td>`
+          : intra
+          ? `<td class="r font-mono">${l.cgst ? fmt(l.cgst) : '—'}</td><td class="r font-mono">${l.sgst ? fmt(l.sgst) : '—'}</td>`
+          : `<td class="r font-mono">${l.igst ? fmt(l.igst) : '—'}</td>`
         : '';
 
       return `
@@ -252,11 +348,11 @@ export async function renderDocumentHtml(d: DocInput): Promise<string> {
           </td>
           <td class="col-hsn font-mono">${esc(l.hsnSac || '—')}</td>
           <td class="r col-qty font-mono"><b>${esc(l.qty)}</b> <span class="unit">${esc(l.unit || 'Nos')}</span></td>
-          <td class="r col-rate font-mono">₹${m(l.rate)}</td>
-          <td class="r col-disc font-mono">${l.discount ? `₹${m(l.discount)}` : '—'}</td>
-          <td class="r col-taxable font-mono">₹${m(l.taxable)}</td>
+          <td class="r col-rate font-mono">${fmt(l.rate)}</td>
+          <td class="r col-disc font-mono">${l.discount ? fmt(l.discount) : '—'}</td>
+          <td class="r col-taxable font-mono">${fmt(l.taxable)}</td>
           ${taxCols}
-          <td class="r col-total font-mono"><b>₹${m(l.total)}</b></td>
+          <td class="r col-total font-mono"><b>${fmt(l.total)}</b></td>
         </tr>
       `;
     })
@@ -264,16 +360,21 @@ export async function renderDocumentHtml(d: DocInput): Promise<string> {
 
   const t = d.totals;
   const totalsList: [string, number, string?][] = [
-    ['Taxable Subtotal', t.subTotal],
+    ['Subtotal', t.subTotal],
     t.discountTotal ? ['Total Discount Applied', -t.discountTotal, 'text-green'] : null,
     gst ? ['Net Taxable Value', t.taxable] : null,
-    gst && intra ? ['CGST (Central Tax)', t.cgst] : null,
-    gst && intra ? ['SGST (State Tax)', t.sgst] : null,
-    gst && !intra ? ['IGST (Integrated Tax)', t.igst] : null,
+    gst && isUae ? ['VAT (5%)', t.igst || (t.cgst || 0) + (t.sgst || 0)] : null,
+    gst && !isUae && intra ? ['CGST (Central Tax)', t.cgst] : null,
+    gst && !isUae && intra ? ['SGST (State Tax)', t.sgst] : null,
+    gst && !isUae && !intra ? ['IGST (Integrated Tax)', t.igst] : null,
     t.roundOff ? ['Round Off', t.roundOff] : null,
   ].filter(Boolean) as [string, number, string?][];
 
-  const posName = d.placeOfSupply ? `${GST_STATES[d.placeOfSupply] ?? ''} (${d.placeOfSupply})` : '';
+  const posName = d.placeOfSupply
+    ? d.placeOfSupply === '96'
+      ? 'Outside India (96)'
+      : `${GST_STATES[d.placeOfSupply] ?? ''} (${d.placeOfSupply})`
+    : '';
 
   const metaList = [
     ['Document Number', d.number ? `<b>${esc(d.number)}</b>` : '<span class="status-draft">DRAFT</span>'],
@@ -282,6 +383,10 @@ export async function renderDocumentHtml(d: DocInput): Promise<string> {
     d.validUntil ? ['Valid Until', `<b>${displayDate(d.validUntil)}</b>`] : null,
     d.expectedDelivery ? ['Expected Delivery', `<b>${displayDate(d.expectedDelivery)}</b>`] : null,
     posName ? ['Place of Supply', `<b>${esc(posName)}</b>`] : null,
+    cur !== 'INR' ? ['Currency', `<b>${esc(cur)} (${esc(sym)})</b>`] : null,
+    cur !== 'INR' && d.exchangeRate ? ['Exchange Rate', `<b>1 ${esc(cur)} = ₹${esc(d.exchangeRate)}</b>`] : null,
+    d.taxTreatment === 'export_lut' || d.taxTreatment === 'sez_lut' ? ['LUT Status', '<b>Zero-Rated under LUT</b>'] : null,
+    co.lutNumber ? ['LUT No.', `<b>${esc(co.lutNumber)}</b>`] : null,
     ...(d.refs ?? []).map((r) => [r.label, `<b>${esc(r.value)}</b>`]),
   ].filter(Boolean) as [string, string][];
 
@@ -294,13 +399,49 @@ export async function renderDocumentHtml(d: DocInput): Promise<string> {
             <tr><th>Invoice / Reference Number</th><th class="r">Settled Amount</th></tr>
           </thead>
           <tbody>
-            ${d.receipt.allocations.map((a) => `<tr><td class="font-mono"><b>${esc(a.number)}</b></td><td class="r font-mono">₹${m(a.amount)}</td></tr>`).join('')}
+            ${d.receipt.allocations.map((a) => `<tr><td class="font-mono"><b>${esc(a.number)}</b></td><td class="r font-mono">${esc(formatCurrency(a.amount, d.receipt?.currency || cur, true))}</td></tr>`).join('')}
           </tbody>
         </table>
         <div class="receipt-summary">
-          <div>Received <b>₹${m(d.receipt.amount)}</b> via <b>${esc(d.receipt.mode.toUpperCase())}</b>${d.receipt.reference ? ` (Ref: <span class="font-mono">${esc(d.receipt.reference)}</span>)` : ''}${d.receipt.tds ? `; TDS withheld ₹${m(d.receipt.tds)}` : ''}.</div>
+          <div>Received <b>${esc(formatCurrency(d.receipt.amount, d.receipt.currency || cur, true))}</b> via <b>${esc(d.receipt.mode.toUpperCase())}</b>${d.receipt.reference ? ` (Ref: <span class="font-mono">${esc(d.receipt.reference)}</span>)` : ''}${d.receipt.tds ? `; TDS withheld ${esc(formatCurrency(d.receipt.tds, d.receipt.currency || cur, true))}` : ''}.</div>
         </div>
         ${d.receipt.cancelledReason ? `<div class="stamp-cancelled">CANCELLED — ${esc(d.receipt.cancelledReason)}</div>` : ''}
+      </div>
+    `
+    : '';
+
+  const docTitle = d.title || TITLES[d.kind] || 'DOCUMENT';
+  let docSubtitle = d.subtitle;
+  if (!docSubtitle) {
+    if (d.taxTreatment === 'export_lut') {
+      docSubtitle = 'Supply meant for export under LUT without payment of integrated tax';
+    } else if (d.taxTreatment === 'export_igst') {
+      docSubtitle = 'Supply meant for export on payment of integrated tax';
+    } else if (d.taxTreatment === 'sez_lut') {
+      docSubtitle = 'Supply to SEZ unit/developer under LUT without payment of integrated tax';
+    } else if (d.taxTreatment === 'sez_igst') {
+      docSubtitle = 'Supply to SEZ unit/developer on payment of integrated tax';
+    } else if (d.taxTreatment === 'bill_of_supply' || !isTaxRegistered) {
+      docSubtitle = 'Supply of Goods / Services (Bill of Supply)';
+    } else {
+      docSubtitle = SUBTITLES[d.kind] || '';
+    }
+  }
+
+  const words = d.totals.inWords || currencyAmountInWords(d.totals.grandTotal, cur);
+
+  // INR conversion display for Indian GST foreign currency documents
+  const showInrConversion = cur !== 'INR' && co.taxRegime === 'IN_GST';
+  const inrConversionHtml = showInrConversion
+    ? `
+      <div class="inr-conversion-card" style="margin-top: 10px; padding: 10px 14px; background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 6px;">
+        <div style="font-weight: 700; color: #1E293B; font-size: 11px; margin-bottom: 4px;">Indian GST Statutory Currency Conversion (CBIC Rate)</div>
+        <div style="display: flex; gap: 16px; flex-wrap: wrap; font-size: 10px; color: #334155;">
+          <div>Exchange Rate: <b>1 ${esc(cur)} = ₹${esc(d.exchangeRate || 1)}</b></div>
+          <div>Taxable: <b class="font-mono">${esc(formatCurrency(d.baseTotals?.taxable || Math.round(t.taxable * (d.exchangeRate || 1)), 'INR', true))}</b></div>
+          <div>Integrated Tax: <b class="font-mono">${esc(formatCurrency(d.baseTotals?.igst || Math.round((t.igst || (t.cgst || 0) + (t.sgst || 0)) * (d.exchangeRate || 1)), 'INR', true))}</b></div>
+          <div>Grand Total: <b class="font-mono">${esc(formatCurrency(d.baseTotals?.grandTotal || Math.round(t.grandTotal * (d.exchangeRate || 1)), 'INR', true))}</b></div>
+        </div>
       </div>
     `
     : '';
@@ -310,7 +451,7 @@ export async function renderDocumentHtml(d: DocInput): Promise<string> {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${esc(TITLES[d.kind])} ${esc(d.number ?? '')} — ${esc(co.legalName)}</title>
+  <title>${esc(docTitle)} ${esc(d.number ?? '')} — ${esc(co.legalName)}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -333,7 +474,9 @@ export async function renderDocumentHtml(d: DocInput): Promise<string> {
           <div class="company-details">
             <div>${nl2br(co.address)}</div>
             <div class="company-contacts">
-              ${co.gstin ? `<span class="gst-badge"><span class="badge-dot"></span>GSTIN: <b>${esc(co.gstin)}</b></span>` : ''}
+              ${isTaxRegistered && co.gstin ? `<span class="gst-badge"><span class="badge-dot"></span>GSTIN: <b>${esc(co.gstin)}</b></span>` : ''}
+              ${isTaxRegistered && co.trn ? `<span class="gst-badge"><span class="badge-dot"></span>TRN: <b>${esc(co.trn)}</b></span>` : ''}
+              ${co.pan ? `<span>PAN: <b>${esc(co.pan)}</b></span>` : ''}
               ${co.phone ? `<span>📞 ${esc(co.phone)}</span>` : ''}
               ${co.email ? `<span>✉️ ${esc(co.email)}</span>` : ''}
               ${co.website ? `<span>🌐 <b>${esc(co.website)}</b></span>` : ''}
@@ -344,11 +487,11 @@ export async function renderDocumentHtml(d: DocInput): Promise<string> {
 
       <div class="title-col">
         <div class="doc-badge-wrap">
-          <span class="doc-type-pill doc-type-${d.kind}">${esc(TITLES[d.kind])}</span>
+          <span class="doc-type-pill doc-type-${d.kind}">${esc(docTitle)}</span>
           ${d.copy ? `<span class="doc-copy-tag">${esc(d.copy)}</span>` : ''}
         </div>
         <div class="doc-number-display font-mono">${d.number ? esc(d.number) : 'DRAFT'}</div>
-        <div class="doc-subtitle">${esc(SUBTITLES[d.kind])}</div>
+        <div class="doc-subtitle">${esc(docSubtitle)}</div>
       </div>
     </header>
 
@@ -359,8 +502,10 @@ export async function renderDocumentHtml(d: DocInput): Promise<string> {
         <div class="card-tag">Bill To / Client Scope</div>
         <div class="party-name">${esc(d.billTo.name)}</div>
         ${d.billTo.company && d.billTo.company !== d.billTo.name ? `<div class="party-company">${esc(d.billTo.company)}</div>` : ''}
-        <div class="party-address">${nl2br(d.billTo.address || 'Address on file')}</div>
+        <div class="party-address">${nl2br(d.billTo.address || [d.billTo.city, d.billTo.state, d.billTo.country].filter(Boolean).join(', ') || 'Address on file')}</div>
         ${d.billTo.gstin ? `<div class="party-gst font-mono"><b>GSTIN:</b> ${esc(d.billTo.gstin)}</div>` : ''}
+        ${d.billTo.trn ? `<div class="party-gst font-mono"><b>TRN:</b> ${esc(d.billTo.trn)}</div>` : ''}
+        ${d.billTo.taxId && !d.billTo.gstin && !d.billTo.trn ? `<div class="party-gst font-mono"><b>Tax ID:</b> ${esc(d.billTo.taxId)}</div>` : ''}
         ${d.billTo.phone || d.billTo.email ? `<div class="party-contact">${[d.billTo.phone, d.billTo.email].filter(Boolean).map(esc).join(' · ')}</div>` : ''}
       </div>
 
@@ -371,8 +516,9 @@ export async function renderDocumentHtml(d: DocInput): Promise<string> {
         <div class="meta-card">
           <div class="card-tag">Ship To / Delivery Destination</div>
           <div class="party-name">${esc(d.shipTo.name)}</div>
-          <div class="party-address">${nl2br(d.shipTo.address || 'Same as billing address')}</div>
+          <div class="party-address">${nl2br(d.shipTo.address || [d.shipTo.city, d.shipTo.state, d.shipTo.country].filter(Boolean).join(', ') || 'Same as billing address')}</div>
           ${d.shipTo.gstin ? `<div class="party-gst font-mono"><b>GSTIN:</b> ${esc(d.shipTo.gstin)}</div>` : ''}
+          ${d.shipTo.trn ? `<div class="party-gst font-mono"><b>TRN:</b> ${esc(d.shipTo.trn)}</div>` : ''}
         </div>
       `
           : ''
@@ -406,7 +552,7 @@ export async function renderDocumentHtml(d: DocInput): Promise<string> {
               <th class="r col-disc">Disc.</th>
               <th class="r col-taxable">Taxable</th>
               ${taxHeaders}
-              <th class="r col-total">Total (₹)</th>
+              <th class="r col-total">Total (${esc(sym)})</th>
             </tr>
           </thead>
           <tbody>
@@ -420,14 +566,16 @@ export async function renderDocumentHtml(d: DocInput): Promise<string> {
         <div class="words-container">
           <div class="words-box">
             <div class="words-tag">Total Amount in Words</div>
-            <div class="words-text">${esc(t.inWords)}</div>
+            <div class="words-text">${esc(words)}</div>
           </div>
+
+          ${inrConversionHtml}
 
           <div class="compliance-badge">
             <span class="compliance-shield">🛡️</span>
             <div>
               <div class="compliance-title">HopEpitome Verified &amp; Digitally Authenticated</div>
-              <div class="compliance-sub">GST Compliant electronic documentation generated under legal standards.</div>
+              <div class="compliance-sub">Electronic commercial documentation generated under legal compliance standards.</div>
             </div>
           </div>
         </div>
@@ -440,14 +588,14 @@ export async function renderDocumentHtml(d: DocInput): Promise<string> {
                   ([label, amount, cls]) => `
                 <tr class="${cls || ''}">
                   <td class="tot-label">${esc(label)}</td>
-                  <td class="tot-val font-mono">${amount < 0 ? `-₹${m(Math.abs(amount))}` : `₹${m(amount)}`}</td>
+                  <td class="tot-val font-mono">${amount < 0 ? `-${fmt(Math.abs(amount))}` : fmt(amount)}</td>
                 </tr>
               `
                 )
                 .join('')}
               <tr class="grand-total-row">
                 <td class="grand-label">Grand Total</td>
-                <td class="grand-val font-mono">₹${m(t.grandTotal)}</td>
+                <td class="grand-val font-mono">${fmt(t.grandTotal)}</td>
               </tr>
             </tbody>
           </table>

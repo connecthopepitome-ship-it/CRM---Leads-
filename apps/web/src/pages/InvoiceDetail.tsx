@@ -96,6 +96,7 @@ export default function InvoiceDetail() {
   const cust = useQuery({ queryKey: ['customer', q.data?.customerId], queryFn: () => get<any>(`/customers/${q.data!.customerId}`), enabled: !!q.data?.customerId });
   const templates = useOptions('messageTemplates');
   const [cn, setCn] = useState(false);
+  const [cnInitialReissue, setCnInitialReissue] = useState(false);
   const issue = useAction(() => api(`/invoices/${id}/issue`, { method: 'POST', body: {}, headers: { 'If-Match': String(q.data?.version) } }), [['invoice', id], ['sales']], () => toast('Invoice issued'));
   const convert = useAction(() => post<{ id: string }>(`/invoices/${id}/convert`), [['invoice', id]], (r) => nav(`/sales/invoices/${r.id}`));
 
@@ -234,7 +235,10 @@ export default function InvoiceDetail() {
             </LinkButton>
           )}
           {!draft && i.type !== 'proforma' && i.status !== 'cancelled' && perm('invoice:credit') && (
-            <Button variant="ghost" onClick={() => setCn(true)}>Credit note</Button>
+            <>
+              <Button variant="ghost" onClick={() => { setCnInitialReissue(false); setCn(true); }}>Credit note</Button>
+              <Button variant="secondary" onClick={() => { setCnInitialReissue(true); setCn(true); }}>Cancel & Reissue</Button>
+            </>
           )}
           {i.type === 'proforma' && i.status === 'issued' && perm('invoice:create') && (
             <Button variant="secondary" busy={convert.isPending} onClick={() => convert.mutate(undefined)}>
@@ -297,14 +301,24 @@ export default function InvoiceDetail() {
         )}
 
         {!draft && i.type !== 'proforma' && i.status !== 'cancelled' && perm('invoice:credit') && (
-          <Button
-            variant="ghost"
-            onClick={() => setCn(true)}
-            className="w-full justify-center text-xs py-2 text-[#778477] border border-[#DCE7D9] bg-white hover:bg-[#F5F9F2]"
-          >
-            <RotateCcw size={13} className="mr-1.5" />
-            <span>Issue Credit Note</span>
-          </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => { setCnInitialReissue(false); setCn(true); }}
+              className="w-full justify-center text-xs py-2 text-[#778477] border border-[#DCE7D9] bg-white hover:bg-[#F5F9F2]"
+            >
+              <RotateCcw size={13} className="mr-1.5" />
+              <span>Credit Note</span>
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => { setCnInitialReissue(true); setCn(true); }}
+              className="w-full justify-center text-xs py-2 text-indigo-700 border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 font-semibold"
+            >
+              <RotateCcw size={13} className="mr-1.5" />
+              <span>Cancel & Reissue</span>
+            </Button>
+          </div>
         )}
 
         {draft && perm('invoice:issue') && (
@@ -679,34 +693,73 @@ export default function InvoiceDetail() {
         </div>
       </div>
 
-      {cn && <CreditNoteDialog invoice={i} onClose={() => setCn(false)} />}
+      {cn && <CreditNoteDialog invoice={i} initialReissue={cnInitialReissue} onClose={() => setCn(false)} />}
     </div>
   );
 }
 
-function CreditNoteDialog({ invoice, onClose }: { invoice: Invoice; onClose(): void }) {
+function CreditNoteDialog({ invoice, initialReissue = false, onClose }: { invoice: Invoice; initialReissue?: boolean; onClose(): void }) {
+  const nav = useNavigate();
   const [mode, setMode] = useState<'full' | 'amount'>('full');
   const [amount, setAmount] = useState('');
-  const [reason, setReason] = useState('');
-  const m = useAction(() => post(`/invoices/${invoice.id}/credit-notes`, { mode, amount: mode === 'amount' ? Math.round(Number(amount) * 100) : undefined, reason }), [['invoice', invoice.id]], () => {
-    toast('Credit note issued');
-    onClose();
-  });
+  const [reason, setReason] = useState(initialReissue ? 'Cancelled for correction and re-issue' : '');
+  const [reissue, setReissue] = useState(initialReissue);
+  const [busy, setBusy] = useState(false);
+
+  const handleSubmit = async () => {
+    setBusy(true);
+    try {
+      await post(`/invoices/${invoice.id}/credit-notes`, {
+        mode,
+        amount: mode === 'amount' ? Math.round(Number(amount) * 100) : undefined,
+        reason: reason.trim() || (reissue ? 'Cancelled for correction and re-issue' : 'Credit adjustment'),
+      });
+      if (reissue && mode === 'full') {
+        const cust = await get<any>(`/customers/${invoice.customerId}`).catch(() => null);
+        const newInv = await post<{ id: string }>('/invoices', {
+          customerId: invoice.customerId,
+          lines: (invoice.lines || []).map((l: any) => ({
+            description: l.description,
+            hsn: l.hsn,
+            qty: l.qty,
+            rate: l.rate,
+            discountPct: l.discountPct,
+            taxCategory: l.taxCategory,
+            taxRate: l.taxRate,
+          })),
+          currency: cust?.currency || invoice.currency,
+          placeOfSupply: cust?.state || (cust?.country === 'IN' ? '29' : '96'),
+          type: 'tax_invoice',
+        });
+        toast('Invoice cancelled and re-issued as draft');
+        onClose();
+        nav(`/sales/invoices/${newInv.id}`);
+      } else {
+        toast('Credit note issued');
+        onClose();
+      }
+    } catch (e) {
+      errorToast(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Dialog
       open
       onClose={onClose}
-      title="Issue a Credit Note"
+      title={reissue ? "Cancel with Credit Note & Reissue" : "Issue a Credit Note"}
       footer={
         <div className="flex items-center gap-2">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
           <Button
             variant="danger"
             disabled={!reason.trim() || (mode === 'amount' && !(Number(amount) > 0))}
-            busy={m.isPending}
-            onClick={() => m.mutate(undefined)}
+            busy={busy}
+            onClick={() => void handleSubmit()}
           >
-            Issue Credit Note
+            {reissue ? 'Cancel & Reissue Draft' : 'Issue Credit Note'}
           </Button>
         </div>
       }
@@ -715,7 +768,11 @@ function CreditNoteDialog({ invoice, onClose }: { invoice: Invoice; onClose(): v
         <SelectField
           label="Credit Option"
           value={mode}
-          onChange={(e) => setMode(e.target.value as 'full')}
+          onChange={(e) => {
+            const val = e.target.value as 'full' | 'amount';
+            setMode(val);
+            if (val === 'amount') setReissue(false);
+          }}
           options={[
             { value: 'full', label: `Full invoice (cancels it) — ${money((invoice.totals?.grandTotal ?? 0) - (invoice.credited ?? 0))}` },
             { value: 'amount', label: 'An amount' },
@@ -734,6 +791,25 @@ function CreditNoteDialog({ invoice, onClose }: { invoice: Invoice; onClose(): v
               />
             )}
           </Field>
+        )}
+        {mode === 'full' && (
+          <label className="flex items-start gap-2 text-xs font-semibold text-slate-700 cursor-pointer pt-1 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+            <input
+              type="checkbox"
+              checked={reissue}
+              onChange={(e) => {
+                setReissue(e.target.checked);
+                if (e.target.checked && !reason) {
+                  setReason('Cancelled for correction and re-issue');
+                }
+              }}
+              className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+            />
+            <div className="text-[11px] leading-tight text-slate-600 font-normal">
+              <span className="font-semibold text-slate-900 block">Cancel with credit note & reissue</span>
+              Automatically clone to a new draft invoice with the customer's latest tax/currency settings.
+            </div>
+          </label>
         )}
         <Field label="Reason" required>
           {(fid) => (

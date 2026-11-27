@@ -10,6 +10,7 @@ import { useAction } from '../features/hooks';
 import { Files } from '../features/Files';
 import { Badge, Banner, Button, Card, Dialog, EmptyState, ErrorState, KeyValue, LinkButton, PageHeader, Skeleton, StatTile, Table, Tabs, TextField, cx, toast } from '../ui';
 import { errorToast } from '../ui/toast';
+import { Copy, Globe } from 'lucide-react';
 
 interface C360 {
   customer: { id: string; code: string; displayName: string; legalName: string | null; gstin: string | null; tags: string[]; ownerId: string; createdAt: string; contacts?: Contact[] };
@@ -73,13 +74,58 @@ export default function Customer360() {
     .filter((f: any) => f.recordType === 'customer' && f.recordId === customer.id && f.status !== 'completed' && !f.completed && f.dueAt)
     .sort((a: any, b: any) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())[0];
   const nextFuOverdue = nextFu && new Date(nextFu.dueAt).getTime() < Date.now();
+  const custData = (detail.data || customer) as any;
+  const country = custData.country || 'IN';
+  const currency = custData.currency || (country === 'IN' ? 'INR' : 'USD');
+  const taxStatus = custData.taxStatus || (custData.tax_status ? custData.tax_status : (country !== 'IN' ? 'overseas' : (custData.gstin ? 'registered' : 'unregistered')));
+  const taxId = custData.taxId || custData.tax_id || custData.gstin || null;
+
   return (
     <>
-      <PageHeader back="/customers" title={customer.displayName} subtitle={`${customer.code}${customer.gstin ? ` · GSTIN ${customer.gstin}` : ''}`} actions={<>
-        {can('quote', 'create') && <LinkButton to={`/sales/quotes/new?partyType=customer&partyId=${customer.id}`} variant="primary">New quote</LinkButton>}
-        {can('payment', 'create') && <LinkButton to={`/sales/payments/new?customerId=${customer.id}`}>Record payment</LinkButton>}
-        <Button variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => setConfirmDelete(true)}>Delete</Button>
-      </>} />
+      <PageHeader
+        back="/customers"
+        title={customer.displayName}
+        subtitle={
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            <span className="font-mono text-slate-500 font-medium">{customer.code}</span>
+            <span className="rounded bg-slate-100 text-slate-700 px-2 py-0.5 text-xs font-semibold flex items-center gap-1 border border-slate-200">
+              <Globe size={11} className="text-slate-500" />
+              {country} ({currency})
+            </span>
+            <span
+              className={cx(
+                'rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider',
+                taxStatus === 'registered' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : '',
+                taxStatus === 'unregistered' || taxStatus === 'consumer' ? 'bg-slate-100 text-slate-700 border border-slate-200' : '',
+                (taxStatus === 'overseas' || taxStatus === 'sez_unit' || taxStatus === 'sez_developer') ? 'bg-blue-100 text-blue-800 border border-blue-200' : ''
+              )}
+            >
+              {taxStatus === 'sez_unit' ? 'SEZ Unit' : taxStatus === 'sez_developer' ? 'SEZ Dev' : taxStatus}
+            </span>
+            {taxId && (
+              <span className="inline-flex items-center gap-1 rounded bg-slate-50 px-2 py-0.5 text-xs font-mono font-medium text-slate-800 border border-slate-200">
+                <span>{taxId}</span>
+                <button
+                  type="button"
+                  title="Copy Tax ID"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(taxId);
+                    toast('Tax ID copied');
+                  }}
+                  className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                >
+                  <Copy size={11} />
+                </button>
+              </span>
+            )}
+          </div>
+        }
+        actions={<>
+          {can('quote', 'create') && <LinkButton to={`/sales/quotes/new?partyType=customer&partyId=${customer.id}`} variant="primary">New quote</LinkButton>}
+          {can('payment', 'create') && <LinkButton to={`/sales/payments/new?customerId=${customer.id}`}>Record payment</LinkButton>}
+          <Button variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => setConfirmDelete(true)}>Delete</Button>
+        </>}
+      />
       {nextFu && (
         <div className="mb-3">
           <Banner tone={nextFuOverdue ? 'danger' : 'info'}>

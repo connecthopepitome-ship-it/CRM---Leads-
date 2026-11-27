@@ -2,6 +2,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { formatCurrency } from '@ss/domain';
 import { get, post } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { date, money } from '../lib/format';
@@ -25,6 +26,10 @@ interface Payment {
   advance: number;
   reversal: { reason: string; byName: string; at: string } | null;
   version: number;
+  currency?: string;
+  exchangeRate?: number;
+  baseAmount?: number;
+  exchangeDiff?: number;
 }
 
 export default function PaymentDetail() {
@@ -69,9 +74,33 @@ export default function PaymentDetail() {
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
         <DocPreview type="receipt" id={id} version={p.version} />
         <Card title="Details">
-          <KeyValue items={[['Amount', money(p.amount ?? 0)], ['TDS', p.tdsAmount ? money(p.tdsAmount) : '—'], ['Date', date(p.date)], ['Mode', (p.mode ?? 'NEFT').toUpperCase()], ['Reference', p.reference], ['Advance kept', p.advance ? money(p.advance) : '—']]} />
+          <KeyValue
+            items={[
+              ['Amount', formatCurrency(p.amount ?? 0, p.currency || 'INR')],
+              ...(p.currency && p.currency !== 'INR' && p.exchangeRate && p.exchangeRate !== 1
+                ? ([['Base Amount (INR)', `₹${((p.baseAmount ?? Math.round((p.amount ?? 0) * p.exchangeRate)) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Rate: ${p.exchangeRate})`]] as [string, any][])
+                : []),
+              ...(p.exchangeDiff
+                ? ([['Realized Forex Diff', `${p.exchangeDiff > 0 ? '+' : ''}₹${(p.exchangeDiff / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`]] as [string, any][])
+                : []),
+              ['TDS', p.tdsAmount ? formatCurrency(p.tdsAmount, p.currency || 'INR') : '—'],
+              ['Date', date(p.date)],
+              ['Mode', (p.mode ?? 'NEFT').toUpperCase()],
+              ['Reference', p.reference],
+              ['Advance kept', p.advance ? formatCurrency(p.advance, p.currency || 'INR') : '—'],
+            ]}
+          />
           <h3 className="mt-3 text-sm font-semibold">Applied to</h3>
-          <ul className="text-sm">{(p.allocations ?? []).map((a) => <li key={a.invoiceId} className="flex justify-between py-1"><Link to={`/sales/invoices/${a.invoiceId}`} className="text-primary hover:underline">{a.number}</Link><span>{money(a.amount)}</span></li>)}</ul>
+          <ul className="text-sm">
+            {(p.allocations ?? []).map((a) => (
+              <li key={a.invoiceId} className="flex justify-between py-1">
+                <Link to={`/sales/invoices/${a.invoiceId}`} className="text-primary hover:underline">
+                  {a.number}
+                </Link>
+                <span>{formatCurrency(a.amount, p.currency || 'INR')}</span>
+              </li>
+            ))}
+          </ul>
         </Card>
       </div>
       <Dialog open={rev} onClose={() => setRev(false)} title="Reverse this payment?" footer={<><Button variant="secondary" onClick={() => setRev(false)}>Cancel</Button><Button variant="danger" disabled={reason.trim().length < 3} busy={reverse.isPending} onClick={() => reverse.mutate(undefined)}>Reverse payment</Button></>}>

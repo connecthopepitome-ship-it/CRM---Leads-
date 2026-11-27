@@ -1,14 +1,14 @@
-/** Customer create (FR-074). Modern balanced color-coded design with dummy presets. */
+/** Customer create (FR-074). Multi-country, multi-currency & tax determination aware. */
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GST_STATES } from '@ss/domain';
+import { GST_STATES, COUNTRIES, CURRENCIES, UAE_EMIRATES, validateGstin, validateTrn } from '@ss/domain';
 import { ApiError, post } from '../lib/api';
 import { useOptions } from '../features/hooks';
-import { Banner, Button, Field, PageHeader, SelectField, TextField, toast } from '../ui';
+import { Banner, Button, PageHeader, SelectField, TextField, toast } from '../ui';
 import { errorToast } from '../ui/toast';
 import { 
-  Building2, CheckCircle2, CreditCard, FileBadge, Mail, MapPin, 
-  Phone, RotateCcw, ShieldCheck, Sparkles, User, UserCheck 
+  Building2, FileBadge, Globe, RotateCcw, 
+  Sparkles, UserCheck 
 } from 'lucide-react';
 
 interface PresetCustomer {
@@ -16,7 +16,10 @@ interface PresetCustomer {
   displayName: string;
   legalName: string;
   type: string;
-  gstin: string;
+  country: string;
+  currency: string;
+  taxStatus: string;
+  taxId: string;
   contactName: string;
   phone: string;
   email: string;
@@ -33,7 +36,10 @@ const PRESET_CUSTOMERS: Record<string, PresetCustomer> = {
     displayName: 'Deshmukh Manufacturing Ltd',
     legalName: 'Deshmukh Precision Engineering Pvt Ltd',
     type: 'business',
-    gstin: '27AABCD1234F1Z5',
+    country: 'IN',
+    currency: 'INR',
+    taxStatus: 'registered',
+    taxId: '27AABCD1234F1Z5',
     contactName: 'Kavita Deshmukh',
     phone: '9822012345',
     email: 'kavita@deshmukh-mfg.com',
@@ -48,7 +54,10 @@ const PRESET_CUSTOMERS: Record<string, PresetCustomer> = {
     displayName: 'Iyer Consulting Services',
     legalName: 'Iyer Cloud Solutions LLP',
     type: 'business',
-    gstin: '29AAACI9876Q1Z2',
+    country: 'IN',
+    currency: 'INR',
+    taxStatus: 'registered',
+    taxId: '29AAACI9876Q1Z2',
     contactName: 'Rajesh Iyer',
     phone: '9448098765',
     email: 'rajesh@iyerconsulting.com',
@@ -58,20 +67,23 @@ const PRESET_CUSTOMERS: Record<string, PresetCustomer> = {
     pincode: '560103',
     creditDays: '15',
   },
-  retail: {
-    label: 'Agro Retail (Mumbai)',
-    displayName: 'Nair Foods & Exports',
-    legalName: 'Nair Agro Food Products Pvt Ltd',
+  uae_client: {
+    label: 'UAE Overseas (Dubai)',
+    displayName: 'Al Manar Global FZE',
+    legalName: 'Al Manar Global Free Zone Enterprise',
     type: 'business',
-    gstin: '27AABCN9988H1Z8',
-    contactName: 'Mohan Nair',
-    phone: '9820055443',
-    email: 'mohan@nairfoods.in',
-    line1: 'APMC Market Yard, Phase II, Sector 19',
-    city: 'Navi Mumbai',
-    stateCode: '27',
-    pincode: '400703',
-    creditDays: '45',
+    country: 'AE',
+    currency: 'AED',
+    taxStatus: 'overseas',
+    taxId: '100456789012345',
+    contactName: 'Tariq Mansoor',
+    phone: '+971 50 123 4567',
+    email: 'tariq@almanarglobal.ae',
+    line1: 'Building A2, DAFZA, Dubai Airport Freezone',
+    city: 'Dubai',
+    stateCode: '',
+    pincode: '',
+    creditDays: '30',
   },
 };
 
@@ -80,18 +92,24 @@ export default function CustomerForm() {
   const territories = useOptions('territories');
   const customerGroups = useOptions('customerGroups');
   const tagsOpts = useOptions('tags');
+  const isDemo = import.meta.env.VITE_DEMO_MODE === 'true';
+
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [f, setF] = useState({
     displayName: '',
     legalName: '',
     type: 'business',
-    gstin: '',
+    country: 'IN',
+    currency: 'INR',
+    taxStatus: 'registered',
+    taxId: '',
     contactName: '',
     phone: '',
     email: '',
     line1: '',
     city: '',
-    stateCode: '29',
+    stateCode: '', // No default 29! State must be explicitly chosen for IN
+    emirate: 'Dubai',
     pincode: '',
     creditDays: '',
     territoryId: '',
@@ -109,6 +127,43 @@ export default function CustomerForm() {
     setF((x) => ({ ...x, [k]: e.target.value }));
   };
 
+  const handleCountryChange = (cCode: string) => {
+    setActivePreset(null);
+    let defCur = 'INR';
+    let taxStat = f.taxStatus;
+    if (cCode === 'AE') {
+      defCur = 'AED';
+      taxStat = 'overseas';
+    } else if (cCode !== 'IN') {
+      defCur = 'USD';
+      taxStat = 'overseas';
+    } else {
+      defCur = 'INR';
+      taxStat = 'registered';
+    }
+    setF((x) => ({
+      ...x,
+      country: cCode,
+      currency: defCur,
+      taxStatus: taxStat,
+      stateCode: cCode === 'IN' ? '' : '',
+    }));
+  };
+
+  const handleTaxIdChange = (val: string) => {
+    setActivePreset(null);
+    const upper = val.toUpperCase().trim();
+    let derivedState = f.stateCode;
+    if (f.country === 'IN' && upper.length >= 2 && /^\d{2}$/.test(upper.slice(0, 2))) {
+      derivedState = upper.slice(0, 2);
+    }
+    setF((x) => ({
+      ...x,
+      taxId: upper,
+      stateCode: derivedState,
+    }));
+  };
+
   const applyPreset = (key: string) => {
     const p = PRESET_CUSTOMERS[key];
     if (!p) return;
@@ -117,13 +172,17 @@ export default function CustomerForm() {
       displayName: p.displayName,
       legalName: p.legalName,
       type: p.type,
-      gstin: p.gstin,
+      country: p.country,
+      currency: p.currency,
+      taxStatus: p.taxStatus,
+      taxId: p.taxId,
       contactName: p.contactName,
       phone: p.phone,
       email: p.email,
       line1: p.line1,
       city: p.city,
       stateCode: p.stateCode,
+      emirate: p.country === 'AE' ? 'Dubai' : '',
       pincode: p.pincode,
       creditDays: p.creditDays,
       territoryId: territories.data?.[0]?.id || '',
@@ -131,7 +190,7 @@ export default function CustomerForm() {
     });
     setDup(false);
     setError(null);
-    toast(`Loaded test customer preset: ${p.label}`);
+    toast(`Loaded preset: ${p.label}`);
   };
 
   const resetForm = () => {
@@ -140,13 +199,17 @@ export default function CustomerForm() {
       displayName: '',
       legalName: '',
       type: 'business',
-      gstin: '',
+      country: 'IN',
+      currency: 'INR',
+      taxStatus: 'registered',
+      taxId: '',
       contactName: '',
       phone: '',
       email: '',
       line1: '',
       city: '',
-      stateCode: '29',
+      stateCode: '',
+      emirate: 'Dubai',
       pincode: '',
       creditDays: '',
       territoryId: '',
@@ -162,19 +225,56 @@ export default function CustomerForm() {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    setFieldErrors({});
+
+    // Client-side validations
+    if (f.country === 'IN') {
+      if (!f.stateCode) {
+        setBusy(false);
+        setFieldErrors({ stateCode: 'State is required for Indian customers' });
+        setError('Please select a state for this Indian customer.');
+        return;
+      }
+      if (f.taxStatus === 'registered' && f.taxId) {
+        const gstinErr = validateGstin(f.taxId, f.stateCode);
+        if (gstinErr) {
+          setBusy(false);
+          setFieldErrors({ taxId: `Invalid GSTIN: ${gstinErr}` });
+          setError(`Invalid GSTIN: ${gstinErr}`);
+          return;
+        }
+      }
+    } else if (f.country === 'AE') {
+      if (f.taxId && !validateTrn(f.taxId)) {
+        setBusy(false);
+        setFieldErrors({ taxId: 'UAE TRN must be exactly 15 digits starting with 100' });
+        setError('UAE TRN must be exactly 15 digits starting with 100');
+        return;
+      }
+    }
+
     try {
+      const stateName = f.country === 'IN' && f.stateCode ? GST_STATES[f.stateCode] : (f.country === 'AE' ? f.emirate : f.city);
       const r = await post<{ id: string }>('/customers', {
         displayName: f.displayName,
         legalName: f.legalName || null,
         type: f.type,
-        gstin: f.gstin || null,
+        country: f.country,
+        currency: f.currency,
+        taxStatus: f.taxStatus,
+        taxId: f.taxId || null,
+        gstin: f.country === 'IN' ? f.taxId || null : null,
+        phone: f.phone || null,
+        email: f.email || null,
+        state: stateName || null,
+        stateCode: f.stateCode || (f.country !== 'IN' ? '96' : null),
         creditDays: f.creditDays ? Number(f.creditDays) : undefined,
         territoryId: f.territoryId || null,
         customerGroupId: f.customerGroupId || null,
         tags: selectedTags,
         confirmDuplicate,
         contact: f.contactName ? { name: f.contactName, phone: f.phone || null, email: f.email || null } : undefined,
-        billing: f.line1 ? { line1: f.line1, city: f.city, stateCode: f.stateCode, pincode: f.pincode || null } : undefined,
+        billing: f.line1 ? { line1: f.line1, city: f.city, state: stateName, stateCode: f.stateCode, pincode: f.pincode || null } : undefined,
       });
       if (!r?.id) throw new Error('Server returned invalid customer record without an ID');
       toast('Customer created successfully');
@@ -201,35 +301,36 @@ export default function CustomerForm() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <PageHeader back="/customers" title="New Customer" />
 
-        {/* Dummy Data Test Presets Toolbar */}
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#CFE5CB] bg-[#E3EFDF] p-1.5 shadow-2xs">
-          <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-[#233D2D]">
-            <Sparkles className="h-3.5 w-3.5 text-[#3D7952]" />
-            Test Data:
-          </span>
-          {Object.entries(PRESET_CUSTOMERS).map(([k, p]) => (
+        {isDemo && (
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#CFE5CB] bg-[#E3EFDF] p-1.5 shadow-2xs">
+            <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-[#233D2D]">
+              <Sparkles className="h-3.5 w-3.5 text-[#3D7952]" />
+              Presets:
+            </span>
+            {Object.entries(PRESET_CUSTOMERS).map(([k, p]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => applyPreset(k)}
+                className={`rounded-xl px-3 py-1.5 text-xs font-medium transition-all ${
+                  activePreset === k
+                    ? 'bg-[#233D2D] text-white shadow-xs font-bold'
+                    : 'bg-white text-[#202820] hover:bg-[#F5F9F2] shadow-2xs'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
             <button
-              key={k}
               type="button"
-              onClick={() => applyPreset(k)}
-              className={`rounded-xl px-3 py-1.5 text-xs font-medium transition-all ${
-                activePreset === k
-                  ? 'bg-[#233D2D] text-white shadow-xs font-bold'
-                  : 'bg-white text-[#202820] hover:bg-[#F5F9F2] shadow-2xs'
-              }`}
+              onClick={resetForm}
+              title="Reset form"
+              className="rounded-xl border border-[#DCE7D9] bg-white p-1.5 text-[#778477] hover:text-rose-600 transition-all shadow-2xs"
             >
-              {p.label}
+              <RotateCcw className="h-3.5 w-3.5" />
             </button>
-          ))}
-          <button
-            type="button"
-            onClick={resetForm}
-            title="Reset form"
-            className="rounded-xl border border-[#DCE7D9] bg-white p-1.5 text-[#778477] hover:text-rose-600 transition-all shadow-2xs"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-          </button>
-        </div>
+          </div>
+        )}
       </div>
 
       <form onSubmit={(e) => void submit(e)} className="space-y-6" noValidate>
@@ -244,20 +345,20 @@ export default function CustomerForm() {
               </Button>
             }
           >
-            A customer record with this GSTIN already exists in the system.
+            A customer record with this Tax ID / GSTIN already exists in the system.
           </Banner>
         )}
 
-        {/* SECTION 1: Business Identity & Registration (Blue Accent) */}
+        {/* SECTION 1: Country, Currency & Organization Identity */}
         <div className="overflow-hidden rounded-2xl border border-slate-200/90 border-l-4 border-l-blue-600 bg-white shadow-xs">
           <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-5 py-3.5">
             <div className="flex items-center gap-3">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-700 shadow-2xs">
-                <Building2 className="h-4 w-4" />
+                <Globe className="h-4 w-4" />
               </span>
               <div>
-                <h3 className="text-sm font-bold text-slate-900 tracking-tight">Organization & Business Identity</h3>
-                <p className="text-xs text-slate-500">Official company display title and registered legal name.</p>
+                <h3 className="text-sm font-bold text-slate-900 tracking-tight">Country & Business Identity</h3>
+                <p className="text-xs text-slate-500">Jurisdiction, billing currency and legal organization details.</p>
               </div>
             </div>
             <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200/60">
@@ -266,6 +367,20 @@ export default function CustomerForm() {
           </div>
 
           <div className="grid gap-4 p-5 sm:grid-cols-2">
+            <SelectField
+              label="Country"
+              value={f.country}
+              onChange={(e) => handleCountryChange(e.target.value)}
+              options={COUNTRIES.map((c) => ({ value: c.code, label: `${c.name} (${c.code})` }))}
+            />
+
+            <SelectField
+              label="Billing Currency"
+              value={f.currency}
+              onChange={(e) => setF((x) => ({ ...x, currency: e.target.value }))}
+              options={Object.entries(CURRENCIES).map(([code, cur]) => ({ value: code, label: `${code} — ${cur.name} (${cur.symbol})` }))}
+            />
+
             <TextField
               label="Display Name (Brand / Common Name)"
               required
@@ -277,12 +392,14 @@ export default function CustomerForm() {
               error={fieldErrors.displayName}
               placeholder="e.g. Deshmukh Manufacturing Ltd"
             />
+
             <TextField
-              label="Legal Name (For Invoices & E-way bills)"
+              label="Legal Name (For Invoices & Tax Documents)"
               value={f.legalName}
               onChange={set('legalName')}
               placeholder="e.g. Deshmukh Precision Engineering Pvt Ltd"
             />
+
             <SelectField
               label="Entity Type"
               value={f.type}
@@ -293,18 +410,35 @@ export default function CustomerForm() {
                 { value: 'government', label: 'Government / Public Sector' },
               ]}
             />
+
+            <SelectField
+              label="Tax Registration Status"
+              value={f.taxStatus}
+              onChange={(e) => setF((x) => ({ ...x, taxStatus: e.target.value }))}
+              options={[
+                { value: 'registered', label: 'Registered (Tax Registered Entity)' },
+                { value: 'unregistered', label: 'Unregistered Business' },
+                { value: 'consumer', label: 'Consumer (B2C)' },
+                { value: 'sez_unit', label: 'SEZ Unit (Special Economic Zone)' },
+                { value: 'sez_developer', label: 'SEZ Developer' },
+                { value: 'overseas', label: 'Overseas (Non-resident)' },
+                { value: 'un_body', label: 'UN Body / Embassy' },
+              ]}
+            />
+
             <TextField
-              label="GSTIN (15-Character Tax ID)"
-              value={f.gstin}
-              onChange={(e) => setF((x) => ({ ...x, gstin: e.target.value.toUpperCase() }))}
-              placeholder="e.g. 27AABCD1234F1Z5"
-              maxLength={15}
-              hint="State digits are checked against place of supply."
+              label={f.country === 'IN' ? 'GSTIN (15-Character India Tax ID)' : f.country === 'AE' ? 'UAE TRN (15 Digits)' : 'Tax ID / VAT Registration No.'}
+              value={f.taxId}
+              onChange={(e) => handleTaxIdChange(e.target.value)}
+              placeholder={f.country === 'IN' ? 'e.g. 27AABCD1234F1Z5' : f.country === 'AE' ? '100XXXXXXXXXXXX' : 'e.g. US123456789'}
+              maxLength={f.country === 'IN' ? 15 : f.country === 'AE' ? 15 : 30}
+              error={fieldErrors.taxId}
+              hint={f.country === 'IN' ? 'State digits auto-select state and are verified by checksum.' : undefined}
             />
           </div>
         </div>
 
-        {/* SECTION 2: Key Contact Person (Emerald Accent) */}
+        {/* SECTION 2: Key Contact Person */}
         <div className="overflow-hidden rounded-2xl border border-slate-200/90 border-l-4 border-l-emerald-600 bg-white shadow-xs">
           <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-5 py-3.5">
             <div className="flex items-center gap-3">
@@ -313,7 +447,7 @@ export default function CustomerForm() {
               </span>
               <div>
                 <h3 className="text-sm font-bold text-slate-900 tracking-tight">Primary Contact Person</h3>
-                <p className="text-xs text-slate-500">Main executive for quotes, billing inquiries, and order notices.</p>
+                <p className="text-xs text-slate-500">Main executive for quotes, invoices, and payment follow-ups.</p>
               </div>
             </div>
           </div>
@@ -330,19 +464,19 @@ export default function CustomerForm() {
               type="tel"
               value={f.phone}
               onChange={set('phone')}
-              placeholder="e.g. 98220 12345"
+              placeholder="e.g. +91 98220 12345"
             />
             <TextField
               label="Email Address"
               type="email"
               value={f.email}
               onChange={set('email')}
-              placeholder="e.g. kavita@deshmukh-mfg.com"
+              placeholder="e.g. contact@client.com"
             />
           </div>
         </div>
 
-        {/* SECTION 3: Tax Location & Commercial Terms (Purple Accent) */}
+        {/* SECTION 3: Tax Location & Commercial Terms */}
         <div className="overflow-hidden rounded-2xl border border-slate-200/90 border-l-4 border-l-purple-600 bg-white shadow-xs">
           <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-5 py-3.5">
             <div className="flex items-center gap-3">
@@ -350,15 +484,10 @@ export default function CustomerForm() {
                 <FileBadge className="h-4 w-4" />
               </span>
               <div>
-                <h3 className="text-sm font-bold text-slate-900 tracking-tight">Billing Address & Credit Governance</h3>
-                <p className="text-xs text-slate-500">Official billing address for tax compliance and payment credit window.</p>
+                <h3 className="text-sm font-bold text-slate-900 tracking-tight">Billing Address & Place of Supply</h3>
+                <p className="text-xs text-slate-500">Official registered location used to determine tax lines (IGST / CGST+SGST / VAT / Zero-rated).</p>
               </div>
             </div>
-            {f.creditDays && (
-              <span className="rounded-full bg-purple-50 px-2.5 py-0.5 text-xs font-bold text-purple-700 border border-purple-200/60">
-                {f.creditDays} Days Credit
-              </span>
-            )}
           </div>
 
           <div className="grid gap-4 p-5 sm:grid-cols-2">
@@ -367,29 +496,51 @@ export default function CustomerForm() {
                 label="Registered Billing Address"
                 value={f.line1}
                 onChange={set('line1')}
-                placeholder="e.g. Plot 42, MIDC Bhosari Industrial Area"
+                placeholder="Street address, building, floor..."
               />
             </div>
             <TextField
               label="City"
               value={f.city}
               onChange={set('city')}
-              placeholder="e.g. Pune"
+              placeholder="e.g. Mumbai"
             />
-            <SelectField
-              label="State (Place of Supply for GST)"
-              value={f.stateCode}
-              onChange={set('stateCode')}
-              options={Object.entries(GST_STATES).map(([v, l]) => ({ value: v, label: `${l} (${v})` }))}
-            />
+
+            {f.country === 'IN' ? (
+              <SelectField
+                label="State (Place of Supply for GST)"
+                required
+                value={f.stateCode}
+                onChange={set('stateCode')}
+                error={fieldErrors.stateCode}
+                placeholder="-- Select Indian State --"
+                options={Object.entries(GST_STATES).map(([v, l]) => ({ value: v, label: `${l} (${v})` }))}
+              />
+            ) : f.country === 'AE' ? (
+              <SelectField
+                label="Emirate"
+                value={f.emirate}
+                onChange={(e) => setF((x) => ({ ...x, emirate: e.target.value }))}
+                options={UAE_EMIRATES.map((em) => ({ value: em, label: em }))}
+              />
+            ) : (
+              <TextField
+                label="State / Province"
+                value={f.stateCode}
+                onChange={set('stateCode')}
+                placeholder="State or Province code"
+              />
+            )}
+
             <TextField
-              label="Pincode"
+              label={f.country === 'IN' ? 'Pincode' : 'Postal / ZIP Code'}
               inputMode="numeric"
               value={f.pincode}
               onChange={set('pincode')}
-              placeholder="e.g. 411026"
-              maxLength={6}
+              placeholder={f.country === 'IN' ? 'e.g. 400703' : 'e.g. 90210'}
+              maxLength={10}
             />
+
             <TextField
               label="Approved Credit Window (Days)"
               inputMode="numeric"
@@ -398,6 +549,7 @@ export default function CustomerForm() {
               placeholder="e.g. 30"
               hint="Payment due date is calculated automatically from this value."
             />
+
             <SelectField
               label="Customer Group"
               value={f.customerGroupId}
@@ -405,6 +557,7 @@ export default function CustomerForm() {
               placeholder="Select customer group…"
               options={(customerGroups.data ?? []).map((g) => ({ value: g.id, label: g.label }))}
             />
+
             <SelectField
               label="Territory"
               value={f.territoryId}
@@ -412,6 +565,7 @@ export default function CustomerForm() {
               placeholder="Select territory…"
               options={(territories.data ?? []).map((t) => ({ value: t.id, label: t.label }))}
             />
+
             {(tagsOpts.data ?? []).length > 0 && (
               <div className="sm:col-span-2 flex flex-wrap items-center gap-2 pt-1">
                 <span className="text-xs font-semibold text-slate-600">Tags:</span>

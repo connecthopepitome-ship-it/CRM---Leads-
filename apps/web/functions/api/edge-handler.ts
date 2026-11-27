@@ -3,6 +3,20 @@
  * High-performance edge router with Cloudflare D1 durable persistence and in-memory fallback.
  */
 import { renderDocumentHtml, DEFAULT_HOPEPITOME_COMPANY, type DocInput, amountInWords, upiQrSvg } from '@ss/doc-templates';
+import {
+  determineTax,
+  determinePlaceOfSupply,
+  computeDocument,
+  formatCurrency,
+  currencyAmountInWords,
+  CURRENCIES,
+  COUNTRIES,
+  UAE_EMIRATES,
+  validateGstin,
+  validateGstinChecksum,
+  validateTrn,
+  GST_STATES,
+} from '@ss/domain';
 
 export interface D1DatabaseLike {
   prepare(query: string): {
@@ -334,99 +348,96 @@ function calculateLinesAndTotals(
   placeOfSupply = '29',
   companyState = '29',
   gstRegistered = true,
-  overallDiscountPct = 0
+  overallDiscountPct = 0,
+  taxOpts: {
+    company?: any;
+    customer?: any;
+    currency?: string;
+    exchangeRate?: number;
+    baseCurrency?: string;
+    docType?: 'quotation' | 'order' | 'invoice' | 'credit_note';
+    exportOption?: 'lut' | 'igst';
+  } = {}
 ) {
-  const isIntraState = placeOfSupply === companyState;
-  const processedLines: any[] = [];
-  let subTotal = 0;
-  let discountTotal = 0;
-  let taxableTotal = 0;
-  let cgstTotal = 0;
-  let sgstTotal = 0;
-  let igstTotal = 0;
+  const company = taxOpts.company || {
+    stateCode: companyState,
+    taxRegistered: gstRegistered,
+    taxRegime: 'IN_GST',
+  };
+  const customer = taxOpts.customer || {
+    stateCode: placeOfSupply,
+    country: placeOfSupply === '96' ? 'AE' : 'IN',
+  };
 
-  for (let i = 0; i < (submittedLines || []).length; i++) {
-    const l = submittedLines[i];
-    if (l.kind === 'heading') {
-      processedLines.push({
-        id: l.id || `ln-${Date.now()}-${i}`,
-        kind: 'heading',
-        description: l.description || '',
-        qty: 0,
-        rate: 0,
-        amount: 0,
-        total: 0,
-      });
-      continue;
-    }
+  const taxDet = determineTax({
+    company,
+    customer,
+    placeOfSupplyOverride: placeOfSupply,
+    docKind: taxOpts.docType || 'tax_invoice',
+    exportOption: taxOpts.exportOption,
+  });
 
-    const qty = Number(l.qty) || 0;
-    const rate = Number(l.rate) || 0;
-    const discountPct = Number(l.discountPct) || 0;
-    const taxRatePct = Number(l.taxRatePct) || 18;
+  const currency = taxOpts.currency || customer.currency || company.currency || 'INR';
+  const exchangeRate = Number(taxOpts.exchangeRate) || 1;
+  const baseCurrency = taxOpts.baseCurrency || company.currency || 'INR';
 
-    const gross = roundHalfUp(qty * rate);
-    const lineDiscount = discountPct > 0 ? roundHalfUp((gross * discountPct) / 100) : 0;
-    const taxable = gross - lineDiscount;
-
-    let cgst = 0;
-    let sgst = 0;
-    let igst = 0;
-
-    if (gstRegistered && taxRatePct > 0) {
-      if (isIntraState) {
-        cgst = roundHalfUp((taxable * taxRatePct) / 200);
-        sgst = cgst;
-      } else {
-        igst = roundHalfUp((taxable * taxRatePct) / 100);
-      }
-    }
-
-    const total = taxable + cgst + sgst + igst;
-
-    subTotal += gross;
-    discountTotal += lineDiscount;
-    taxableTotal += taxable;
-    cgstTotal += cgst;
-    sgstTotal += sgst;
-    igstTotal += igst;
-
-    processedLines.push({
-      id: l.id || `ln-${Date.now()}-${i}`,
-      kind: 'item',
+  const docTotals = computeDocument(
+    (submittedLines || []).map((l: any, i: number) => ({
+      kind: l.kind || 'item',
       productId: l.productId || null,
       description: l.description || '',
-      qty,
+      qty: Number(l.qty) || 0,
       unit: l.unit || 'Nos',
-      rate,
-      discountPct: discountPct || null,
-      taxRatePct,
+      rate: Number(l.rate) || 0,
+      discountPct: l.discountPct ? Number(l.discountPct) : null,
+      taxRatePct: l.taxRatePct !== undefined ? Number(l.taxRatePct) : 18,
+      taxCategory: l.taxCategory || 'taxable',
       hsnSac: l.hsnSac || null,
-      amount: taxable,
-      total,
-      invoicedQty: l.invoicedQty || 0,
-      pendingQty: l.pendingQty !== undefined ? l.pendingQty : qty,
-    });
-  }
+    })),
+    {
+      treatment: taxDet.treatment,
+      gst: !['bill_of_supply', 'none'].includes(taxDet.treatment),
+      intraState: taxDet.treatment === 'intra_state',
+      currency,
+      exchangeRate,
+      baseCurrency,
+      overallDiscountPct,
+      roundOff: true,
+    }
+  );
 
-  const beforeRound = taxableTotal + cgstTotal + sgstTotal + igstTotal;
-  const roundOff = roundHalfUp(beforeRound / 100) * 100 - beforeRound;
-  const grandTotal = beforeRound + roundOff;
+  const processedLines = docTotals.lines.map((l: any, i: number) => ({
+    id: (submittedLines[i] as any)?.id || `ln-${Date.now()}-${i}`,
+    ...l,
+    amount: l.taxable,
+    invoicedQty: (submittedLines[i] as any)?.invoicedQty || 0,
+    pendingQty: (submittedLines[i] as any)?.pendingQty !== undefined ? (submittedLines[i] as any).pendingQty : l.qty,
+  }));
 
   return {
+    treatment: taxDet.treatment,
+    title: taxDet.documentTitle,
+    lutText: taxDet.mandatoryText,
     lines: processedLines,
-    totals: {
-      subTotal,
-      discountTotal,
-      taxable: taxableTotal,
-      cgst: cgstTotal,
-      sgst: sgstTotal,
-      igst: igstTotal,
-      roundOff,
-      grandTotal,
-      inWords: `${(grandTotal / 100).toLocaleString('en-IN')} rupees only`,
-    },
+    totals: docTotals.totals,
+    baseTotals: docTotals.baseTotals,
   };
+}
+
+async function getCompanySettings(db?: D1DatabaseLike): Promise<any> {
+  let company: any = { ...memoryStore.company };
+  if (db) {
+    try {
+      const row: any = await db.prepare("SELECT value_json FROM settings WHERE key = 'company'").first();
+      if (row?.value_json) {
+        const parsed = JSON.parse(row.value_json);
+        company = { ...company, ...parsed };
+      }
+    } catch (e) {
+      console.error('Failed to load company settings from D1', e);
+    }
+  }
+  return company;
 }
 
 async function getNextCustomerCode(db?: D1DatabaseLike): Promise<string> {
@@ -1491,11 +1502,18 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               displayName: r.display_name,
               legalName: r.legal_name,
               gstin: r.gstin,
+              country: r.country || data.country || 'IN',
+              currency: r.currency || data.currency || (r.country && r.country !== 'IN' ? 'AED' : 'INR'),
+              taxStatus: r.tax_status || data.taxStatus || (r.country && r.country !== 'IN' ? 'overseas' : (r.gstin ? 'registered' : 'unregistered')),
+              taxId: r.tax_id || data.taxId || r.gstin || null,
+              billingAddress: r.billing_address || data.billingAddress || r.address || null,
+              shippingAddress: r.shipping_address || data.shippingAddress || null,
               phone: r.phone,
               email: r.email,
               address: r.address,
               city: r.city,
               state: r.state,
+              stateCode: r.state_code || data.stateCode || (r.gstin ? r.gstin.substring(0, 2) : (r.country === 'IN' ? r.state : '96')),
               contacts: data.contacts || [],
               addresses: data.addresses || [],
               territoryId: data.territoryId || null,
@@ -1545,16 +1563,70 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       const assignedTo = body.assignedTo || body.assigned_to || authUser?.fullName || null;
       const teamId = body.teamId || body.team_id || authUser?.teamId || null;
 
+      const country = String(body.country || 'IN').toUpperCase();
+      const currency = body.currency || (country === 'IN' ? 'INR' : (country === 'AE' ? 'AED' : 'USD'));
+      const taxStatus = body.taxStatus || body.tax_status || (country !== 'IN' ? 'overseas' : (body.gstin ? 'registered' : 'unregistered'));
+      const rawTaxId = (body.taxId || body.tax_id || body.trn || body.gstin || '').trim();
+      const taxId = rawTaxId || null;
+
       const billing = body.billing || (Array.isArray(body.addresses) ? body.addresses[0] : null);
-      const resolvedState = resolveStateAndCode(
-        billing?.state || body.state,
-        billing?.stateCode || body.stateCode,
-        body.gstin
-      );
-      const billingStateCode = resolvedState.code;
-      const state = resolvedState.name;
+      let billingStateCode = '';
+      let state = '';
+      if (country === 'IN') {
+        const resolvedState = resolveStateAndCode(
+          billing?.state || body.state,
+          billing?.stateCode || body.stateCode,
+          taxId
+        );
+        billingStateCode = resolvedState.code;
+        state = resolvedState.name;
+
+        if (['registered', 'sez_unit', 'sez_developer'].includes(taxStatus)) {
+          if (!taxId) {
+            return jsonRes({
+              type: 'https://salesphere.live/errors/validation',
+              title: 'Validation error',
+              status: 422,
+              errors: { gstin: 'GSTIN is required for tax-registered entities in India' },
+            }, 422);
+          }
+          const gstinErr = validateGstin(taxId, billingStateCode);
+          if (gstinErr) {
+            return jsonRes({
+              type: 'https://salesphere.live/errors/validation',
+              title: 'Validation error',
+              status: 422,
+              errors: { gstin: `Invalid GSTIN: ${gstinErr}` },
+            }, 422);
+          }
+        }
+        if (['unregistered', 'consumer'].includes(taxStatus) && taxId) {
+          return jsonRes({
+            type: 'https://salesphere.live/errors/validation',
+            title: 'Validation error',
+            status: 422,
+            errors: { gstin: 'GSTIN must not be provided for unregistered or consumer customers' },
+          }, 422);
+        }
+      } else {
+        billingStateCode = '96'; // Outside India
+        state = billing?.state || body.state || (country === 'AE' ? 'Dubai' : 'Overseas');
+        if (country === 'AE' && taxStatus === 'registered' && taxId) {
+          if (!validateTrn(taxId)) {
+            return jsonRes({
+              type: 'https://salesphere.live/errors/validation',
+              title: 'Validation error',
+              status: 422,
+              errors: { trn: 'UAE TRN must be exactly 15 digits starting with 100' },
+            }, 422);
+          }
+        }
+      }
+
       const city = billing?.city || body.city || '';
-      const address = billing?.line1 ? `${billing.line1}${city ? ', ' + city : ''}` : (body.address || '');
+      const billingAddress = body.billingAddress || body.billing_address || (billing?.line1 ? `${billing.line1}${city ? ', ' + city : ''}` : (body.address || ''));
+      const shippingAddress = body.shippingAddress || body.shipping_address || (body.shippingSameAsBilling !== false ? billingAddress : '');
+      const address = billingAddress;
 
       const phone = body.phone || body.contact?.phone || null;
       const email = body.email || body.contact?.email || null;
@@ -1577,7 +1649,13 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         code,
         displayName,
         legalName: (body.legalName || '').trim() || displayName,
-        gstin: (body.gstin || '').trim() || null,
+        gstin: country === 'IN' ? taxId : null,
+        country,
+        currency,
+        taxStatus,
+        taxId,
+        billingAddress,
+        shippingAddress,
         phone,
         email,
         address,
@@ -1594,8 +1672,8 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       if (db) {
         try {
           await db.prepare(`
-            INSERT INTO customers (id, code, display_name, legal_name, gstin, phone, email, address, city, state, data_json, assigned_user_id, assigned_to, team_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO customers (id, code, display_name, legal_name, gstin, phone, email, address, city, state, country, currency, tax_status, tax_id, billing_address, shipping_address, data_json, assigned_user_id, assigned_to, team_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
             newCust.id,
             newCust.code,
@@ -1607,6 +1685,12 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             newCust.address,
             newCust.city,
             newCust.state,
+            newCust.country,
+            newCust.currency,
+            newCust.taxStatus,
+            newCust.taxId,
+            newCust.billingAddress,
+            newCust.shippingAddress,
             JSON.stringify({
               contacts: newCust.contacts,
               addresses: newCust.addresses,
@@ -1879,6 +1963,12 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               displayName: row.display_name,
               legalName: row.legal_name,
               gstin: row.gstin,
+              country: row.country || data.country || 'IN',
+              currency: row.currency || data.currency || (row.country && row.country !== 'IN' ? 'AED' : 'INR'),
+              taxStatus: row.tax_status || data.taxStatus || (row.country && row.country !== 'IN' ? 'overseas' : (row.gstin ? 'registered' : 'unregistered')),
+              taxId: row.tax_id || data.taxId || row.gstin || null,
+              billingAddress: row.billing_address || data.billingAddress || row.address || null,
+              shippingAddress: row.shipping_address || data.shippingAddress || null,
               phone: row.phone,
               email: row.email,
               address: row.address,
@@ -1968,11 +2058,18 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               displayName: row.display_name,
               legalName: row.legal_name,
               gstin: row.gstin,
+              country: row.country || data.country || 'IN',
+              currency: row.currency || data.currency || (row.country && row.country !== 'IN' ? 'AED' : 'INR'),
+              taxStatus: row.tax_status || data.taxStatus || (row.country && row.country !== 'IN' ? 'overseas' : (row.gstin ? 'registered' : 'unregistered')),
+              taxId: row.tax_id || data.taxId || row.gstin || null,
+              billingAddress: row.billing_address || data.billingAddress || row.address || null,
+              shippingAddress: row.shipping_address || data.shippingAddress || null,
               phone: row.phone,
               email: row.email,
               address: row.address,
               city: row.city,
               state: row.state,
+              stateCode: row.state_code || data.stateCode || (row.gstin ? row.gstin.substring(0, 2) : (row.country === 'IN' ? row.state : '96')),
               contacts: data.contacts || [],
               addresses: data.addresses || [],
               assignedUserId: row.assigned_user_id || null,
@@ -1997,6 +2094,12 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           const displayName = body.displayName !== undefined ? body.displayName : row.display_name;
           const legalName = body.legalName !== undefined ? body.legalName : row.legal_name;
           const gstin = body.gstin !== undefined ? body.gstin : row.gstin;
+          const country = body.country !== undefined ? body.country : (row.country || 'IN');
+          const currency = body.currency !== undefined ? body.currency : (row.currency || 'INR');
+          const taxStatus = body.taxStatus !== undefined ? body.taxStatus : (row.tax_status || (country !== 'IN' ? 'overseas' : 'registered'));
+          const taxId = body.taxId !== undefined ? body.taxId : (row.tax_id || gstin);
+          const billingAddress = body.billingAddress !== undefined ? body.billingAddress : (row.billing_address || row.address);
+          const shippingAddress = body.shippingAddress !== undefined ? body.shippingAddress : row.shipping_address;
           const phone = body.phone !== undefined ? body.phone : (body.contact?.phone !== undefined ? body.contact.phone : row.phone);
           const email = body.email !== undefined ? body.email : (body.contact?.email !== undefined ? body.contact.email : row.email);
           const assignedUserId = body.assignedUserId !== undefined ? (body.assignedUserId || null) : (body.assigned_user_id !== undefined ? (body.assigned_user_id || null) : row.assigned_user_id);
@@ -2009,7 +2112,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
 
           let existingData: any = {};
           try { existingData = row.data_json ? JSON.parse(row.data_json) : {}; } catch {}
-          let address = row.address;
+          let address = billingAddress || row.address;
           let city = row.city;
           let state = row.state;
           if (body.contacts) existingData.contacts = body.contacts;
@@ -2037,8 +2140,8 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           }
 
           await db.prepare(`
-            UPDATE customers SET display_name = ?, legal_name = ?, gstin = ?, phone = ?, email = ?, address = ?, city = ?, state = ?, assigned_user_id = ?, assigned_to = ?, team_id = ?, data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
-          `).bind(displayName, legalName, gstin, phone, email, address, city, state, assignedUserId, assignedTo, teamId, JSON.stringify(existingData), id).run();
+            UPDATE customers SET display_name = ?, legal_name = ?, gstin = ?, phone = ?, email = ?, address = ?, city = ?, state = ?, country = ?, currency = ?, tax_status = ?, tax_id = ?, billing_address = ?, shipping_address = ?, assigned_user_id = ?, assigned_to = ?, team_id = ?, data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+          `).bind(displayName, legalName, gstin, phone, email, address, city, state, country, currency, taxStatus, taxId, billingAddress, shippingAddress, assignedUserId, assignedTo, teamId, JSON.stringify(existingData), id).run();
         } catch (e) {
           console.error('D1 customer patch error:', e);
         }
@@ -2079,6 +2182,9 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
                 version: r.version,
                 orderId: d.orderId || null,
                 isLatest: true,
+                currency: r.currency || d.currency || 'INR',
+                exchangeRate: r.exchange_rate || d.exchangeRate || 1,
+                baseGrandTotal: r.base_grand_total || d.baseGrandTotal || r.grand_total,
               };
             });
             return jsonRes({ items, nextCursor: null });
@@ -2103,11 +2209,12 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       }
 
       // Check customer or lead exists and is active (Requirement 1)
+      let customerCust: any = null;
       if (pType === 'customer') {
         let cust: any = null;
         if (db) {
           try {
-            const { results } = await db.prepare('SELECT id, display_name, legal_name FROM customers WHERE id = ? AND deleted_at IS NULL').bind(pId).all();
+            const { results } = await db.prepare('SELECT id, display_name, legal_name, country, currency, tax_status, tax_id, state, gstin FROM customers WHERE id = ? AND deleted_at IS NULL').bind(pId).all();
             cust = results?.[0];
           } catch (e) {}
         }
@@ -2115,6 +2222,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         if (!cust) {
           return jsonRes({ type: 'https://salesphere.live/errors/not-found', title: 'Customer not found', status: 422, code: 'CUSTOMER_NOT_FOUND', message: 'Customer not found' }, 422);
         }
+        customerCust = cust;
         if (!resolvedPartyName || resolvedPartyName === 'Customer') {
           resolvedPartyName = cust.display_name || cust.legal_name || cust.displayName || cust.legalName || 'Customer';
         }
@@ -2162,20 +2270,45 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       }
       if (!resolvedPartyName) resolvedPartyName = 'Customer';
 
-      // Calculate lines and totals with accurate paise math
-      const placeOfSupply = body.placeOfSupply || '29';
-      const companyState = '29';
-      const gstRegistered = true;
-      const { lines: processedLines, totals: calculatedTotals } = calculateLinesAndTotals(
+      const company = await getCompanySettings(db);
+      const custStateCode = customerCust?.state ? resolveStateAndCode(customerCust.state, null, customerCust.gstin).code : undefined;
+      const posResult = determinePlaceOfSupply(
+        { country: company.country || 'IN', stateCode: company.stateCode || '29' },
+        { country: customerCust?.country || 'IN', stateCode: custStateCode },
+        body.placeOfSupply
+      );
+      const placeOfSupply = posResult.code;
+
+      const docCurrency = body.currency || customerCust?.currency || company.baseCurrency || company.currency || (company.country === 'AE' ? 'AED' : 'INR');
+      const exchangeRate = Number(body.exchangeRate) || 1;
+      const baseCurrency = company.baseCurrency || company.currency || (company.country === 'AE' ? 'AED' : 'INR');
+
+      const computed = calculateLinesAndTotals(
         body.lines || [],
         placeOfSupply,
-        companyState,
-        gstRegistered,
-        Number(body.overallDiscountPct) || 0
+        company.stateCode || (company.country === 'AE' ? '00' : '29'),
+        company.taxRegistered ?? true,
+        Number(body.overallDiscountPct) || 0,
+        {
+          company,
+          customer: customerCust ? {
+            country: customerCust.country,
+            stateCode: custStateCode,
+            taxStatus: customerCust.tax_status,
+            taxId: customerCust.tax_id || customerCust.gstin,
+            currency: customerCust.currency,
+          } : undefined,
+          currency: docCurrency,
+          exchangeRate,
+          baseCurrency,
+          docType: 'quotation',
+          exportOption: body.exportOption || (company.lutNumber ? 'lut' : 'igst'),
+        }
       );
 
       const nextNum = await getNextDocNumber(db, 'quotes', 'display_number', 'QT/26-27/');
       const newQtId = 'qt-' + Date.now();
+      const baseGrandTotal = computed.baseTotals?.grandTotal ?? Math.round(computed.totals.grandTotal * exchangeRate);
       const newQt = {
         id: newQtId,
         displayNumber: nextNum,
@@ -2185,9 +2318,16 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         status: 'draft',
         date: new Date().toISOString().slice(0, 10),
         validUntil: new Date(Date.now() + (Number(body.validDays) || 15) * 86400000).toISOString().slice(0, 10),
-        totals: calculatedTotals,
-        lines: processedLines,
+        totals: computed.totals,
+        baseTotals: computed.baseTotals,
+        lines: computed.lines,
         placeOfSupply,
+        currency: docCurrency,
+        exchangeRate,
+        baseGrandTotal,
+        title: computed.title,
+        treatment: computed.treatment,
+        lutText: computed.lutText,
         pdf: { status: 'ready' },
         revisions: [],
         version: 1,
@@ -2197,8 +2337,8 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       if (db) {
         try {
           await db.prepare(`
-            INSERT INTO quotes (id, display_number, party_type, party_id, party_name, status, date, valid_until, grand_total, sub_total, taxable, cgst, sgst, igst, data_json, created_at, updated_at, version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO quotes (id, display_number, party_type, party_id, party_name, status, date, valid_until, grand_total, sub_total, taxable, cgst, sgst, igst, data_json, created_at, updated_at, version, currency, exchange_rate, base_grand_total)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
             newQt.id,
             newQt.displayNumber,
@@ -2214,10 +2354,24 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             newQt.totals.cgst,
             newQt.totals.sgst,
             newQt.totals.igst,
-            JSON.stringify({ lines: newQt.lines, totals: newQt.totals, placeOfSupply: newQt.placeOfSupply, revisions: newQt.revisions }),
+            JSON.stringify({
+              lines: newQt.lines,
+              totals: newQt.totals,
+              baseTotals: newQt.baseTotals,
+              placeOfSupply: newQt.placeOfSupply,
+              revisions: newQt.revisions,
+              currency: docCurrency,
+              exchangeRate,
+              treatment: computed.treatment,
+              title: computed.title,
+              lutText: computed.lutText,
+            }),
             new Date().toISOString(),
             new Date().toISOString(),
-            1
+            1,
+            docCurrency,
+            exchangeRate,
+            baseGrandTotal
           ).run();
         } catch (e) {
           console.error('D1 quotes insert error:', e);
@@ -2347,6 +2501,9 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             status: r.status,
             totals: d.totals || { grandTotal: r.grand_total },
             lines: d.lines || [],
+            currency: r.currency || d.currency || 'INR',
+            exchangeRate: r.exchange_rate || d.exchangeRate || 1,
+            baseGrandTotal: r.base_grand_total || d.baseGrandTotal || r.grand_total,
           };
         }
       } catch (e) {}
@@ -2403,6 +2560,10 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       pendingQty: l.qty,
     }));
 
+    const docCurrency = qt.currency || 'INR';
+    const exchangeRate = Number(qt.exchangeRate) || 1;
+    const baseGrandTotal = Number(qt.baseGrandTotal) || Number(qt.totals?.grandTotal || 0);
+
     const newOrd = {
       id: newOrdId,
       number: nextOrdNum,
@@ -2414,6 +2575,9 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       expectedDelivery: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
       totals: qt.totals,
       lines: processedLines,
+      currency: docCurrency,
+      exchangeRate,
+      baseGrandTotal,
       invoices: [],
       version: 1,
     };
@@ -2421,8 +2585,8 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (db) {
       try {
         await db.prepare(`
-          INSERT INTO orders (id, number, customer_id, customer_name, quote_id, status, date, expected_delivery, grand_total, data_json, created_at, updated_at, version)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO orders (id, number, customer_id, customer_name, quote_id, status, date, expected_delivery, grand_total, data_json, created_at, updated_at, version, currency, exchange_rate, base_grand_total)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           newOrd.id,
           newOrd.number,
@@ -2433,10 +2597,13 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           newOrd.date,
           newOrd.expectedDelivery,
           newOrd.totals?.grandTotal || 0,
-          JSON.stringify({ lines: newOrd.lines, totals: newOrd.totals, invoices: newOrd.invoices }),
+          JSON.stringify({ lines: newOrd.lines, totals: newOrd.totals, invoices: newOrd.invoices, currency: docCurrency, exchangeRate }),
           new Date().toISOString(),
           new Date().toISOString(),
-          1
+          1,
+          docCurrency,
+          exchangeRate,
+          baseGrandTotal
         ).run();
 
         await db.prepare("UPDATE quotes SET status = 'ordered', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(qid).run();
@@ -2474,6 +2641,11 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             status: r.status,
             totals: d.totals || { grandTotal: r.grand_total },
             lines: d.lines || [],
+            currency: r.currency || d.currency || 'INR',
+            exchangeRate: r.exchange_rate || d.exchangeRate || 1,
+            baseGrandTotal: r.base_grand_total || d.baseGrandTotal || r.grand_total,
+            treatment: d.treatment,
+            title: d.title,
           };
         }
       } catch (e) {}
@@ -2541,6 +2713,11 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       amount: l.taxable ?? l.amount ?? (l.qty * l.rate),
     }));
 
+    const docCurrency = qt.currency || 'INR';
+    const exchangeRate = Number(qt.exchangeRate) || 1;
+    const baseGrandTotal = Number(qt.baseGrandTotal) || Number(grandTotal * exchangeRate);
+    const invType = qt.title ? (qt.treatment === 'export_lut' || qt.treatment === 'export_igst' ? 'export_invoice' : (qt.treatment === 'bill_of_supply' ? 'bill_of_supply' : 'tax_invoice')) : 'tax_invoice';
+
     const newInv = {
       id: newInvId,
       number: nextInvNum,
@@ -2548,7 +2725,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       customerName,
       quoteId: qid,
       orderId: null,
-      type: 'tax_invoice',
+      type: invType,
       status: 'issued',
       date: new Date().toISOString().slice(0, 10),
       dueDate: new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10),
@@ -2557,6 +2734,9 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       balanceDue: grandTotal,
       totals: qt.totals,
       lines: processedLines,
+      currency: docCurrency,
+      exchangeRate,
+      baseGrandTotal,
       pdf: { status: 'ready' },
       creditNotes: [],
       version: 1,
@@ -2565,8 +2745,8 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (db) {
       try {
         await db.prepare(`
-          INSERT INTO invoices (id, number, customer_id, customer_name, order_id, quote_id, type, status, date, due_date, grand_total, paid_amount, credited_amount, balance_due, data_json, created_at, updated_at, version)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO invoices (id, number, customer_id, customer_name, order_id, quote_id, type, status, date, due_date, grand_total, paid_amount, credited_amount, balance_due, data_json, created_at, updated_at, version, currency, exchange_rate, base_grand_total)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           newInv.id,
           newInv.number,
@@ -2582,10 +2762,13 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           0,
           0,
           grandTotal,
-          JSON.stringify({ lines: newInv.lines, totals: newInv.totals, quoteId: qid, quoteNumber: qt.displayNumber }),
+          JSON.stringify({ lines: newInv.lines, totals: newInv.totals, quoteId: qid, quoteNumber: qt.displayNumber, currency: docCurrency, exchangeRate, treatment: qt.treatment, title: qt.title }),
           new Date().toISOString(),
           new Date().toISOString(),
-          1
+          1,
+          docCurrency,
+          exchangeRate,
+          baseGrandTotal
         ).run();
 
         // Update quote status to invoiced and save invoiceId/invoiceNumber in data_json
@@ -2716,6 +2899,9 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
                 lines: d.lines || [],
                 invoices: d.invoices || [],
                 version: r.version,
+                currency: r.currency || d.currency || 'INR',
+                exchangeRate: r.exchange_rate || d.exchangeRate || 1,
+                baseGrandTotal: r.base_grand_total || d.baseGrandTotal || r.grand_total,
               };
             });
             return jsonRes({ items, nextCursor: null });
@@ -2746,22 +2932,12 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         }, 422);
       }
 
-      // Always compute lines and totals so amounts, taxable, totals are never null
-      const computed = calculateLinesAndTotals(lines, '29');
-      const totals = body.totals?.grandTotal ? body.totals : computed.totals;
-      const processedLines = computed.lines.map((l: any) => ({
-        ...l,
-        amount: l.taxable ?? l.amount ?? (l.qty * l.rate),
-        invoicedQty: 0,
-        pendingQty: l.qty,
-      }));
-
       // Check customer exists and is active (Requirement 1)
       let customerName = (body.customerName || '').trim();
       let validCust: any = null;
       if (db) {
         try {
-          const { results } = await db.prepare('SELECT display_name, legal_name FROM customers WHERE id = ? AND deleted_at IS NULL').bind(customerId).all();
+          const { results } = await db.prepare('SELECT display_name, legal_name, country, currency, tax_status, tax_id, state, gstin FROM customers WHERE id = ? AND deleted_at IS NULL').bind(customerId).all();
           validCust = results?.[0];
         } catch (e) {}
       }
@@ -2773,8 +2949,54 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         customerName = validCust.display_name || validCust.legal_name || validCust.displayName || validCust.legalName || 'Customer';
       }
 
+      const company = await getCompanySettings(db);
+      const custStateCode = validCust?.state ? resolveStateAndCode(validCust.state, null, validCust.gstin).code : undefined;
+      const posResult = determinePlaceOfSupply(
+        { country: company.country || 'IN', stateCode: company.stateCode || '29' },
+        { country: validCust?.country || 'IN', stateCode: custStateCode },
+        body.placeOfSupply
+      );
+      const placeOfSupply = posResult.code;
+
+      const docCurrency = body.currency || validCust?.currency || company.baseCurrency || company.currency || (company.country === 'AE' ? 'AED' : 'INR');
+      const exchangeRate = Number(body.exchangeRate) || 1;
+      const baseCurrency = company.baseCurrency || company.currency || (company.country === 'AE' ? 'AED' : 'INR');
+
+      const computed = calculateLinesAndTotals(
+        lines,
+        placeOfSupply,
+        company.stateCode || (company.country === 'AE' ? '00' : '29'),
+        company.taxRegistered ?? true,
+        Number(body.overallDiscountPct) || 0,
+        {
+          company,
+          customer: validCust ? {
+            country: validCust.country,
+            stateCode: custStateCode,
+            taxStatus: validCust.tax_status,
+            taxId: validCust.tax_id || validCust.gstin,
+            currency: validCust.currency,
+          } : undefined,
+          currency: docCurrency,
+          exchangeRate,
+          baseCurrency,
+          docType: 'order',
+          exportOption: body.exportOption || (company.lutNumber ? 'lut' : 'igst'),
+        }
+      );
+
+      const totals = computed.totals;
+      const processedLines = computed.lines.map((l: any) => ({
+        ...l,
+        amount: l.taxable ?? l.amount ?? (l.qty * l.rate),
+        invoicedQty: 0,
+        pendingQty: l.qty,
+      }));
+
       const nextOrdNum = await getNextDocNumber(db, 'orders', 'number', 'SO/26-27/');
       const newOrdId = 'ord-' + Date.now();
+      const baseGrandTotal = computed.baseTotals?.grandTotal ?? Math.round(totals.grandTotal * exchangeRate);
+
       const newOrd = {
         id: newOrdId,
         number: nextOrdNum,
@@ -2785,7 +3007,11 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         date: body.date || new Date().toISOString().slice(0, 10),
         expectedDelivery: body.expectedDelivery || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
         totals,
+        baseTotals: computed.baseTotals,
         lines: processedLines,
+        currency: docCurrency,
+        exchangeRate,
+        baseGrandTotal,
         invoices: [],
         version: 1,
       };
@@ -2793,8 +3019,8 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       if (db) {
         try {
           await db.prepare(`
-            INSERT INTO orders (id, number, customer_id, customer_name, quote_id, status, date, expected_delivery, grand_total, data_json, created_at, updated_at, version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO orders (id, number, customer_id, customer_name, quote_id, status, date, expected_delivery, grand_total, data_json, created_at, updated_at, version, currency, exchange_rate, base_grand_total)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
             newOrd.id,
             newOrd.number,
@@ -2805,10 +3031,13 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             newOrd.date,
             newOrd.expectedDelivery,
             newOrd.totals.grandTotal,
-            JSON.stringify({ lines: newOrd.lines, totals: newOrd.totals, invoices: newOrd.invoices }),
+            JSON.stringify({ lines: newOrd.lines, totals: newOrd.totals, invoices: newOrd.invoices, currency: docCurrency, exchangeRate }),
             new Date().toISOString(),
             new Date().toISOString(),
-            1
+            1,
+            docCurrency,
+            exchangeRate,
+            baseGrandTotal
           ).run();
         } catch (e) {
           console.error('D1 orders insert error:', e);
@@ -2839,6 +3068,9 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             status: r.status,
             totals: d.totals || { grandTotal: r.grand_total },
             lines: d.lines || [],
+            currency: r.currency || d.currency || 'INR',
+            exchangeRate: r.exchange_rate || d.exchangeRate || 1,
+            baseGrandTotal: r.base_grand_total || d.baseGrandTotal || r.grand_total,
           };
         }
       } catch (e) {}
@@ -2888,6 +3120,10 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       } catch (e) {}
     }
 
+    const docCurrency = ord.currency || 'INR';
+    const exchangeRate = Number(ord.exchangeRate) || 1;
+    const baseGrandTotal = Number(ord.baseGrandTotal) || Number(grandTotal * exchangeRate);
+
     const newInv = {
       id: newInvId,
       number: nextInvNum,
@@ -2906,6 +3142,9 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       balanceDue: grandTotal,
       totals: ord.totals,
       lines: updatedLines,
+      currency: docCurrency,
+      exchangeRate,
+      baseGrandTotal,
       pdf: { status: 'ready' },
       creditNotes: [],
       version: 1,
@@ -2914,8 +3153,8 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (db) {
       try {
         await db.prepare(`
-          INSERT INTO invoices (id, number, customer_id, customer_name, order_id, quote_id, type, status, date, due_date, grand_total, paid_amount, credited_amount, balance_due, data_json, created_at, updated_at, version)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO invoices (id, number, customer_id, customer_name, order_id, quote_id, type, status, date, due_date, grand_total, paid_amount, credited_amount, balance_due, data_json, created_at, updated_at, version, currency, exchange_rate, base_grand_total)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           newInv.id,
           newInv.number,
@@ -2931,10 +3170,13 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           0,
           0,
           grandTotal,
-          JSON.stringify({ lines: newInv.lines, totals: newInv.totals, orderId: oid, orderNumber: ord.number, quoteId: linkedQuoteId, quoteNumber: linkedQuoteNumber }),
+          JSON.stringify({ lines: newInv.lines, totals: newInv.totals, orderId: oid, orderNumber: ord.number, quoteId: linkedQuoteId, quoteNumber: linkedQuoteNumber, currency: docCurrency, exchangeRate }),
           new Date().toISOString(),
           new Date().toISOString(),
-          1
+          1,
+          docCurrency,
+          exchangeRate,
+          baseGrandTotal
         ).run();
 
         // Update order status to invoiced and save updated lines & invoices
@@ -3157,6 +3399,9 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
                 pdf: { status: 'ready' },
                 creditNotes: [],
                 version: r.version,
+                currency: r.currency || d.currency || 'INR',
+                exchangeRate: r.exchange_rate || d.exchangeRate || 1,
+                baseGrandTotal: r.base_grand_total || d.baseGrandTotal || r.grand_total,
               };
             });
             return jsonRes({ items: invItems, nextCursor: null });
@@ -3235,7 +3480,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       let custStateCode = '29';
       if (db) {
         try {
-          const { results } = await db.prepare('SELECT display_name, legal_name, state, gstin, data_json FROM customers WHERE id = ? AND deleted_at IS NULL').bind(customerId).all();
+          const { results } = await db.prepare('SELECT display_name, legal_name, country, currency, tax_status, tax_id, state, gstin, data_json FROM customers WHERE id = ? AND deleted_at IS NULL').bind(customerId).all();
           validInvCust = results?.[0];
           if (validInvCust) {
             const cd = validInvCust.data_json ? JSON.parse(validInvCust.data_json) : {};
@@ -3252,13 +3497,48 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         customerName = validInvCust.display_name || validInvCust.legal_name || validInvCust.displayName || validInvCust.legalName || 'Customer';
       }
 
-      // Compute GST and totals based on customer's state (Place of Supply)
-      const computed = calculateLinesAndTotals(validLines, custStateCode);
+      const company = await getCompanySettings(db);
+      const posResult = determinePlaceOfSupply(
+        { country: company.country || 'IN', stateCode: company.stateCode || '29' },
+        { country: validInvCust?.country || 'IN', stateCode: custStateCode },
+        body.placeOfSupply
+      );
+      const placeOfSupply = posResult.code;
+
+      const docCurrency = body.currency || validInvCust?.currency || company.baseCurrency || company.currency || (company.country === 'AE' ? 'AED' : 'INR');
+      const exchangeRate = Number(body.exchangeRate) || 1;
+      const baseCurrency = company.baseCurrency || company.currency || (company.country === 'AE' ? 'AED' : 'INR');
+
+      // Compute GST and totals based on tax determination engine
+      const computed = calculateLinesAndTotals(
+        validLines,
+        placeOfSupply,
+        company.stateCode || (company.country === 'AE' ? '00' : '29'),
+        company.taxRegistered ?? true,
+        Number(body.overallDiscountPct) || 0,
+        {
+          company,
+          customer: validInvCust ? {
+            country: validInvCust.country,
+            stateCode: custStateCode,
+            taxStatus: validInvCust.tax_status,
+            taxId: validInvCust.tax_id || validInvCust.gstin,
+            currency: validInvCust.currency,
+          } : undefined,
+          currency: docCurrency,
+          exchangeRate,
+          baseCurrency,
+          docType: 'invoice',
+          exportOption: body.exportOption || (company.lutNumber ? 'lut' : 'igst'),
+        }
+      );
       totals = computed.totals;
 
       const nextInvNum = await getNextDocNumber(db, 'invoices', 'number', 'INV/26-27/');
       const newInvId = 'inv-' + Date.now();
       const grandTotal = totals.grandTotal || 0;
+      const baseGrandTotal = computed.baseTotals?.grandTotal ?? Math.round(grandTotal * exchangeRate);
+      const invType = computed.title ? (computed.treatment === 'export_lut' || computed.treatment === 'export_igst' ? 'export_invoice' : (computed.treatment === 'bill_of_supply' ? 'bill_of_supply' : 'tax_invoice')) : (body.type || 'tax_invoice');
 
       const newInv = {
         id: newInvId,
@@ -3266,7 +3546,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         customerId,
         customerName,
         orderId: body.orderId || null,
-        type: body.type || 'tax_invoice',
+        type: invType,
         status: 'issued',
         date: body.date || new Date().toISOString().slice(0, 10),
         dueDate: body.dueDate || new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10),
@@ -3274,7 +3554,14 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         credited: 0,
         balanceDue: grandTotal,
         totals,
+        baseTotals: computed.baseTotals,
         lines: validLines,
+        currency: docCurrency,
+        exchangeRate,
+        baseGrandTotal,
+        title: computed.title,
+        treatment: computed.treatment,
+        lutText: computed.lutText,
         pdf: { status: 'ready' },
         creditNotes: [],
         version: 1,
@@ -3283,8 +3570,8 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       if (db) {
         try {
           await db.prepare(`
-            INSERT INTO invoices (id, number, customer_id, customer_name, order_id, type, status, date, due_date, grand_total, paid_amount, credited_amount, balance_due, data_json, created_at, updated_at, version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO invoices (id, number, customer_id, customer_name, order_id, type, status, date, due_date, grand_total, paid_amount, credited_amount, balance_due, data_json, created_at, updated_at, version, currency, exchange_rate, base_grand_total)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
             newInv.id,
             newInv.number,
@@ -3299,10 +3586,23 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             0,
             0,
             grandTotal,
-            JSON.stringify({ lines: newInv.lines, totals: newInv.totals, orderId: newInv.orderId }),
+            JSON.stringify({
+              lines: newInv.lines,
+              totals: newInv.totals,
+              baseTotals: newInv.baseTotals,
+              orderId: newInv.orderId,
+              currency: docCurrency,
+              exchangeRate,
+              treatment: computed.treatment,
+              title: computed.title,
+              lutText: computed.lutText,
+            }),
             new Date().toISOString(),
             new Date().toISOString(),
-            1
+            1,
+            docCurrency,
+            exchangeRate,
+            baseGrandTotal
           ).run();
         } catch (e) {
           console.error('D1 invoices insert error:', e);
@@ -3801,6 +4101,10 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
                 })),
                 reversal: d.reversal || null,
                 version: 1,
+                currency: r.currency || d.currency || 'INR',
+                exchangeRate: r.exchange_rate || d.exchangeRate || 1,
+                baseAmount: r.base_amount || d.baseAmount || r.amount,
+                exchangeDiff: r.exchange_diff || d.exchangeDiff || 0,
               };
             })
           );
@@ -3844,7 +4148,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         }
       }
 
-      const custRow: any = await db.prepare('SELECT display_name, legal_name FROM customers WHERE id = ?').bind(customerId).first();
+      const custRow: any = await db.prepare('SELECT display_name, legal_name, currency FROM customers WHERE id = ?').bind(customerId).first();
       const customerName = custRow?.display_name || custRow?.legal_name || body.customerName || 'Customer';
 
       const nextPayNum = await getNextDocNumber(db, 'payments', 'receipt_no', 'RCT/26-27/');
@@ -3903,13 +4207,27 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         advance = Math.max(0, rem);
       }
 
+      const payCurrency = body.currency || custRow?.currency || 'INR';
+      const payExchangeRate = Number(body.exchangeRate) || 1;
+      const baseAmount = Math.round(grossAmount * payExchangeRate);
+
+      let totalExchangeDiff = 0;
+      const invDetailsMap: Record<string, any> = {};
+      for (const alloc of plannedAllocations) {
+        const invRow: any = await db.prepare('SELECT grand_total, paid_amount, credited_amount, number, currency, exchange_rate, base_grand_total FROM invoices WHERE id = ?').bind(alloc.invoiceId).first();
+        invDetailsMap[alloc.invoiceId] = invRow;
+        const invRate = Number(invRow?.exchange_rate) || 1;
+        const allocDiff = Math.round(alloc.amount * (payExchangeRate - invRate));
+        totalExchangeDiff += allocDiff;
+      }
+
       const batchQueries: any[] = [];
       const timestamp = new Date().toISOString();
 
       batchQueries.push(
         db.prepare(`
-          INSERT INTO payments (id, receipt_no, customer_id, customer_name, date, amount, tds_amount, mode, reference, status, advance, data_json, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+          INSERT INTO payments (id, receipt_no, customer_id, customer_name, date, amount, tds_amount, mode, reference, status, advance, data_json, created_at, updated_at, currency, exchange_rate, base_amount, exchange_diff)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           payId,
           nextPayNum,
@@ -3927,9 +4245,15 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             note: body.note || null,
             utrOverrideReason: body.utrOverrideReason || null,
             netAmount,
+            currency: payCurrency,
+            exchangeRate: payExchangeRate,
           }),
           timestamp,
-          timestamp
+          timestamp,
+          payCurrency,
+          payExchangeRate,
+          baseAmount,
+          totalExchangeDiff
         )
       );
 
@@ -3943,7 +4267,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           `).bind(allocId, payId, alloc.invoiceId, alloc.amount, timestamp, timestamp)
         );
 
-        const invRow: any = await db.prepare('SELECT grand_total, paid_amount, credited_amount, number FROM invoices WHERE id = ?').bind(alloc.invoiceId).first();
+        const invRow: any = invDetailsMap[alloc.invoiceId] || await db.prepare('SELECT grand_total, paid_amount, credited_amount, number FROM invoices WHERE id = ?').bind(alloc.invoiceId).first();
         const curPaid = Number(invRow?.paid_amount ?? 0);
         const curCredited = Number(invRow?.credited_amount ?? 0);
         const grandTot = Number(invRow?.grand_total ?? 0);
@@ -3966,7 +4290,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           `).bind(
             'act-inv-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
             alloc.invoiceId,
-            `Payment applied: ${nextPayNum} (₹${(alloc.amount / 100).toFixed(2)})`,
+            `Payment applied: ${nextPayNum} (${formatCurrency(alloc.amount, payCurrency)})`,
             `Applied to invoice ${invRow?.number || alloc.invoiceId}`,
             authUser?.fullName || 'Owner Admin'
           )
@@ -3986,8 +4310,8 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         `).bind(
           'act-cust-' + Date.now(),
           customerId,
-          `Payment received: ${nextPayNum} (₹${(grossAmount / 100).toFixed(2)})`,
-          `Mode: ${mode.toUpperCase()}${reference ? ' · Ref: ' + reference : ''}${advance > 0 ? ' · Advance: ₹' + (advance / 100).toFixed(2) : ''}`,
+          `Payment received: ${nextPayNum} (${formatCurrency(grossAmount, payCurrency)})`,
+          `Mode: ${mode.toUpperCase()}${reference ? ' · Ref: ' + reference : ''}${advance > 0 ? ' · Advance: ' + formatCurrency(advance, payCurrency) : ''}`,
           authUser?.fullName || 'Owner Admin'
         )
       );
@@ -4001,7 +4325,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           timestamp,
           authUser?.fullName || 'Owner Admin',
           payId,
-          JSON.stringify({ receiptNo: nextPayNum, customerId, amount: grossAmount, mode, reference, advance, allocations: clientAllocations })
+          JSON.stringify({ receiptNo: nextPayNum, customerId, amount: grossAmount, mode, reference, advance, allocations: clientAllocations, currency: payCurrency, exchangeRate: payExchangeRate, exchangeDiff: totalExchangeDiff })
         )
       );
 
@@ -4020,6 +4344,10 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         status: 'active',
         advance,
         allocations: clientAllocations,
+        currency: payCurrency,
+        exchangeRate: payExchangeRate,
+        baseAmount,
+        exchangeDiff: totalExchangeDiff,
       }, 201);
     }
   }
@@ -4063,6 +4391,10 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
             })),
             reversal: d.reversal || null,
             version: 1,
+            currency: r.currency || d.currency || 'INR',
+            exchangeRate: r.exchange_rate || d.exchangeRate || 1,
+            baseAmount: r.base_amount || d.baseAmount || r.amount,
+            exchangeDiff: r.exchange_diff || d.exchangeDiff || 0,
           });
         }
       } catch (e) {
@@ -4199,6 +4531,8 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
   async function buildDocInput(type: string, id: string): Promise<DocInput | null> {
     const norm = type.toLowerCase().replace(/s$/, '');
 
+    const companySettings: any = await getCompanySettings(db);
+
     if (norm === 'quote' || norm === 'quotation') {
       let q: any = null;
       if (db) {
@@ -4251,7 +4585,7 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
 
       const billToName = q.party_name || q.partyName || partyDetails?.displayName || partyDetails?.display_name || partyDetails?.name || 'Customer';
       const billToCompany = partyDetails?.legalName || partyDetails?.legal_name || partyDetails?.company || null;
-      const billToAddress = partyDetails?.billingAddress || partyDetails?.billing_address || (partyDetails?.city ? `${partyDetails.city}${partyDetails.pincode ? ' - ' + partyDetails.pincode : ''}` : 'Address on file');
+      const billToAddress = partyDetails?.billingAddress || partyDetails?.billing_address || partyDetails?.address || (partyDetails?.city ? `${partyDetails.city}${partyDetails.pincode ? ' - ' + partyDetails.pincode : ''}` : 'Address on file');
       const billToGstin = partyDetails?.gstin || null;
       const billToStateCode = partyDetails?.stateCode || partyDetails?.state_code || '29';
 
@@ -4263,6 +4597,9 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       const igst = Number(totalsObj.igst ?? q.igst ?? 0);
       const subTotal = Number(totalsObj.subTotal ?? q.sub_total ?? taxable);
       const discountTotal = Number(totalsObj.discountTotal ?? 0);
+
+      const docCurrency = q.currency || dataJson.currency || partyDetails?.currency || companySettings.currency || 'INR';
+      const exchangeRate = Number(q.exchange_rate || dataJson.exchangeRate || 1);
 
       if (lines.length === 0) {
         lines.push({
@@ -4284,16 +4621,24 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
 
       const docInput: DocInput = {
         kind: 'quotation',
+        title: q.title || dataJson.title || 'QUOTATION',
+        currency: docCurrency,
+        exchangeRate,
+        baseCurrency: companySettings.currency || 'INR',
+        baseTotals: dataJson.baseTotals || null,
+        taxTreatment: dataJson.treatment,
+        lutText: dataJson.lutText,
         number: q.display_number || q.displayNumber || q.number || 'QT/26-27/0001',
         date: q.date || new Date().toISOString().split('T')[0],
         validUntil: q.valid_until || q.validUntil || null,
         placeOfSupply: billToStateCode,
-        company: DEFAULT_HOPEPITOME_COMPANY,
+        company: companySettings,
         billTo: {
           name: billToName,
           company: billToCompany,
           address: billToAddress,
           gstin: billToGstin,
+          trn: partyDetails?.tax_id || null,
           stateCode: billToStateCode,
           phone: partyDetails?.phone || null,
           email: partyDetails?.email || null,
@@ -4308,11 +4653,11 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           igst,
           roundOff: 0,
           grandTotal,
-          inWords: amountInWords(grandTotal),
+          inWords: currencyAmountInWords(grandTotal, docCurrency),
         },
         refs: [
           { label: 'Scope', value: 'Enterprise Digital System' },
-          { label: 'Engagement Lead', value: 'HopEpitome Strategics' },
+          { label: 'Engagement Lead', value: companySettings.legalName || 'HopEpitome Strategics' },
         ],
         terms: '1. Quotation validity: 30 calendar days from issue date.\n2. Commercial terms: 50% mobilization advance upon order confirmation, 50% upon milestone completion.\n3. GST and statutory levies applied as per prevailing Indian tax regulations.\n4. Governed by HopEpitome professional services terms and Bangalore jurisdiction.',
         notes: 'HopEpitome Strategics: We build digital systems for businesses and distinctive professional identities for people.',
@@ -4513,18 +4858,40 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       if (inv.order_id || inv.orderId) refs.push({ label: 'Sales Order', value: inv.order_number || inv.orderId });
       if (inv.quote_id || inv.quoteId) refs.push({ label: 'Quotation', value: inv.quote_number || inv.quoteId });
 
+      let docTitle = inv.title || dataJson.title;
+      if (!docTitle) {
+        if (inv.type === 'bill_of_supply' || !companySettings.taxRegistered) {
+          docTitle = 'BILL OF SUPPLY';
+        } else if (dataJson.treatment === 'export_lut') {
+          docTitle = 'EXPORT INVOICE';
+        } else {
+          docTitle = 'TAX INVOICE';
+        }
+      }
+
+      const invCurrency = inv.currency || dataJson.currency || customer?.currency || companySettings.currency || 'INR';
+      const invExchangeRate = Number(inv.exchange_rate || dataJson.exchangeRate || 1);
+
       const docInput: DocInput = {
-        kind: inv.type === 'bill_of_supply' ? 'bill_of_supply' : 'tax_invoice',
+        kind: inv.type === 'bill_of_supply' || !companySettings.taxRegistered ? 'bill_of_supply' : 'tax_invoice',
+        title: docTitle,
+        currency: invCurrency,
+        exchangeRate: invExchangeRate,
+        baseCurrency: companySettings.currency || 'INR',
+        baseTotals: dataJson.baseTotals || null,
+        taxTreatment: dataJson.treatment,
+        lutText: dataJson.lutText,
         number: inv.number || 'INV/26-27/0001',
         date: inv.date || new Date().toISOString().split('T')[0],
         dueDate: inv.due_date || inv.dueDate || null,
         placeOfSupply: billToStateCode,
-        company: DEFAULT_HOPEPITOME_COMPANY,
+        company: companySettings,
         billTo: {
           name: billToName,
           company: billToCompany,
           address: billToAddress,
           gstin: billToGstin,
+          trn: customer?.tax_id || null,
           stateCode: billToStateCode,
           phone: customer?.phone || null,
           email: customer?.email || null,
@@ -4539,17 +4906,20 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           igst,
           roundOff: 0,
           grandTotal,
-          inWords: amountInWords(grandTotal),
+          inWords: currencyAmountInWords(grandTotal, invCurrency),
         },
         refs,
         payment: await (async () => {
-          let vpa = DEFAULT_HOPEPITOME_COMPANY.upiId || 'service@hopepitome';
-          let payeeName = DEFAULT_HOPEPITOME_COMPANY.legalName;
-          let bank = {
-            name: DEFAULT_HOPEPITOME_COMPANY.bankName || 'HDFC Bank Ltd',
-            accountNo: DEFAULT_HOPEPITOME_COMPANY.bankAccount || '50200088991122',
-            ifsc: DEFAULT_HOPEPITOME_COMPANY.bankIfsc || 'HDFC0001234',
-            branch: DEFAULT_HOPEPITOME_COMPANY.bankBranch || 'Outer Ring Road, Bengaluru',
+          let vpa = companySettings.upiId || 'service@hopepitome';
+          let payeeName = companySettings.legalName || 'HopEpitome Strategics';
+          let bank: any = {
+            name: companySettings.bankName || 'HDFC Bank Ltd',
+            accountNo: companySettings.bankAccount || '50200088991122',
+            ifsc: companySettings.bankIfsc || 'HDFC0001234',
+            branch: companySettings.bankBranch || 'Outer Ring Road, Bengaluru',
+            iban: companySettings.bankIban || null,
+            swift: companySettings.bankSwift || null,
+            currency: companySettings.bankCurrency || invCurrency,
           };
           if (db) {
             try {
@@ -4559,29 +4929,45 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
                 if (u.vpa) vpa = u.vpa;
                 if (u.payeeName) payeeName = u.payeeName;
               }
-              const bankRow: any = await db.prepare("SELECT * FROM masters WHERE type = 'bankAccounts' AND status = 'active' ORDER BY is_default DESC, sort_order ASC LIMIT 1").first();
-              if (bankRow?.data_json) {
-                const b = JSON.parse(bankRow.data_json);
-                bank = {
-                  name: b.bankName || bankRow.name || bank.name,
-                  accountNo: b.accountNo || bank.accountNo,
-                  ifsc: b.ifsc || bank.ifsc,
-                  branch: b.branch || bank.branch,
-                };
+              const { results: bankRows } = await db.prepare("SELECT * FROM masters WHERE type = 'bankAccounts' AND status = 'active' ORDER BY is_default DESC, sort_order ASC").all();
+              if (bankRows && bankRows.length > 0) {
+                let matchingBank = bankRows[0];
+                if (invCurrency !== 'INR') {
+                  const match = bankRows.find((r: any) => {
+                    try {
+                      const b = JSON.parse(r.data_json || '{}');
+                      return (b.currency && b.currency.toUpperCase() === invCurrency.toUpperCase()) || b.iban || b.swift;
+                    } catch { return false; }
+                  });
+                  if (match) matchingBank = match;
+                }
+                if (matchingBank?.data_json) {
+                  const b = JSON.parse(matchingBank.data_json);
+                  bank = {
+                    name: b.bankName || matchingBank.name || bank.name,
+                    accountNo: b.accountNo || bank.accountNo,
+                    ifsc: b.ifsc || bank.ifsc,
+                    iban: b.iban || null,
+                    swift: b.swiftBic || b.swift || null,
+                    currency: b.currency || invCurrency,
+                    branch: b.branch || bank.branch,
+                  };
+                }
               }
             } catch {}
           }
           return {
             balance: balanceDue,
             paid: Math.max(0, grandTotal - balanceDue),
+            currency: invCurrency,
             vpa,
             payeeName,
-            showQr: balanceDue > 0,
+            showQr: invCurrency === 'INR' && balanceDue > 0,
             bank,
           };
         })(),
         terms: await (async () => {
-          if (invData.terms || invData.termsText) return invData.terms || invData.termsText;
+          if (dataJson.terms || dataJson.termsText) return dataJson.terms || dataJson.termsText;
           if (db) {
             try {
               const { results } = await db.prepare("SELECT * FROM masters WHERE type = 'termsTemplates' AND status = 'active' ORDER BY is_default DESC, sort_order ASC").all();
@@ -4594,9 +4980,9 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
               }
             } catch {}
           }
-          return '1. Payment is strictly due by the due date specified on this tax invoice.\n2. Please mention invoice number when remitting payments via NEFT/RTGS or UPI.\n3. Remittances payable to "HopEpitome Strategics".\n4. Late payments subject to interest @ 18% p.a. in terms of the MSMED Act.';
+          return '1. Payment is strictly due by the due date specified on this invoice.\n2. Please mention invoice number when remitting payments.\n3. Governed by company standard terms.';
         })(),
-        notes: invData.notes || 'Thank you for your business. HopEpitome Strategics — Elevating Enterprise Excellence.',
+        notes: dataJson.notes || 'Thank you for your business. Electronic invoice generated under regulatory compliance.',
       };
       return docInput;
     }
@@ -4646,6 +5032,9 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
       const sgst = Number(cn.sgst || 0);
       const igst = Number(cn.igst || 0);
 
+      const cnCurrency = cn.currency || invRow?.currency || customer?.currency || companySettings.currency || 'INR';
+      const cnExchangeRate = Number(cn.exchange_rate || invRow?.exchange_rate || 1);
+
       const lines: any[] = [
         {
           kind: 'item',
@@ -4672,15 +5061,20 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
 
       const docInput: DocInput = {
         kind: 'credit_note',
+        title: 'TAX CREDIT NOTE',
+        currency: cnCurrency,
+        exchangeRate: cnExchangeRate,
+        baseCurrency: companySettings.currency || 'INR',
         number: cn.number || 'CN/26-27/0001',
         date: cn.date || new Date().toISOString().split('T')[0],
         placeOfSupply: billToStateCode,
-        company: DEFAULT_HOPEPITOME_COMPANY,
+        company: companySettings,
         billTo: {
           name: billToName,
           company: billToCompany,
           address: billToAddress,
           gstin: billToGstin,
+          trn: customer?.tax_id || null,
           stateCode: billToStateCode,
           phone: customer?.phone || null,
           email: customer?.email || null,
@@ -4695,11 +5089,113 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
           igst,
           roundOff: 0,
           grandTotal,
-          inWords: amountInWords(grandTotal),
+          inWords: currencyAmountInWords(grandTotal, cnCurrency),
         },
         refs,
-        terms: 'Credit Note issued under Section 34 of CGST Act, 2017. Input Tax Credit (ITC) reversal to be effected in accordance with statutory guidelines.',
+        terms: 'Credit Note issued under applicable statutory guidelines. Input Tax Credit (ITC) reversal to be effected in accordance with statutory rules.',
         notes: `Original Invoice: ${cn.invoice_number || 'N/A'} · Reason: ${cn.reason || 'Commercial Adjustment'}`,
+      };
+      return docInput;
+    }
+
+    if (norm === 'receipt' || norm === 'payment') {
+      let pay: any = null;
+      if (db) {
+        try {
+          const { results } = await db.prepare('SELECT * FROM payments WHERE id = ? AND deleted_at IS NULL').bind(id).all();
+          pay = results?.[0];
+        } catch (e) {}
+      }
+      if (!pay) {
+        pay = memoryStore.payments.find((p) => p.id === id);
+      }
+      if (!pay) return null;
+
+      let customer: any = null;
+      if (pay.customer_id || pay.customerId) {
+        const cId = pay.customer_id || pay.customerId;
+        if (db) {
+          try {
+            const { results } = await db.prepare('SELECT * FROM customers WHERE id = ?').bind(cId).all();
+            customer = results?.[0];
+          } catch (e) {}
+        }
+        if (!customer) customer = memoryStore.customers.find((c) => c.id === cId);
+      }
+
+      let dataJson: any = {};
+      try {
+        dataJson = pay.data_json ? JSON.parse(pay.data_json) : {};
+      } catch {}
+
+      const payCurrency = pay.currency || dataJson.currency || customer?.currency || companySettings.currency || 'INR';
+      const payExchangeRate = Number(pay.exchange_rate || dataJson.exchangeRate || 1);
+      const payAmount = Number(pay.amount || 0);
+
+      let allocations: { number: string; amount: number }[] = [];
+      if (Array.isArray(dataJson.allocations) && dataJson.allocations.length > 0) {
+        allocations = dataJson.allocations;
+      } else if (db) {
+        try {
+          const { results: alcRows } = await db.prepare(`
+            SELECT a.amount, i.number
+            FROM allocations a
+            LEFT JOIN invoices i ON a.invoice_id = i.id
+            WHERE a.payment_id = ?
+          `).bind(pay.id).all();
+          allocations = (alcRows || []).map((a: any) => ({
+            number: a.number || 'INV',
+            amount: Number(a.amount || 0),
+          }));
+        } catch {}
+      }
+
+      const billToName = customer?.display_name || customer?.legal_name || pay.customer_name || 'Customer';
+      const billToAddress = customer?.billing_address || customer?.address || (customer?.city ? `${customer.city}${customer.pincode ? ' - ' + customer.pincode : ''}` : 'Address on file');
+
+      const docInput: DocInput = {
+        kind: 'receipt',
+        title: 'PAYMENT RECEIPT',
+        number: pay.receipt_no || pay.id,
+        date: pay.date || new Date().toISOString().split('T')[0],
+        currency: payCurrency,
+        exchangeRate: payExchangeRate,
+        baseCurrency: companySettings.currency || 'INR',
+        company: companySettings,
+        billTo: {
+          name: billToName,
+          company: customer?.legal_name || null,
+          address: billToAddress,
+          gstin: customer?.gstin || null,
+          trn: customer?.tax_id || null,
+          stateCode: customer?.state_code || (customer?.gstin ? customer.gstin.substring(0, 2) : '29'),
+          phone: customer?.phone || null,
+          email: customer?.email || null,
+        },
+        lines: [],
+        totals: {
+          subTotal: 0,
+          discountTotal: 0,
+          taxable: 0,
+          cgst: 0,
+          sgst: 0,
+          igst: 0,
+          roundOff: 0,
+          grandTotal: payAmount,
+          inWords: currencyAmountInWords(payAmount, payCurrency),
+        },
+        receipt: {
+          amount: payAmount,
+          currency: payCurrency,
+          exchangeRate: payExchangeRate,
+          baseAmount: pay.base_amount || Math.round(payAmount * payExchangeRate),
+          mode: pay.mode || 'bank',
+          reference: pay.reference || null,
+          tds: Number(pay.tds_amount || 0),
+          allocations,
+          cancelledReason: pay.status === 'reversed' ? (pay.reversed_reason || 'Reversed') : null,
+        },
+        notes: 'Official electronic payment acknowledgement. Received with thanks.',
       };
       return docInput;
     }
@@ -4717,18 +5213,23 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     if (!docInput) {
       return jsonRes({ type: 'https://salesphere.live/errors/not-found', title: 'Document not found', status: 404, code: 'NOT_FOUND' }, 404);
     }
-    let html = await renderDocumentHtml(docInput);
-    if (action === 'pdf' || url.searchParams.get('print') === 'true') {
-      html += '<script>window.addEventListener("load",()=>setTimeout(()=>window.print(),350));</script>';
+    try {
+      let html = await renderDocumentHtml(docInput);
+      if (action === 'pdf' || url.searchParams.get('print') === 'true') {
+        html += '<script>window.addEventListener("load",()=>setTimeout(()=>window.print(),350));</script>';
+      }
+      return new Response(html, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+        },
+      });
+    } catch (err: any) {
+      console.error('Document render error:', err);
+      return jsonRes({ title: 'Document rendering error', message: err?.message || String(err), status: 500 }, 500);
     }
-    return new Response(html, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-      },
-    });
   }
 
   // 12b. /share-links
@@ -4820,14 +5321,60 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
   }
 
 
-  // 13. /admin/company (Requirement 4)
+  // 13. /admin/company (Requirement 4 & Multi-country Multi-currency)
   if (path === '/admin/company' || path === '/admin/company/') {
     if (method === 'GET') {
-      return jsonRes(memoryStore.company);
+      const comp = await getCompanySettings(db);
+      return jsonRes(comp);
     }
     if (method === 'PUT' || method === 'POST') {
       const body = (await request.json().catch(() => ({}))) as any;
-      Object.assign(memoryStore.company, body);
+      const country = body.country || 'IN';
+      const taxRegistered = body.gstRegistered !== false && body.taxRegistered !== false;
+      const taxRegime = body.taxRegime || (country === 'IN' ? 'IN_GST' : (country === 'AE' ? 'AE_VAT' : 'NONE'));
+      const gstin = (body.gstin || '').trim();
+
+      if (taxRegistered && country === 'IN' && taxRegime === 'IN_GST' && gstin) {
+        const stateCode = body.stateCode || gstin.substring(0, 2);
+        const gstinErr = validateGstin(gstin, stateCode);
+        if (gstinErr) {
+          return jsonRes({
+            type: 'https://salesphere.live/errors/validation',
+            title: 'Invalid Company GSTIN',
+            status: 422,
+            code: gstinErr,
+            errors: { gstin: `Invalid GSTIN: ${gstinErr}` },
+          }, 422);
+        }
+      }
+      if (taxRegistered && country === 'AE' && taxRegime === 'AE_VAT' && body.trn) {
+        if (!validateTrn(body.trn)) {
+          return jsonRes({
+            type: 'https://salesphere.live/errors/validation',
+            title: 'Invalid Company TRN',
+            status: 422,
+            code: 'INVALID_TRN',
+            errors: { trn: 'UAE TRN must be exactly 15 digits starting with 100' },
+          }, 422);
+        }
+      }
+
+      Object.assign(memoryStore.company, body, {
+        country,
+        taxRegime,
+        taxRegistered,
+        currency: body.currency || (country === 'IN' ? 'INR' : (country === 'AE' ? 'AED' : 'USD')),
+      });
+
+      if (db) {
+        try {
+          await db.prepare("INSERT OR REPLACE INTO settings (key, value_json, updated_at) VALUES ('company', ?, datetime('now'))")
+            .bind(JSON.stringify(memoryStore.company))
+            .run();
+        } catch (e) {
+          console.error('Failed to persist company settings to D1', e);
+        }
+      }
       return jsonRes(memoryStore.company);
     }
   }
@@ -4869,6 +5416,49 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
         .prepare('SELECT * FROM masters WHERE type = ? ORDER BY is_default DESC, sort_order ASC, name ASC')
         .bind(mType)
         .all();
+      if (!results || results.length === 0) {
+        if (mType === 'currencies') {
+          return jsonRes({
+            items: Object.entries(CURRENCIES).map(([code, meta], idx) => ({
+              id: `cur-${code.toLowerCase()}`,
+              type: 'currencies',
+              name: `${meta.name} (${code})`,
+              key: code,
+              status: 'active',
+              isDefault: code === 'INR',
+              sortOrder: idx + 1,
+              data: meta,
+              version: 1,
+            })),
+          });
+        }
+        if (mType === 'countries') {
+          return jsonRes({
+            items: COUNTRIES.map((c, idx) => ({
+              id: `country-${c.code.toLowerCase()}`,
+              type: 'countries',
+              name: c.name,
+              key: c.code,
+              status: 'active',
+              isDefault: c.code === 'IN',
+              sortOrder: idx + 1,
+              data: c,
+              version: 1,
+            })),
+          });
+        }
+        if (mType === 'taxRates') {
+          return jsonRes({
+            items: [
+              { id: 'tax-0', type: 'taxRates', name: '0% (Nil / Exempt / LUT)', key: '0', isDefault: false, sortOrder: 1, data: { ratePct: 0 } },
+              { id: 'tax-5', type: 'taxRates', name: '5% GST / VAT', key: '5', isDefault: false, sortOrder: 2, data: { ratePct: 5 } },
+              { id: 'tax-12', type: 'taxRates', name: '12% GST', key: '12', isDefault: false, sortOrder: 3, data: { ratePct: 12 } },
+              { id: 'tax-18', type: 'taxRates', name: '18% GST (Standard Services)', key: '18', isDefault: true, sortOrder: 4, data: { ratePct: 18 } },
+              { id: 'tax-28', type: 'taxRates', name: '28% GST', key: '28', isDefault: false, sortOrder: 5, data: { ratePct: 28 } },
+            ],
+          });
+        }
+      }
       return jsonRes({ items: (results || []).map(mapMasterRow) });
     }
 
@@ -6116,6 +6706,97 @@ export async function handleEdgeApi(request: Request, db?: D1DatabaseLike): Prom
     const repId = repMatch[1];
     const from = url.searchParams.get('from') || `${new Date().toISOString().slice(0, 7)}-01`;
     const to = url.searchParams.get('to') || new Date().toISOString().slice(0, 10);
+
+    if (repId === 'data-check') {
+      const issues: any[] = [];
+      let totalChecked = 0;
+      let sharmaFixed = false;
+      let alBilalFixed = false;
+      const doFix = url.searchParams.get('fix') === 'true' || method === 'POST';
+
+      if (db) {
+        try {
+          const { results: custRows } = await db.prepare(
+            'SELECT id, display_name, legal_name, state, gstin, country, currency, tax_status, tax_id FROM customers WHERE deleted_at IS NULL'
+          ).all();
+
+          for (const c of (custRows || []) as any[]) {
+            totalChecked++;
+            // Sharma Textiles check
+            if (c.id === 'cust-1' || c.display_name === 'Sharma Textiles') {
+              const stateCode = c.state ? resolveStateAndCode(c.state, null, c.gstin).code : '';
+              if (c.gstin && c.gstin.startsWith('27') && (c.state === 'Kerala' || stateCode === '32')) {
+                if (doFix) {
+                  await db.prepare("UPDATE customers SET state = 'Maharashtra' WHERE id = ?").bind(c.id).run();
+                  sharmaFixed = true;
+                } else {
+                  issues.push({
+                    type: 'STATE_GSTIN_MISMATCH',
+                    recordId: c.id,
+                    name: c.display_name,
+                    gstin: c.gstin,
+                    state: c.state,
+                    message: `Customer ${c.display_name} has state '${c.state}' (32) but GSTIN '${c.gstin}' indicates Maharashtra (27). GSTIN is the source of truth.`,
+                  });
+                }
+              }
+            }
+
+            // Al bilal tech check
+            if (c.id === 'cust-1795511388807' || c.display_name?.toLowerCase().includes('al bilal')) {
+              if (c.country !== 'AE' || c.currency !== 'AED' || c.tax_status !== 'overseas') {
+                if (doFix) {
+                  await db.prepare("UPDATE customers SET country = 'AE', currency = 'AED', tax_status = 'overseas', state = NULL WHERE id = ?").bind(c.id).run();
+                  alBilalFixed = true;
+                } else {
+                  issues.push({
+                    type: 'OVERSEAS_CUSTOMER_CONFIG',
+                    recordId: c.id,
+                    name: c.display_name,
+                    country: c.country,
+                    currency: c.currency,
+                    taxStatus: c.tax_status,
+                    message: `Al bilal tech should have country 'AE', currency 'AED', tax_status 'overseas'.`,
+                  });
+                }
+              }
+            }
+
+            // Placeholder GSTIN check
+            if (c.gstin === '29ABCDE1234F1Z5') {
+              issues.push({
+                type: 'PLACEHOLDER_TAX_ID',
+                recordId: c.id,
+                name: c.display_name,
+                taxId: c.gstin,
+                message: `Customer ${c.display_name} has placeholder GSTIN 29ABCDE1234F1Z5.`,
+              });
+            }
+          }
+
+          // Company check
+          const comp = await getCompanySettings(db);
+          if (comp.gstin === '29ABCDE1234F1Z5') {
+            issues.push({
+              type: 'COMPANY_PLACEHOLDER_GSTIN',
+              message: 'Company settings has placeholder GSTIN 29ABCDE1234F1Z5.',
+            });
+          }
+        } catch (e) {
+          console.error('Data check error:', e);
+        }
+      }
+
+      return jsonRes({
+        ok: issues.length === 0,
+        totalChecked,
+        issueCount: issues.length,
+        issues,
+        sharmaFixed,
+        alBilalFixed,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     if (repId === 'RPT-006') {
       const columns = [

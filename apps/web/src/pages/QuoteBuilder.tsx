@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { computeDocument, GST_STATES, isIntraState } from '@ss/domain';
+import { computeDocument, determineTax, formatCurrency, GST_STATES, CURRENCIES, isIntraState } from '@ss/domain';
 import { ApiError, get, patch, post } from '../lib/api';
 import { money, toPaise } from '../lib/format';
 import { useOptions } from '../features/hooks';
@@ -21,6 +21,7 @@ interface Line {
   rate: string;
   discountPct: string;
   taxRatePct: string;
+  taxCategory?: 'taxable' | 'exempt' | 'nil_rated' | 'non_gst' | 'zero_rated';
   hsnSac: string;
 }
 
@@ -107,15 +108,30 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
   const existing = useQuery({ queryKey: ['quote', id], queryFn: () => get<Record<string, unknown>>(`/quotes/${id}`), enabled: !!id && isQuote });
 
   const [partyType, setPartyType] = useState(isOrder || isInvoice ? 'customer' : (params.get('partyType') ?? 'customer'));
-  const [partyId, setPartyId] = useState(params.get('partyId') ?? 'cust-1');
+  const [partyId, setPartyId] = useState(params.get('partyId') ?? '');
   const [partySearch, setPartySearch] = useState('');
   
-  // Default to rich enterprise sample data for instant testing
-  const [lines, setLines] = useState<Line[]>(SAMPLE_PRESETS.enterprise.lines);
+  // Clean starter line item
+  const [lines, setLines] = useState<Line[]>([
+    {
+      kind: 'item',
+      productId: null,
+      description: '',
+      qty: '1',
+      unit: 'Nos',
+      rate: '',
+      discountPct: '',
+      taxRatePct: '18',
+      taxCategory: 'taxable',
+      hsnSac: '',
+    },
+  ]);
   const [validDays, setValidDays] = useState('15');
-  const [pos, setPos] = useState('29');
+  const [pos, setPos] = useState('');
+  const [docCurrency, setDocCurrency] = useState('INR');
+  const [exchangeRate, setExchangeRate] = useState('1.00');
   const [overall, setOverall] = useState('');
-  const [terms, setTerms] = useState('1. 50% advance upon acceptance, balance upon deployment.\n2. Standard 18% GST applicable.\n3. Quotation valid for 15 days.');
+  const [terms, setTerms] = useState('1. 50% advance upon acceptance, balance upon deployment.\n2. Standard tax applicable.\n3. Quotation valid for 15 days.');
   const [notes, setNotes] = useState('Thank you for choosing SaleSphere. We look forward to working with your team.');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -132,8 +148,11 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
       id: item.id,
       name: item.displayName || item.name || item.id,
       company: (item as any).company || (item as any).legalName || '',
-      stateCode: (item as any).stateCode || (item as any).state || '29',
-      gstin: (item as any).gstin || '29ABCDE1234F1Z5',
+      stateCode: (item as any).stateCode || (item as any).state || '',
+      country: (item as any).country || 'IN',
+      currency: (item as any).currency || 'INR',
+      taxStatus: (item as any).taxStatus || (item as any).tax_status || 'registered',
+      gstin: (item as any).gstin || (item as any).taxId || '',
     }));
   }, [parties.data]);
 
@@ -178,7 +197,23 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
     }
   }, [existing.data]);
 
-  const placeOfSupply = pos || company.data?.stateCode || '29';
+  const selectedParty = useMemo(() => {
+    return availableParties.find((p) => p.id === partyId) || null;
+  }, [availableParties, partyId]);
+
+  useEffect(() => {
+    if (!selectedParty) return;
+    const pAny = selectedParty as any;
+    if (pAny.country && pAny.country !== 'IN') {
+      setPos('96');
+      if (pAny.currency) setDocCurrency(pAny.currency);
+    } else if (pAny.stateCode) {
+      setPos(pAny.stateCode);
+      if (pAny.currency) setDocCurrency(pAny.currency);
+    }
+  }, [selectedParty]);
+
+  const placeOfSupply = pos || (selectedParty?.country !== 'IN' && selectedParty?.country ? '96' : ((company.data as any)?.stateCode || '29'));
   const toBody = (l: Line) => ({
     kind: l.kind,
     productId: l.productId,
@@ -188,21 +223,46 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
     rate: toPaise(l.rate || 0),
     discountPct: l.discountPct ? Number(l.discountPct) : null,
     taxRatePct: Number(l.taxRatePct) || 0,
+    taxCategory: l.taxCategory || 'taxable',
     hsnSac: l.hsnSac || null,
   });
+
+  const taxDet = useMemo(() => {
+    return determineTax({
+      company: {
+        country: (company.data as any)?.country || 'IN',
+        stateCode: (company.data as any)?.stateCode || '29',
+        taxRegistered: (company.data as any)?.taxRegistered ?? (company.data as any)?.gstRegistered ?? true,
+        taxRegime: (company.data as any)?.taxRegime || 'IN_GST',
+        lutNumber: (company.data as any)?.lutNumber || undefined,
+      },
+      customer: selectedParty ? {
+        country: (selectedParty as any).country || 'IN',
+        stateCode: (selectedParty as any).stateCode || undefined,
+        taxStatus: (selectedParty as any).taxStatus || 'registered',
+        currency: (selectedParty as any).currency || 'INR',
+      } : undefined,
+      placeOfSupply,
+      docType: isQuote ? 'quotation' : isOrder ? 'order' : 'invoice',
+    });
+  }, [company.data, selectedParty, placeOfSupply, isQuote, isOrder]);
 
   const calc = useMemo(() => {
     try {
       return computeDocument(lines.map(toBody), {
-        gst: company.data?.gstRegistered ?? true,
-        intraState: isIntraState(company.data?.stateCode ?? '29', placeOfSupply),
+        treatment: taxDet.treatment,
+        gst: !['bill_of_supply', 'none'].includes(taxDet.treatment),
+        intraState: taxDet.treatment === 'intra_state',
+        currency: docCurrency,
+        exchangeRate: Number(exchangeRate) || 1,
+        baseCurrency: (company.data as any)?.baseCurrency || (company.data as any)?.currency || 'INR',
         overallDiscountPct: Number(overall) || 0,
         roundOff: true,
       });
     } catch {
       return null;
     }
-  }, [lines, company.data, placeOfSupply, overall]);
+  }, [lines, taxDet, docCurrency, exchangeRate, company.data, overall]);
 
   const upd = (i: number, k: keyof Line, v: string) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
 
@@ -267,6 +327,9 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
         customerName: selectedParty?.name || 'Customer',
         date: new Date().toISOString().slice(0, 10),
         expectedDelivery: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+        placeOfSupply,
+        currency: docCurrency,
+        exchangeRate: Number(exchangeRate) || 1,
         lines: validLines,
         totals: t,
       };
@@ -289,9 +352,12 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
       const invBody = {
         customerId: partyId,
         customerName: selectedParty?.name || 'Customer',
-        type: company.data?.gstRegistered === false ? 'bill_of_supply' : 'tax_invoice',
+        type: company.data?.gstRegistered === false ? 'bill_of_supply' : (taxDet.treatment === 'export_lut' || taxDet.treatment === 'export_igst' ? 'export_invoice' : 'tax_invoice'),
         date: new Date().toISOString().slice(0, 10),
         dueDate: new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10),
+        placeOfSupply,
+        currency: docCurrency,
+        exchangeRate: Number(exchangeRate) || 1,
         lines: validLines,
         totals: t,
       };
@@ -315,6 +381,8 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
       partyId,
       validDays: Number(validDays) || 15,
       placeOfSupply,
+      currency: docCurrency,
+      exchangeRate: Number(exchangeRate) || 1,
       overallDiscountPct: Number(overall) || 0,
       termsText: terms || null,
       notes: notes || null,
@@ -344,11 +412,10 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
     sgst: 0,
     igst: 0,
     roundOff: 0,
-    inWords: 'Zero rupees only',
+    inWords: 'Zero only',
     maxDiscountPct: 0,
   };
   const t = calc?.totals ?? DEFAULT_TOTALS;
-  const selectedParty = availableParties.find((p) => p.id === partyId);
 
   return (
     <div className="space-y-6 pb-28 sm:pb-16 font-sans w-full max-w-full min-w-0">
@@ -453,7 +520,7 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
                     type="button"
                     onClick={() => {
                       setPartyType('lead');
-                      setPartyId('lead-1');
+                      setPartyId('');
                     }}
                     className={`flex items-center gap-1.5 rounded-lg px-3 py-1 transition-all ${
                       partyType === 'lead'
@@ -510,9 +577,11 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
                     <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <span>{selectedParty.company || 'Direct Client'}</span>
                       <span>·</span>
-                      <span className="font-mono text-slate-600">GSTIN: {selectedParty.gstin || '29ABCDE1234F1Z5'}</span>
+                      <span className="font-mono text-slate-600">{selectedParty.gstin ? `Tax ID: ${selectedParty.gstin}` : 'Unregistered'}</span>
                       <span>·</span>
-                      <span>State: {selectedParty.stateCode || '29'}</span>
+                      <span>Place of Supply: {selectedParty.country !== 'IN' ? 'Outside India (96)' : (selectedParty.stateCode ? `${GST_STATES[selectedParty.stateCode] || selectedParty.stateCode} (${selectedParty.stateCode})` : 'Not specified')}</span>
+                      <span>·</span>
+                      <span className="font-semibold text-blue-700">{selectedParty.currency || 'INR'}</span>
                     </div>
                   </div>
                 </div>
@@ -650,7 +719,7 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
 
                   {/* Pricing & Tax Grid */}
                   {l.kind !== 'heading' && (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-1 text-xs w-full max-w-full min-w-0">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5 pt-1 text-xs w-full max-w-full min-w-0">
                       <div>
                         <label className="block text-[10px] font-semibold text-slate-500 mb-1">Quantity</label>
                         <input
@@ -681,7 +750,7 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">Rate (₹)</label>
+                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">Rate ({docCurrency})</label>
                         <input
                           type="number"
                           step="0.01"
@@ -704,16 +773,32 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">GST Slab</label>
+                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">Tax Category</label>
+                        <select
+                          value={l.taxCategory || 'taxable'}
+                          onChange={(e) => upd(i, 'taxCategory' as any, e.target.value)}
+                          className="w-full min-h-[36px] rounded-xl border border-slate-200 px-2 py-1 text-xs text-slate-800 focus:outline-none focus:border-emerald-500 shadow-2xs cursor-pointer font-medium"
+                        >
+                          <option value="taxable">Taxable</option>
+                          <option value="exempt">Exempt</option>
+                          <option value="nil_rated">Nil-rated</option>
+                          <option value="non_gst">Non-GST</option>
+                          <option value="zero_rated">Zero-rated</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">Tax Rate %</label>
                         <select
                           value={l.taxRatePct}
+                          disabled={l.taxCategory && l.taxCategory !== 'taxable'}
                           onChange={(e) => upd(i, 'taxRatePct', e.target.value)}
-                          className="w-full min-h-[36px] rounded-xl border border-slate-200 px-2 py-1 text-xs text-slate-800 focus:outline-none focus:border-emerald-500 shadow-2xs cursor-pointer font-semibold"
+                          className="w-full min-h-[36px] rounded-xl border border-slate-200 px-2 py-1 text-xs text-slate-800 focus:outline-none focus:border-emerald-500 shadow-2xs cursor-pointer font-semibold disabled:bg-slate-50 disabled:text-slate-400"
                         >
-                          <option value="0">0% Exempt</option>
+                          <option value="0">0% Zero</option>
                           <option value="5">5% Standard</option>
                           <option value="12">12% Standard</option>
-                          <option value="18">18% Services</option>
+                          <option value="18">18% Standard</option>
                           <option value="28">28% High Slab</option>
                         </select>
                       </div>
@@ -794,7 +879,7 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
               </div>
             </div>
 
-            <div className="grid gap-3 grid-cols-1 sm:grid-cols-4 text-xs w-full max-w-full">
+            <div className="grid gap-3 grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 text-xs w-full max-w-full">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">Payment Terms</label>
                 <select
@@ -816,7 +901,7 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">{isInvoice ? 'Due Days' : 'Validity Period (Days)'}</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">{isInvoice ? 'Due Days' : 'Validity (Days)'}</label>
                 <input
                   type="number"
                   value={validDays}
@@ -826,18 +911,56 @@ export default function QuoteBuilder({ mode: initialMode }: QuoteBuilderProps) {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Place of Supply (GST)</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Place of Supply</label>
                 <select
                   value={placeOfSupply}
                   onChange={(e) => setPos(e.target.value)}
                   className="w-full max-w-full min-h-[42px] rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 shadow-2xs cursor-pointer font-medium"
                 >
+                  <option value="96">Outside India (96) — Export</option>
+                  <option value="00">UAE / International (00)</option>
                   {Object.entries(GST_STATES).map(([v, l]) => (
                     <option key={v} value={v}>
                       {l} ({v})
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Currency</label>
+                <select
+                  value={docCurrency}
+                  onChange={(e) => {
+                    const c = e.target.value;
+                    setDocCurrency(c);
+                    if (c === ((company.data as any)?.baseCurrency || 'INR')) {
+                      setExchangeRate('1.00');
+                    }
+                  }}
+                  className="w-full max-w-full min-h-[42px] rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 shadow-2xs cursor-pointer font-medium"
+                >
+                  {Object.entries(CURRENCIES).map(([c, info]) => (
+                    <option key={c} value={c}>
+                      {c} ({info.symbol})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Exchange Rate
+                </label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={exchangeRate}
+                  disabled={docCurrency === ((company.data as any)?.baseCurrency || 'INR')}
+                  onChange={(e) => setExchangeRate(e.target.value)}
+                  placeholder="1.00"
+                  className="w-full max-w-full min-h-[42px] rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-800 font-semibold focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 shadow-2xs disabled:bg-slate-50 disabled:text-slate-400"
+                />
               </div>
 
               <div>

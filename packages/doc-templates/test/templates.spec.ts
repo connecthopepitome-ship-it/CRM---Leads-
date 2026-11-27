@@ -93,4 +93,114 @@ describe('document templates', () => {
     expect(html).toContain('INV/26-27/0001');
     expect(html).toContain('UPI123456789');
   });
+
+  it('renders multi-currency USD export invoice with statutory INR conversion block', async () => {
+    const html = await renderDocumentHtml({
+      kind: 'tax_invoice',
+      number: 'INV/26-27/0020',
+      title: 'EXPORT INVOICE',
+      date: '2026-11-27',
+      currency: 'USD',
+      exchangeRate: 84.5,
+      baseCurrency: 'INR',
+      taxTreatment: 'export_lut',
+      company: {
+        legalName: 'HopEpitome Strategics',
+        address: 'Bangalore, Karnataka',
+        stateCode: '29',
+        taxRegime: 'IN_GST',
+        taxRegistered: true,
+        gstin: '29AABCH1234F1Z0',
+        lutNumber: 'LUT/2026-27/001',
+      },
+      billTo: {
+        name: 'Global Corp Inc',
+        country: 'US',
+        address: '100 Silicon Way, San Jose, CA, USA',
+      },
+      lines: [
+        {
+          description: 'Cloud Consulting Services',
+          hsnSac: '998313',
+          qty: 1,
+          unit: 'Nos',
+          rate: 100_000, // $1,000.00
+          discount: 0,
+          taxable: 100_000,
+          taxRatePct: 0,
+          cgst: 0,
+          sgst: 0,
+          igst: 0,
+          total: 100_000,
+        },
+      ],
+      totals: {
+        subTotal: 100_000,
+        discountTotal: 0,
+        taxable: 100_000,
+        cgst: 0,
+        sgst: 0,
+        igst: 0,
+        roundOff: 0,
+        grandTotal: 100_000,
+        inWords: 'US Dollars One Thousand and Zero Cents Only',
+      },
+    });
+
+    expect(html).toContain('EXPORT INVOICE');
+    expect(html).toContain('Supply meant for export under LUT without payment of integrated tax');
+    expect(html).toContain('$ 1,000.00');
+    expect(html).toContain('Total ($)');
+    expect(html).toContain('Indian GST Statutory Currency Conversion');
+    expect(html).toContain('Exchange Rate: <b>1 USD = ₹84.5</b>');
+    expect(html).toContain('Grand Total: <b class="font-mono">₹ 84,500.00</b>');
+    expect(html).toContain('Global Corp Inc');
+    expect(html).toContain('100 Silicon Way, San Jose, CA, USA');
+  });
+
+  it('renders bill of supply for unregistered company without tax columns or GSTIN', async () => {
+    const html = await renderDocumentHtml({
+      kind: 'bill_of_supply',
+      number: 'BOS/26-27/0001',
+      date: '2026-11-27',
+      company: {
+        legalName: 'Small Biz',
+        address: 'Bangalore, Karnataka',
+        stateCode: '29',
+        taxRegistered: false,
+        gstin: null,
+      },
+      billTo: { name: 'Customer A', address: 'Bangalore' },
+      lines: [
+        {
+          description: 'Consulting',
+          qty: 1,
+          rate: 50_000,
+          discount: 0,
+          taxable: 50_000,
+          taxRatePct: 0,
+          cgst: 0,
+          sgst: 0,
+          igst: 0,
+          total: 50_000,
+        },
+      ],
+      totals: {
+        subTotal: 50_000,
+        discountTotal: 0,
+        taxable: 50_000,
+        cgst: 0,
+        sgst: 0,
+        igst: 0,
+        roundOff: 0,
+        grandTotal: 50_000,
+        inWords: 'Rupees Five Hundred Only',
+      },
+    });
+
+    expect(html).toContain('BILL OF SUPPLY');
+    expect(html).not.toContain('GSTIN:');
+    expect(html).not.toContain('<th class="r">CGST</th>');
+    expect(html).not.toContain('<th class="r">IGST</th>');
+  });
 });
